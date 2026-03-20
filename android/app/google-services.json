@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "286777752164",
+    "project_id": "hifyp-ea16a",
+    "storage_bucket": "hifyp-ea16a.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:286777752164:android:2ca39b32dd9c53aa63bd71",
+        "android_client_info": {
+          "package_name": "com.edu.tarumt.fyp"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "286777752164-idh053o2lkbiahqhvp4lo49tt0lr7vau.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.edu.tarumt.fyp",
+            "certificate_hash": "199043a69c78fb609073f3930ea8c2eb77fe0245"
+          }
+        },
+        {
+          "client_id": "286777752164-m3t0eujmul9kd5fb4o00csshm0uhgook.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBNhprBpAfBNY6__VX79pbOyog9TU62ykw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "286777752164-m3t0eujmul9kd5fb4o00csshm0uhgook.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "286777752164-makquuhko1010mi7scqd5tph8shq84j1.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.edu.tarumt.fyp"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

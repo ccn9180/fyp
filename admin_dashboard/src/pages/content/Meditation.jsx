@@ -1,0 +1,569 @@
+import { useState, useRef } from 'react';
+import { doc, deleteDoc, addDoc, updateDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
+import { db, storage } from '../../firebase';
+import { useMeditationGuides } from '../../hooks/useFirestore';
+import { Plus, Search, Pencil, Trash2, Music, X, Save, Send, Image as ImageIcon, Clock, PlayCircle, Upload, Loader2, Tag, FileText } from 'lucide-react';
+
+const C = {
+  primary: '#7C9C84',
+  primaryDark: '#6A8671',
+  cream: '#F6F5F2',
+  creamDarker: '#E5E4E0',
+  sage100: '#E5EDE8',
+  charcoal: '#333',
+  charcoalMuted: '#666',
+  muted: '#888',
+  white: '#ffffff',
+  error: '#f87171'
+};
+
+const card = { background: 'white', borderRadius: '20px', boxShadow: '0 2px 16px rgba(0,0,0,0.06)', padding: '20px' };
+const sLabel = { fontFamily: 'Outfit', fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: C.muted };
+const badge = (type) => ({ display: 'inline-flex', padding: '3px 10px', borderRadius: '999px', fontSize: '11px', fontWeight: 700, fontFamily: 'Outfit', background: type === 'green' ? C.sage100 : '#fffbeb', color: type === 'green' ? C.primary : '#d97706' });
+
+export default function Meditation() {
+  const { data: guides, loading } = useMeditationGuides();
+  const [search, setSearch] = useState('');
+  const [deleting, setDeleting] = useState(null);
+  const [viewingGuide, setViewingGuide] = useState(null);
+  const [preloading, setPreloading] = useState(null);
+
+  const viewWithPreload = (m) => {
+    if (preloading) return;
+    if (!m.imageUrl) return setViewingGuide(m);
+    
+    setPreloading(m.id);
+    const img = new Image();
+    img.src = m.imageUrl;
+    img.onload = () => {
+      setPreloading(null);
+      setViewingGuide(m);
+    };
+    img.onerror = () => {
+      setPreloading(null);
+      setViewingGuide(m);
+    };
+  };
+  const [uploadProgress, setUploadProgress] = useState({ imageUrl: 0, audioUrl: 0 });
+  const [isUploading, setIsUploading] = useState({ imageUrl: false, audioUrl: false });
+
+  const fileInputRef = useRef(null);
+  const audioInputRef = useRef(null);
+
+  const handleFileUpload = (e, targetField) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setIsUploading(prev => ({ ...prev, [targetField]: true }));
+    const storageRef = ref(storage, `meditations/${targetField}/${Date.now()}_${file.name}`);
+    const uploadTask = uploadBytesResumable(storageRef, file);
+
+    uploadTask.on('state_changed', 
+      (snapshot) => {
+        const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+        setUploadProgress(prev => ({ ...prev, [targetField]: progress }));
+      }, 
+      (err) => {
+        console.error("Upload error:", err);
+        setIsUploading(prev => ({ ...prev, [targetField]: false }));
+        alert("Upload failed. Verify that you have enabled Firebase Storage and rules.");
+      }, 
+      () => {
+        getDownloadURL(uploadTask.snapshot.ref).then((downloadURL) => {
+          setFormData(prev => ({ ...prev, [targetField]: downloadURL }));
+          
+          // Auto-calculate duration if it's an audio file
+          if (targetField === 'audioUrl') {
+            const audio = new Audio();
+            audio.src = URL.createObjectURL(file);
+            audio.onloadedmetadata = () => {
+              const minutes = Math.ceil(audio.duration / 60);
+              setFormData(prev => ({ ...prev, duration: `${minutes} min` }));
+              URL.revokeObjectURL(audio.src);
+            };
+          }
+
+          setIsUploading(prev => ({ ...prev, [targetField]: false }));
+          setUploadProgress(prev => ({ ...prev, [targetField]: 0 }));
+        });
+      }
+    );
+  };
+  const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [editingGuide, setEditingGuide] = useState(null);
+
+  // Form State
+  const [formData, setFormData] = useState({
+    title: '',
+    subtitle: '',
+    category: '',
+    duration: '',
+    imageUrl: '',
+    audioUrl: '',
+    status: 'draft'
+  });
+
+  const filtered = guides.filter(m =>
+    (m.title || '').toLowerCase().includes(search.toLowerCase()) ||
+    (m.category || '').toLowerCase().includes(search.toLowerCase())
+  );
+
+  const handleOpenEditor = (guide = null) => {
+    if (guide) {
+      setEditingGuide(guide);
+      setFormData({
+        title: guide.title || '',
+        subtitle: guide.subtitle || '',
+        category: guide.category || '',
+        duration: guide.duration || '',
+        imageUrl: guide.imageUrl || '',
+        audioUrl: guide.audioUrl || '',
+        status: guide.status || 'draft'
+      });
+    } else {
+      setEditingGuide(null);
+      setFormData({
+        title: '',
+        subtitle: '',
+        category: '',
+        duration: '',
+        imageUrl: '',
+        audioUrl: '',
+        status: 'draft'
+      });
+    }
+    setIsEditorOpen(true);
+  };
+
+  const handleCloseEditor = () => {
+    setIsEditorOpen(false);
+    setEditingGuide(null);
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      if (editingGuide) {
+        // Update existing guide
+        const docRef = doc(db, 'meditation_guides', editingGuide.id);
+        await updateDoc(docRef, {
+          ...formData,
+          updatedAt: serverTimestamp()
+        });
+      } else {
+        // Add new guide
+        await addDoc(collection(db, 'meditation_guides'), {
+          ...formData,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+          clicks: 0,
+          views: 0,
+          plays: 0
+        });
+      }
+      handleCloseEditor();
+    } catch (error) {
+      console.error("Error saving meditation guide: ", error);
+      alert("Failed to save guide. View console for details.");
+    }
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm('Delete this meditation guide?')) return;
+    setDeleting(id);
+    try {
+      await deleteDoc(doc(db, 'meditation_guides', id));
+    } catch (error) {
+      console.error("Error deleting meditation guide: ", error);
+    }
+    setDeleting(null);
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', position: 'relative' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div>
+          <span style={{ ...sLabel, display: 'block', marginBottom: '4px' }}>Content Management</span>
+          <h2 style={{ fontFamily: '"Playfair Display", serif', fontWeight: 600, fontSize: '24px', color: C.charcoal, margin: 0 }}>Meditation Guide</h2>
+        </div>
+        <button
+          onClick={() => handleOpenEditor()}
+          style={{ display: 'flex', alignItems: 'center', gap: '6px', background: C.primary, color: 'white', border: 'none', borderRadius: '14px', padding: '10px 18px', fontFamily: 'Outfit', fontWeight: 600, fontSize: '14px', cursor: 'pointer', transition: 'background 0.2s' }}
+          onMouseOver={(e) => e.target.style.background = C.primaryDark}
+          onMouseOut={(e) => e.target.style.background = C.primary}
+        >
+          <Plus size={15} /> Upload Guide
+        </button>
+      </div>
+
+      <div style={card}>
+        <div style={{ position: 'relative', maxWidth: '280px', marginBottom: '20px' }}>
+          <Search size={14} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: C.muted }} />
+          <input
+            style={{ width: '100%', background: C.cream, border: `1px solid ${C.creamDarker}`, borderRadius: '12px', padding: '10px 12px 10px 36px', fontFamily: 'Outfit', fontSize: '13px', color: C.charcoal, outline: 'none', boxSizing: 'border-box' }}
+            placeholder="Search guides…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+        </div>
+
+        {loading ? (
+          <p style={{ fontFamily: 'Outfit', fontSize: '13px', color: C.muted }}>Loading meditation guides…</p>
+        ) : filtered.length === 0 ? (
+          <p style={{ fontFamily: 'Outfit', fontSize: '13px', color: C.muted }}>No guides found.</p>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'Outfit', fontSize: '13px' }}>
+              <thead>
+                <tr style={{ borderBottom: `1px solid ${C.creamDarker}` }}>
+                  {['Title', 'Category', 'Duration', 'Status', 'Metrics', 'Actions'].map(h => (
+                    <th key={h} style={{ textAlign: 'left', paddingBottom: '10px', fontWeight: 700, fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.06em', color: C.muted }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((m, i) => (
+                  <tr 
+                    key={m.id} 
+                    onClick={() => viewWithPreload(m)}
+                    style={{ borderBottom: i < filtered.length - 1 ? `1px solid ${C.creamDarker}` : 'none', cursor: 'pointer' }} 
+                    className="hover:bg-cream transition-colors group"
+                  >
+                    <td style={{ padding: '12px 0', fontWeight: 600, color: C.charcoal, maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} className="group-hover:text-primary transition-colors">
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        {preloading === m.id ? <Loader2 size={14} className="animate-spin text-primary" /> : <Music size={14} style={{ opacity: 0.5 }} />}
+                        {m.title || 'Untitled'}
+                      </div>
+                    </td>
+                    <td style={{ padding: '12px 0' }}>
+                      <span style={badge('green')}>{m.category || 'Focus'}</span>
+                    </td>
+                    <td style={{ padding: '12px 0', color: C.charcoalMuted, fontWeight: 500 }}>{m.duration}</td>
+                    <td style={{ padding: '12px 0' }}>
+                      <span style={badge((m.status || '').toLowerCase() === 'published' ? 'green' : 'amber')}>
+                        {m.status ? m.status.charAt(0).toUpperCase() + m.status.slice(1) : 'Draft'}
+                      </span>
+                    </td>
+                    <td style={{ padding: '12px 0' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
+                        <span style={{ fontSize: '11px', color: C.charcoalMuted, fontWeight: 600 }}>{(m.plays || 0).toLocaleString()} <span style={{ color: C.muted, fontWeight: 400 }}>plays</span></span>
+                        <span style={{ fontSize: '11px', color: C.muted }}>{(m.views || 0).toLocaleString()} views</span>
+                        <span style={{ fontSize: '11px', color: '#eab308' }}>★ {m.rating?.toFixed(1) || '0.0'}</span>
+                      </div>
+                    </td>
+                    <td style={{ padding: '12px 0' }}>
+                      <div style={{ display: 'flex', gap: '4px' }} onClick={e => e.stopPropagation()}>
+                        <button 
+                          onClick={() => handleOpenEditor(m)}
+                          style={{ padding: '6px', border: 'none', background: C.cream, borderRadius: '8px', cursor: 'pointer', color: C.muted }}
+                        >
+                          <Pencil size={14} />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(m.id)}
+                          disabled={deleting === m.id}
+                          style={{ padding: '6px', border: 'none', background: '#fef2f2', borderRadius: '8px', cursor: 'pointer', color: '#f87171' }}
+                        >
+                          {deleting === m.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Meditation Preview Modal */}
+      {viewingGuide && (
+        <div 
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(8px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}
+          onClick={() => setViewingGuide(null)}
+        >
+          <div 
+            style={{ width: '100%', maxWidth: '600px', background: 'white', borderRadius: '32px', overflow: 'hidden', boxShadow: '0 30px 60px rgba(0,0,0,0.15)' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ padding: '0', position: 'relative' }}>
+               {viewingGuide.imageUrl && (
+                 <img src={viewingGuide.imageUrl} style={{ width: '100%', height: '300px', objectFit: 'cover' }} alt="Cover" />
+               )}
+               <button onClick={() => setViewingGuide(null)} style={{ position: 'absolute', top: '20px', right: '20px', padding: '10px', background: 'rgba(255,255,255,0.8)', border: 'none', borderRadius: '50%', cursor: 'pointer', backdropFilter: 'blur(4px)' }}>
+                 <X size={20} />
+               </button>
+            </div>
+            
+            <div style={{ padding: '32px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
+                <div style={{ flex: 1 }}>
+                  <span style={badge('green')}>{viewingGuide.category}</span>
+                  <h3 style={{ fontFamily: 'Playfair Display', fontSize: '28px', margin: '12px 0 8px 0' }}>{viewingGuide.title}</h3>
+                  <p style={{ margin: 0, color: C.charcoalMuted, fontSize: '15px' }}>{viewingGuide.subtitle}</p>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '32px' }}>
+                  <div style={{ background: C.cream, padding: '16px', borderRadius: '20px', textAlign: 'center' }}>
+                    <p style={{ margin: 0, fontSize: '10px', fontWeight: 700, color: C.muted, textTransform: 'uppercase' }}>Duration</p>
+                    <p style={{ margin: '4px 0 0 0', fontSize: '15px', fontWeight: 600 }}>{viewingGuide.duration}</p>
+                  </div>
+                  <div style={{ background: C.cream, padding: '16px', borderRadius: '20px', textAlign: 'center' }}>
+                    <p style={{ margin: 0, fontSize: '10px', fontWeight: 700, color: C.muted, textTransform: 'uppercase' }}>Plays</p>
+                    <p style={{ margin: '4px 0 0 0', fontSize: '15px', fontWeight: 600 }}>{viewingGuide.plays || 0}</p>
+                  </div>
+                  <div style={{ background: C.cream, padding: '16px', borderRadius: '20px', textAlign: 'center' }}>
+                    <p style={{ margin: 0, fontSize: '10px', fontWeight: 700, color: C.muted, textTransform: 'uppercase' }}>Views</p>
+                    <p style={{ margin: '4px 0 0 0', fontSize: '15px', fontWeight: 600 }}>{viewingGuide.views || 0}</p>
+                  </div>
+                  <div style={{ background: C.cream, padding: '16px', borderRadius: '20px', textAlign: 'center' }}>
+                    <p style={{ margin: 0, fontSize: '10px', fontWeight: 700, color: C.muted, textTransform: 'uppercase' }}>Rating</p>
+                    <p style={{ margin: '4px 0 0 0', fontSize: '15px', fontWeight: 600 }}>{viewingGuide.rating?.toFixed(1) || '0.0'}</p>
+                  </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px' }}>
+                 <button onClick={() => { setViewingGuide(null); handleOpenEditor(viewingGuide); }} style={{ flex: 1, padding: '16px', background: C.primary, color: 'white', border: 'none', borderRadius: '16px', fontWeight: 600, cursor: 'pointer' }}>Edit Guide</button>
+                 <button onClick={() => setViewingGuide(null)} style={{ padding: '16px 24px', background: C.cream, color: C.charcoal, border: 'none', borderRadius: '16px', fontWeight: 600, cursor: 'pointer' }}>Close</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Slide-over Editor Modal */}
+      {isEditorOpen && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          right: 0,
+          bottom: 0,
+          left: 0,
+          zIndex: 100,
+          display: 'flex',
+          justifyContent: 'flex-end',
+          background: 'rgba(0,0,0,0.3)',
+          backdropFilter: 'blur(2px)'
+        }}>
+          <div
+            style={{
+              width: '100%',
+              maxWidth: '500px',
+              background: 'white',
+              height: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '-4px 0 24px rgba(0,0,0,0.1)',
+              animation: 'slideIn 0.3s ease-out'
+            }}
+          >
+            <style>
+              {`
+                @keyframes slideIn {
+                  from { transform: translateX(100%); }
+                  to { transform: translateX(0); }
+                }
+                .form-group { margin-bottom: 20px; }
+                .form-label { display: flex; align-items: center; gap: 6px; font-family: 'Outfit', sans-serif; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: ${C.muted}; margin-bottom: 8px; }
+                .form-input { width: 100%; background: ${C.cream}; border: 1px solid ${C.creamDarker}; border-radius: 12px; padding: 10px 14px; height: 42px; font-family: 'Outfit', sans-serif; font-size: 14px; color: ${C.charcoal}; outline: none; box-sizing: border-box; transition: all 0.2s ease; }
+                .form-input:focus { border-color: ${C.primary}; box-shadow: 0 0 0 3px ${C.sage100}; }
+                select.form-input { cursor: pointer; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 14px center; padding-right: 40px; }
+                .editor-header { padding: 24px; border-bottom: 1px solid ${C.creamDarker}; display: flex; align-items: center; justify-content: space-between; }
+                .editor-content { flex: 1; overflow-y: auto; padding: 24px; }
+                .editor-footer { padding: 20px 24px; border-top: 1px solid ${C.creamDarker}; display: flex; justify-content: flex-end; gap: 12px; }
+              `}
+            </style>
+
+            <div className="editor-header">
+              <div>
+                <span style={sLabel}>{editingGuide ? 'Editing Guide' : 'Creation'}</span>
+                <h3 style={{ margin: 0, fontFamily: 'Playfair Display', fontSize: '20px', fontWeight: 600 }}>{editingGuide ? 'Edit Guide' : 'Upload Guide'}</h3>
+              </div>
+              <button
+                onClick={handleCloseEditor}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '8px', color: C.muted }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmit} className="editor-content">
+              <div className="form-group">
+                <label className="form-label"><FileText size={12} /> Guide Title</label>
+                <input
+                  className="form-input"
+                  value={formData.title}
+                  onChange={e => setFormData({ ...formData, title: e.target.value })}
+                  placeholder="e.g., Forest Breathing"
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label"><FileText size={12} /> Subtitle / Description</label>
+                <input
+                  className="form-input"
+                  value={formData.subtitle}
+                  onChange={e => setFormData({ ...formData, subtitle: e.target.value })}
+                  placeholder="e.g., Deep focus and calm..."
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div className="form-group">
+                  <label className="form-label"><Tag size={12} /> Category</label>
+                  <select
+                    className="form-input"
+                    value={formData.category}
+                    onChange={e => setFormData({ ...formData, category: e.target.value })}
+                    required
+                  >
+                    <option value="" disabled>Select a category</option>
+                    <option value="Stress">Stress</option>
+                    <option value="Sleep">Sleep</option>
+                    <option value="Focus">Focus</option>
+                    <option value="Breathing">Breathing</option>
+                    <option value="Mindfulness">Mindfulness</option>
+                    <option value="Guided">Guided</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label className="form-label"><Clock size={12} /> Duration</label>
+                  <input
+                    className="form-input"
+                    value={formData.duration}
+                    onChange={e => setFormData({ ...formData, duration: e.target.value })}
+                    placeholder="e.g., 6 min"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label"><ImageIcon size={12} /> Cover Image</label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input
+                    className="form-input"
+                    value={formData.imageUrl}
+                    onChange={e => setFormData({ ...formData, imageUrl: e.target.value })}
+                    placeholder="Enter URL or upload..."
+                    style={{ flex: 1 }}
+                  />
+                  <input 
+                    type="file" 
+                    hidden 
+                    ref={fileInputRef} 
+                    accept="image/*"
+                    onChange={(e) => handleFileUpload(e, 'imageUrl')} 
+                  />
+                  <button 
+                    type="button"
+                    onClick={() => fileInputRef.current.click()}
+                    disabled={isUploading.imageUrl}
+                    style={{ padding: '0 15px', borderRadius: '12px', border: `1px solid ${C.creamDarker}`, background: '#f8faf9', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                  >
+                    {isUploading.imageUrl ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+                  </button>
+                </div>
+                {uploadProgress.imageUrl > 0 && <div style={{ height: '4px', background: C.sage100, borderRadius: '2px', marginTop: '4px' }}><div style={{ height: '100%', width: `${uploadProgress.imageUrl}%`, background: C.primary, borderRadius: '2px', transition: 'width 0.3s' }}></div></div>}
+              </div>
+
+              <div className="form-group">
+                <label className="form-label"><PlayCircle size={12} /> Audio Track</label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input
+                    className="form-input"
+                    value={formData.audioUrl}
+                    onChange={e => setFormData({ ...formData, audioUrl: e.target.value })}
+                    placeholder="Enter audio URL or upload..."
+                    style={{ flex: 1 }}
+                  />
+                  <input 
+                    type="file" 
+                    hidden 
+                    ref={audioInputRef} 
+                    accept="audio/*"
+                    onChange={(e) => handleFileUpload(e, 'audioUrl')} 
+                  />
+                  <button 
+                    type="button"
+                    onClick={() => audioInputRef.current.click()}
+                    disabled={isUploading.audioUrl}
+                    style={{ padding: '0 15px', borderRadius: '12px', border: `1px solid ${C.creamDarker}`, background: '#f8faf9', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                  >
+                    {isUploading.audioUrl ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+                  </button>
+                </div>
+                {uploadProgress.audioUrl > 0 && <div style={{ height: '4px', background: C.sage100, borderRadius: '2px', marginTop: '4px' }}><div style={{ height: '100%', width: `${uploadProgress.audioUrl}%`, background: C.primary, borderRadius: '2px', transition: 'width 0.3s' }}></div></div>}
+              </div>
+
+              <div className="form-group">
+                <label className="form-label"><Send size={12} /> Status</label>
+                <select
+                  className="form-input"
+                  value={formData.status}
+                  onChange={e => setFormData({ ...formData, status: e.target.value })}
+                >
+                  <option value="draft">Draft (Hidden from App)</option>
+                  <option value="published">Published (Live in App)</option>
+                </select>
+              </div>
+            </form>
+
+            <div className="editor-footer">
+              <button
+                onClick={handleCloseEditor}
+                style={{ padding: '10px 20px', background: 'transparent', border: `1px solid ${C.creamDarker}`, borderRadius: '12px', fontFamily: 'Outfit', fontWeight: 600, color: C.charcoalMuted, cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSubmit}
+                style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '8px', 
+                  padding: '10px 24px', 
+                  background: C.primary, 
+                  color: 'white', 
+                  border: 'none', 
+                  borderRadius: '12px', 
+                  fontFamily: 'Outfit', 
+                  fontWeight: 600, 
+                  cursor: 'pointer', 
+                  boxShadow: '0 4px 12px rgba(124, 156, 132, 0.3)',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.background = C.primaryDark;
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                  e.currentTarget.style.boxShadow = '0 6px 16px rgba(124, 156, 132, 0.4)';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.background = C.primary;
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(124, 156, 132, 0.3)';
+                }}
+              >
+                {editingGuide ? <><Save size={16} /> Update Guide</> : <><Send size={16} /> Upload Guide</>}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Styles for animation */}
+      <style>{`
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        .animate-spin {
+          animation: spin 1s linear infinite;
+        }
+      `}</style>
+    </div>
+  );
+}

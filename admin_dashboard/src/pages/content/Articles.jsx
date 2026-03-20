@@ -1,0 +1,907 @@
+import { useState, useRef } from 'react';
+import { doc, deleteDoc, addDoc, updateDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
+import { db, storage } from '../../firebase';
+import { useArticles } from '../../hooks/useFirestore';
+import { Plus, Search, Pencil, Trash2, Eye, X, Send, Save, Image as ImageIcon, User, Clock, FileText, Tag, ChevronDown, Upload, Loader2, Sparkles, FileUp, CheckCircle2, AlertCircle } from 'lucide-react';
+
+const C = { 
+  primary: '#7C9C84', 
+  primaryDark: '#6A8671',
+  cream: '#F6F5F2', 
+  creamDarker: '#E5E4E0', 
+  sage100: '#E5EDE8', 
+  charcoal: '#333', 
+  charcoalMuted: '#666',
+  muted: '#888',
+  white: '#ffffff',
+  error: '#f87171',
+  indigo: '#6366f1'
+};
+
+const AUTHOR_PRESETS = [
+  { name: "Dr. Sarah Jenkins", role: "Clinical Neuropsychologist", img: "https://images.unsplash.com/photo-1544005313-94ddf0286df2" },
+  { name: "Marcus Thorne", role: "Sleep Science Specialist", img: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d" },
+  { name: "Elena Vance", role: "Mindfulness & Performance Coach", img: "https://images.unsplash.com/photo-1554151228-14d9def656e4" },
+  { name: "Dr. Julian Reyes", role: "Nutritional Psychiatrist", img: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e" },
+  { name: "Kenji Yamamoto", role: "Behavioral Economist", img: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e" }
+];
+
+const CATEGORY_TEMPLATES = {
+  "Science-Backed": "https://images.unsplash.com/photo-1507413245164-6160d8298b31",
+  "Mental Health": "https://images.unsplash.com/photo-1544367567-0f2fcb009e0b",
+  "Self-Care": "https://images.unsplash.com/photo-1506126613408-eca07ce68773",
+  "Anxiety": "https://images.unsplash.com/photo-1474418397713-7ded81cf2000",
+  "Productivity": "https://images.unsplash.com/photo-1518241353330-0f7941c2d9b5",
+  "Recommend": "https://images.unsplash.com/photo-1484480974693-6ca0a78fb36b"
+};
+
+const card = { background: 'white', borderRadius: '20px', boxShadow: '0 2px 16px rgba(0,0,0,0.06)', padding: '20px' };
+const sLabel = { fontFamily: 'Outfit', fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: C.muted };
+const badge = (type) => ({ display: 'inline-flex', padding: '3px 10px', borderRadius: '999px', fontSize: '11px', fontWeight: 700, fontFamily: 'Outfit', background: type === 'green' ? C.sage100 : '#fffbeb', color: type === 'green' ? C.primary : '#d97706' });
+
+export default function Articles() {
+  const { data: articles, loading } = useArticles();
+  const [search, setSearch] = useState('');
+  const [deleting, setDeleting] = useState(null);
+  const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [editingArticle, setEditingArticle] = useState(null);
+  
+  const [uploadProgress, setUploadProgress] = useState({ imageUrl: 0, authorImageUrl: 0 });
+  const [isUploading, setIsUploading] = useState({ imageUrl: false, authorImageUrl: false });
+  const [isSummarizing, setIsSummarizing] = useState(false);
+  const [isBulkImporting, setIsBulkImporting] = useState(false);
+  const [isPreviewMode, setIsPreviewMode] = useState(false);
+  const [viewingArticle, setViewingArticle] = useState(null);
+  const [preloading, setPreloading] = useState(null);
+
+  const viewWithPreload = (a) => {
+    if (preloading) return;
+    if (!a.imageUrl) return setViewingArticle(a);
+    
+    setPreloading(a.id);
+    const img = new Image();
+    img.src = a.imageUrl;
+    img.onload = () => {
+      setPreloading(null);
+      setViewingArticle(a);
+    };
+    img.onerror = () => {
+      setPreloading(null);
+      setViewingArticle(a);
+    };
+  };
+  
+  const fileInputRef = useRef(null);
+  const importInputRef = useRef(null);
+  const authorInputRef = useRef(null);
+
+  const handleFileUpload = (e, targetField) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setIsUploading(prev => ({ ...prev, [targetField]: true }));
+    const storageRef = ref(storage, `articles/${targetField}/${Date.now()}_${file.name}`);
+    const uploadTask = uploadBytesResumable(storageRef, file);
+
+    uploadTask.on('state_changed', 
+      (snapshot) => {
+        const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+        setUploadProgress(prev => ({ ...prev, [targetField]: progress }));
+      }, 
+      (err) => {
+        console.error("Upload error:", err);
+        setIsUploading(prev => ({ ...prev, [targetField]: false }));
+        alert("Upload failed. Verify that you have enabled Firebase Storage and rules.");
+      }, 
+      () => {
+        getDownloadURL(uploadTask.snapshot.ref).then((downloadURL) => {
+          setFormData(prev => ({ ...prev, [targetField]: downloadURL }));
+          setIsUploading(prev => ({ ...prev, [targetField]: false }));
+          setUploadProgress(prev => ({ ...prev, [targetField]: 0 }));
+        });
+      }
+    );
+  };
+
+  const autoCalculateReadingTime = () => {
+    if (!formData.content) return;
+    const wordsPerMinute = 200;
+    const words = formData.content.trim().split(/\s+/).length;
+    const minutes = Math.ceil(words / wordsPerMinute);
+    setFormData(prev => ({ ...prev, readingTime: `${minutes} min read` }));
+  };
+
+  const autoGenerateSummary = () => {
+    if (!formData.content) {
+      alert("Please enter content first to generate a summary.");
+      return;
+    }
+    
+    setIsSummarizing(true);
+    
+    // Simulate AI delay for better UX
+    setTimeout(() => {
+      // Basic sentence detection and extraction
+      const cleanContent = formData.content.replace(/[#*`]/g, '').trim();
+      const sentences = cleanContent.match(/[^.!?]+[.!?]+/g) || [cleanContent];
+      
+      let summary = "";
+      if (sentences.length <= 2) {
+        summary = sentences.join(" ");
+      } else {
+        // Take the first 2-3 sentences, but keep it under 180 chars
+        summary = sentences.slice(0, 2).join(" ");
+        if (summary.length < 100 && sentences[2]) {
+          summary += " " + sentences[2];
+        }
+      }
+      
+      // Cleanup and truncate if still too long
+      if (summary.length > 200) {
+        summary = summary.substring(0, 197) + "...";
+      }
+      
+      setFormData(prev => ({ ...prev, subtitle: summary }));
+      setIsSummarizing(false);
+    }, 800);
+  };
+
+  const applyAuthorPreset = (author) => {
+    setFormData(prev => ({
+      ...prev,
+      authorName: author.name,
+      authorRole: author.role,
+      authorImageUrl: author.img
+    }));
+  };
+
+  const applyCategoryTemplate = (cat) => {
+    if (CATEGORY_TEMPLATES[cat]) {
+      setFormData(prev => ({ ...prev, tag: cat, imageUrl: CATEGORY_TEMPLATES[cat] }));
+    }
+  };
+
+  const handleDuplicate = async (article) => {
+    if (!window.confirm('Duplicate this article?')) return;
+    try {
+      await addDoc(collection(db, 'articles'), {
+        ...article,
+        title: `${article.title} (Copy)`,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        views: 0,
+        clicks: 0,
+        rating: 0
+      });
+      alert("Article duplicated successfully!");
+    } catch (e) { console.error(e); }
+  };
+
+  const handleBulkImport = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const json = JSON.parse(event.target.result);
+        const articlesToImport = Array.isArray(json) ? json : [json];
+        
+        if (!window.confirm(`Are you sure you want to import ${articlesToImport.length} articles?`)) return;
+        
+        setIsBulkImporting(true);
+        let successCount = 0;
+
+        for (const meta of articlesToImport) {
+          // Basic validation and auto-summary if missing
+          let summary = meta.subtitle || meta.summary || "";
+          if (!summary && meta.content) {
+            const cleanContent = meta.content.replace(/[#*`]/g, '').trim();
+            const sentences = cleanContent.match(/[^.!?]+[.!?]+/g) || [cleanContent];
+            summary = sentences.slice(0, 2).join(" ");
+            if (summary.length > 200) summary = summary.substring(0, 197) + "...";
+          }
+
+          await addDoc(collection(db, 'articles'), {
+            title: meta.title || "Untitiled Article",
+            subtitle: summary,
+            content: meta.content || "",
+            tag: meta.tag || meta.category || "General",
+            imageUrl: meta.imageUrl || "",
+            authorName: meta.authorName || "FYP Editor",
+            authorRole: meta.authorRole || "Health Specialist",
+            authorImageUrl: meta.authorImageUrl || "",
+            readingTime: meta.readingTime || "5 min read",
+            status: meta.status || "published",
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+            views: 0,
+            clicks: 0,
+            rating: 0
+          });
+          successCount++;
+        }
+
+        alert(`Successfully imported ${successCount} articles!`);
+      } catch (error) {
+        console.error("Bulk import error:", error);
+        alert("Failed to import. Ensure the JSON format is an array of article objects.");
+      } finally {
+        setIsBulkImporting(false);
+        e.target.value = null; // Reset input
+      }
+    };
+    reader.readAsText(file);
+  };
+  
+  // Form State
+  const [formData, setFormData] = useState({
+    title: '',
+    tag: '',
+    subtitle: '',
+    content: '',
+    imageUrl: '',
+    authorName: '',
+    authorRole: '',
+    authorImageUrl: '',
+    readingTime: '',
+    sourceLink: '',
+    status: 'draft'
+  });
+
+  const filtered = articles.filter(a =>
+    (a.title || '').toLowerCase().includes(search.toLowerCase()) ||
+    (a.tag || '').toLowerCase().includes(search.toLowerCase())
+  );
+
+  const handleOpenEditor = (article = null) => {
+    if (article) {
+      setEditingArticle(article);
+      setFormData({
+        title: article.title || '',
+        tag: article.tag || '',
+        subtitle: article.subtitle || '',
+        content: article.content || '',
+        imageUrl: article.imageUrl || '',
+        authorName: article.authorName || '',
+        authorRole: article.authorRole || '',
+        authorImageUrl: article.authorImageUrl || '',
+        readingTime: article.readingTime || '',
+        sourceLink: article.sourceLink || '',
+        status: article.status || 'draft'
+      });
+    } else {
+      setEditingArticle(null);
+      setFormData({
+        title: '',
+        tag: '',
+        subtitle: '',
+        content: '',
+        imageUrl: '',
+        authorName: '',
+        authorRole: '',
+        authorImageUrl: '',
+        readingTime: '',
+        sourceLink: '',
+        status: 'draft'
+      });
+    }
+    setIsEditorOpen(true);
+  };
+
+  const handleCloseEditor = () => {
+    setIsEditorOpen(false);
+    setEditingArticle(null);
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      let finalData = { ...formData };
+      
+      // Auto-generate summary if missing
+      if (!finalData.subtitle && finalData.content) {
+        const cleanContent = finalData.content.replace(/[#*`]/g, '').trim();
+        const sentences = cleanContent.match(/[^.!?]+[.!?]+/g) || [cleanContent];
+        let summary = sentences.slice(0, 2).join(" ");
+        if (summary.length > 200) summary = summary.substring(0, 197) + "...";
+        finalData.subtitle = summary;
+      }
+
+      if (editingArticle) {
+        // Update existing article
+        const docRef = doc(db, 'articles', editingArticle.id);
+        await updateDoc(docRef, {
+          ...finalData,
+          updatedAt: serverTimestamp()
+        });
+      } else {
+        // Add new article
+        await addDoc(collection(db, 'articles'), {
+          ...finalData,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+          views: 0,
+          clicks: 0,
+          rating: 0
+        });
+      }
+      handleCloseEditor();
+    } catch (error) {
+      console.error("Error saving article: ", error);
+      alert("Failed to save article. View console for details.");
+    }
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm('Delete this article?')) return;
+    setDeleting(id);
+    try {
+      await deleteDoc(doc(db, 'articles', id));
+    } catch (error) {
+      console.error("Error deleting article: ", error);
+    }
+    setDeleting(null);
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', position: 'relative' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div>
+          <span style={{ ...sLabel, display: 'block', marginBottom: '4px' }}>Content Management</span>
+          <h2 style={{ fontFamily: '"Playfair Display", serif', fontWeight: 600, fontSize: '24px', color: C.charcoal, margin: 0 }}>Article Content</h2>
+        </div>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <input 
+            type="file" 
+            accept=".json" 
+            hidden 
+            ref={importInputRef} 
+            onChange={handleBulkImport} 
+          />
+          <button
+            onClick={() => importInputRef.current.click()}
+            disabled={isBulkImporting}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', background: C.cream, color: C.charcoalMuted, border: `1px solid ${C.creamDarker}`, borderRadius: '14px', padding: '10px 18px', fontFamily: 'Outfit', fontWeight: 600, fontSize: '14px', cursor: 'pointer', transition: 'all 0.2s' }}
+            onMouseOver={(e) => e.target.style.background = C.creamDarker}
+            onMouseOut={(e) => e.target.style.background = C.cream}
+          >
+            {isBulkImporting ? <Loader2 size={15} className="animate-spin" /> : <FileUp size={15} />} 
+            Bulk Import
+          </button>
+          <button
+            onClick={() => handleOpenEditor()}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', background: C.primary, color: 'white', border: 'none', borderRadius: '14px', padding: '10px 18px', fontFamily: 'Outfit', fontWeight: 600, fontSize: '14px', cursor: 'pointer', transition: 'background 0.2s', boxShadow: '0 4px 12px rgba(124, 156, 132, 0.2)' }}
+            onMouseOver={(e) => e.target.style.background = C.primaryDark}
+            onMouseOut={(e) => e.target.style.background = C.primary}
+          >
+            <Plus size={15} /> New Article
+          </button>
+        </div>
+      </div>
+
+      <div style={card}>
+        <div style={{ position: 'relative', maxWidth: '280px', marginBottom: '20px' }}>
+          <Search size={14} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: C.muted }} />
+          <input
+            style={{ width: '100%', background: C.cream, border: `1px solid ${C.creamDarker}`, borderRadius: '12px', padding: '10px 12px 10px 36px', fontFamily: 'Outfit', fontSize: '13px', color: C.charcoal, outline: 'none', boxSizing: 'border-box' }}
+            placeholder="Search articles…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+        </div>
+
+        {loading ? (
+          <p style={{ fontFamily: 'Outfit', fontSize: '13px', color: C.muted }}>Loading articles…</p>
+        ) : filtered.length === 0 ? (
+          <p style={{ fontFamily: 'Outfit', fontSize: '13px', color: C.muted }}>No articles found.</p>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'Outfit', fontSize: '13px' }}>
+              <thead>
+                <tr style={{ borderBottom: `1px solid ${C.creamDarker}` }}>
+                  {['Title', 'Category', 'Status', 'Metrics', 'Actions'].map(h => (
+                    <th key={h} style={{ textAlign: 'left', paddingBottom: '10px', fontWeight: 700, fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.06em', color: C.muted }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((a, i) => (
+                  <tr 
+                    key={a.id} 
+                    onClick={() => viewWithPreload(a)}
+                    style={{ borderBottom: i < filtered.length - 1 ? `1px solid ${C.creamDarker}` : 'none', cursor: 'pointer' }} 
+                    className="hover:bg-cream transition-colors group"
+                  >
+                    <td style={{ padding: '12px 0', fontWeight: 600, color: C.charcoal, maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} className="group-hover:text-primary transition-colors">
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        {preloading === a.id && <Loader2 size={14} className="animate-spin text-primary" />}
+                        {a.title || 'Untitled'}
+                      </div>
+                    </td>
+                    <td style={{ padding: '12px 0' }}>
+                      <span style={badge('green')}>{a.tag || a.category || 'Uncategorized'}</span>
+                    </td>
+                    <td style={{ padding: '12px 0' }}>
+                      <span style={badge((a.status || '').toLowerCase() === 'published' ? 'green' : 'amber')}>
+                        {a.status ? a.status.charAt(0).toUpperCase() + a.status.slice(1) : 'Draft'}
+                      </span>
+                    </td>
+                    <td style={{ padding: '12px 0' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
+                        <span style={{ fontSize: '11px', color: C.charcoalMuted, fontWeight: 600 }}>{(a.views || 0).toLocaleString()} <span style={{ color: C.muted, fontWeight: 400 }}>views</span></span>
+                        <span style={{ fontSize: '11px', color: '#eab308' }}>★ {a.rating?.toFixed(1) || '0.0'}</span>
+                      </div>
+                    </td>
+                    <td style={{ padding: '12px 0' }}>
+                      <div style={{ display: 'flex', gap: '4px' }} onClick={e => e.stopPropagation()}>
+                        <button 
+                          onClick={() => handleDuplicate(a)}
+                          title="Duplicate Content"
+                          style={{ padding: '6px', border: 'none', background: C.cream, borderRadius: '8px', cursor: 'pointer', color: C.indigo }}
+                        >
+                          <Plus size={14} />
+                        </button>
+                        <button 
+                          onClick={() => handleOpenEditor(a)}
+                          style={{ padding: '6px', border: 'none', background: C.cream, borderRadius: '8px', cursor: 'pointer', color: C.muted }}
+                        >
+                          <Pencil size={14} />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(a.id)}
+                          disabled={deleting === a.id}
+                          style={{ padding: '6px', border: 'none', background: '#fef2f2', borderRadius: '8px', cursor: 'pointer', color: '#f87171' }}
+                        >
+                          {deleting === a.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Article Preview Modal */}
+      {viewingArticle && (
+        <div 
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(8px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}
+          onClick={() => setViewingArticle(null)}
+        >
+          <div 
+            style={{ width: '100%', maxWidth: '900px', maxHeight: '90vh', background: 'white', borderRadius: '32px', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 30px 60px rgba(0,0,0,0.15)' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ padding: '40px', overflowY: 'auto' }}>
+               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '32px' }}>
+                 <div>
+                    <span style={badge('green')}>{viewingArticle.tag}</span>
+                    <h2 style={{ fontFamily: 'Playfair Display', fontSize: '36px', margin: '16px 0 8px 0', lineHeight: 1.2 }}>{viewingArticle.title}</h2>
+                    <p style={{ fontSize: '18px', color: C.charcoalMuted, lineHeight: 1.6, margin: 0 }}>{viewingArticle.subtitle}</p>
+                 </div>
+                 <button onClick={() => setViewingArticle(null)} style={{ padding: '12px', background: C.cream, border: 'none', borderRadius: '50%', cursor: 'pointer' }}>
+                   <X size={24} />
+                 </button>
+               </div>
+
+               <div style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '24px', background: C.cream, borderRadius: '24px', marginBottom: '40px' }}>
+                 <img src={viewingArticle.authorImageUrl} style={{ width: '56px', height: '56px', borderRadius: '16px', objectFit: 'cover' }} alt="Author" />
+                 <div>
+                   <p style={{ margin: 0, fontWeight: 700, fontSize: '16px' }}>{viewingArticle.authorName}</p>
+                   <p style={{ margin: 0, fontSize: '13px', color: C.muted }}>{viewingArticle.authorRole} · {viewingArticle.readingTime}</p>
+                 </div>
+               </div>
+
+               {viewingArticle.imageUrl && (
+                 <img src={viewingArticle.imageUrl} style={{ width: '100%', height: '400px', borderRadius: '24px', objectFit: 'cover', marginBottom: '40px' }} alt="Article" />
+               )}
+
+               <div 
+                style={{ fontSize: '17px', lineHeight: 1.9, color: '#334155', fontFamily: 'Outfit' }}
+                dangerouslySetInnerHTML={{ __html: viewingArticle.content?.replace(/\n/g, '<br/>') }}
+               />
+            </div>
+            <div style={{ padding: '20px 40px', background: '#FAF9F6', borderTop: `1px solid ${C.creamDarker}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+               <div style={{ display: 'flex', gap: '24px' }}>
+                 <div style={{ textAlign: 'center' }}>
+                   <p style={{ margin: 0, fontSize: '10px', fontWeight: 700, color: C.muted, textTransform: 'uppercase' }}>Views</p>
+                   <p style={{ margin: 0, fontSize: '18px', fontWeight: 600 }}>{viewingArticle.views}</p>
+                 </div>
+                 <div style={{ textAlign: 'center' }}>
+                   <p style={{ margin: 0, fontSize: '10px', fontWeight: 700, color: C.muted, textTransform: 'uppercase' }}>Rating</p>
+                   <p style={{ margin: 0, fontSize: '18px', fontWeight: 600 }}>{viewingArticle.rating?.toFixed(1) || '0.0'}</p>
+                 </div>
+               </div>
+               <button onClick={() => { setViewingArticle(null); handleOpenEditor(viewingArticle); }} style={{ padding: '12px 24px', background: C.primary, color: 'white', border: 'none', borderRadius: '14px', fontWeight: 600, cursor: 'pointer' }}>Edit Content</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Slide-over Editor Modal */}
+      {isEditorOpen && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          right: 0,
+          bottom: 0,
+          left: 0,
+          zIndex: 100,
+          display: 'flex',
+          justifyContent: 'flex-end',
+          background: 'rgba(0,0,0,0.3)',
+          backdropFilter: 'blur(2px)'
+        }}>
+          <div 
+            style={{
+              width: '100%',
+              maxWidth: '600px',
+              background: 'white',
+              height: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '-4px 0 24px rgba(0,0,0,0.1)',
+              animation: 'slideIn 0.3s ease-out'
+            }}
+          >
+            <style>
+              {`
+                @keyframes slideIn {
+                  from { transform: translateX(100%); }
+                  to { transform: translateX(0); }
+                }
+                .form-group { margin-bottom: 20px; }
+                .form-label { display: flex; align-items: center; gap: 6px; font-family: 'Outfit', sans-serif; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: ${C.muted}; margin-bottom: 8px; }
+                .form-input { width: 100%; background: ${C.cream}; border: 1px solid ${C.creamDarker}; border-radius: 12px; padding: 10px 14px; height: 42px; font-family: 'Outfit', sans-serif; font-size: 14px; color: ${C.charcoal}; outline: none; box-sizing: border-box; transition: all 0.2s ease; }
+                .form-input:focus { border-color: ${C.primary}; box-shadow: 0 0 0 3px ${C.sage100};}
+                select.form-input { cursor: pointer; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 14px center; padding-right: 40px; }
+                textarea.form-input { min-height: 120px; height: auto; resize: vertical; padding: 14px; }
+                .editor-header { padding: 20px 24px; border-bottom: 1px solid ${C.creamDarker}; display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+                .editor-content { flex: 1; overflow-y: auto; padding: 24px; }
+                .editor-footer { padding: 20px 24px; border-top: 1px solid ${C.creamDarker}; display: flex; justify-content: flex-end; gap: 12px; }
+                .tab-btn { padding: 8px 16px; border-radius: 10px; border: none; font-family: 'Outfit'; font-weight: 600; font-size: 13px; cursor: pointer; transition: all 0.2s; }
+                .tab-btn.active { background: ${C.primary}; color: white; }
+                .tab-btn.inactive { background: ${C.cream}; color: ${C.charcoalMuted}; }
+                .markdown-preview { font-family: 'Outfit', sans-serif; line-height: 1.6; color: ${C.charcoal}; padding: 10px; }
+                .markdown-preview h1, .markdown-preview h2, .markdown-preview h3 { font-family: 'Playfair Display'; margin-top: 1.5em; border-bottom: 1px solid ${C.creamDarker}; padding-bottom: 0.3em; }
+                .markdown-preview code { background: ${C.cream}; padding: 2px 5px; border-radius: 4px; }
+              `}
+            </style>
+
+            <div className="editor-header">
+              <div style={{ flex: 1 }}>
+                <span style={sLabel}>{editingArticle ? 'Editing Article' : 'Creation'}</span>
+                <h3 style={{ margin: 0, fontFamily: 'Playfair Display', fontSize: '20px', fontWeight: 600 }}>{editingArticle ? 'Edit Article' : 'New Article'}</h3>
+              </div>
+              
+              <div style={{ background: C.cream, borderRadius: '12px', padding: '4px', display: 'flex', gap: '4px' }}>
+                <button 
+                  className={`tab-btn ${!isPreviewMode ? 'active' : 'inactive'}`}
+                  onClick={() => setIsPreviewMode(false)}
+                >
+                  Edit
+                </button>
+                <button 
+                  className={`tab-btn ${isPreviewMode ? 'active' : 'inactive'}`}
+                  onClick={() => setIsPreviewMode(true)}
+                >
+                  Preview
+                </button>
+              </div>
+
+              <button 
+                onClick={handleCloseEditor}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '8px', color: C.muted }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="editor-content">
+              {!isPreviewMode ? (
+                <>
+                  <div className="form-group">
+                    <label className="form-label"><FileText size={12} /> Title</label>
+                    <input 
+                      className="form-input" 
+                      value={formData.title} 
+                      onChange={e => setFormData({...formData, title: e.target.value})} 
+                      placeholder="e.g., The Neurobiology of Daily Gratitude"
+                      required
+                    />
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                    <div className="form-group">
+                      <label className="form-label"><Tag size={12} /> Category / Tag</label>
+                      <select 
+                        className="form-input" 
+                        value={formData.tag} 
+                        onChange={e => {
+                          const val = e.target.value;
+                          setFormData({...formData, tag: val});
+                          applyCategoryTemplate(val);
+                        }} 
+                        required
+                      >
+                        <option value="" disabled>Select a category</option>
+                        {Object.keys(CATEGORY_TEMPLATES).map(cat => (
+                          <option key={cat} value={cat}>{cat}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label"><Clock size={12} /> Reading Time</label>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <input 
+                          className="form-input" 
+                          value={formData.readingTime} 
+                          onChange={e => setFormData({...formData, readingTime: e.target.value})} 
+                          placeholder="e.g., 6 min read"
+                          style={{ flex: 1 }}
+                        />
+                        <button 
+                          type="button"
+                          onClick={autoCalculateReadingTime}
+                          title="Auto-calculate from content"
+                          style={{ padding: '0 15px', borderRadius: '12px', border: `1px solid ${C.creamDarker}`, background: '#f8faf9', cursor: 'pointer', display: 'flex', alignItems: 'center', color: C.primary }}
+                        >
+                          <Sparkles size={16} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+              <div className="form-group">
+                <label className="form-label"><FileText size={12} /> Subtitle / Excerpt</label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input 
+                    className="form-input" 
+                    value={formData.subtitle} 
+                    onChange={e => setFormData({...formData, subtitle: e.target.value})} 
+                    placeholder="A short summary shown in listing cards..."
+                    style={{ flex: 1 }}
+                  />
+                  <button 
+                    type="button"
+                    onClick={autoGenerateSummary}
+                    disabled={isSummarizing}
+                    title="Auto-generate summary from content"
+                    style={{ 
+                      padding: '0 15px', 
+                      borderRadius: '12px', 
+                      border: `1px solid ${C.creamDarker}`, 
+                      background: isSummarizing ? C.cream : '#f8faf9', 
+                      cursor: 'pointer', 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      color: C.primary,
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    {isSummarizing ? <Loader2 size={16} className="animate-spin text-muted" /> : <Sparkles size={16} />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label"><ImageIcon size={12} /> Header Image URL</label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input 
+                    className="form-input" 
+                    value={formData.imageUrl} 
+                    onChange={e => setFormData({...formData, imageUrl: e.target.value})} 
+                    placeholder="Enter URL or upload..."
+                    style={{ flex: 1 }}
+                  />
+                  <input 
+                    type="file" 
+                    hidden 
+                    ref={fileInputRef} 
+                    accept="image/*"
+                    onChange={(e) => handleFileUpload(e, 'imageUrl')} 
+                  />
+                  <button 
+                    type="button"
+                    onClick={() => fileInputRef.current.click()}
+                    disabled={isUploading.imageUrl}
+                    style={{ padding: '0 15px', borderRadius: '12px', border: `1px solid ${C.creamDarker}`, background: '#f8faf9', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                  >
+                    {isUploading.imageUrl ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+                  </button>
+                </div>
+                {uploadProgress.imageUrl > 0 && <div style={{ height: '4px', background: C.sage100, borderRadius: '2px', marginTop: '4px' }}><div style={{ height: '100%', width: `${uploadProgress.imageUrl}%`, background: C.primary, borderRadius: '2px', transition: 'width 0.3s' }}></div></div>}
+                {formData.imageUrl && (
+                  <div style={{ marginTop: '12px' }}>
+                    <span className="form-label" style={{ fontSize: '9px' }}>Live Preview</span>
+                    <div style={{ borderRadius: '16px', overflow: 'hidden', height: '180px', border: `1px solid ${C.creamDarker}`, background: C.cream, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <img 
+                        src={formData.imageUrl} 
+                        alt="Cover Preview" 
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                          e.target.parentNode.innerHTML = '<span style="color: #999; font-size: 12px; font-family: Outfit;">Invalid Image URL</span>';
+                        }} 
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div style={{ background: C.cream, padding: '16px', borderRadius: '16px', marginBottom: '20px', border: `1px solid ${C.creamDarker}` }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+                  <span className="form-label" style={{ marginBottom: 0 }}><User size={12} /> Author Profile</span>
+                  <select 
+                    style={{ background: 'white', border: `1px solid ${C.creamDarker}`, borderRadius: '8px', padding: '4px 8px', fontSize: '11px', fontFamily: 'Outfit', cursor: 'pointer' }}
+                    onChange={(e) => {
+                      const author = AUTHOR_PRESETS.find(a => a.name === e.target.value);
+                      if (author) applyAuthorPreset(author);
+                    }}
+                  >
+                    <option value="">Quick Select Author...</option>
+                    {AUTHOR_PRESETS.map(a => <option key={a.name} value={a.name}>{a.name}</option>)}
+                  </select>
+                </div>
+                
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontSize: '9px', opacity: 0.8 }}>Display Name</label>
+                    <input 
+                      className="form-input" 
+                      style={{ background: C.white }}
+                      value={formData.authorName} 
+                      onChange={e => setFormData({...formData, authorName: e.target.value})} 
+                      placeholder="e.g., Dr. Elena Vance"
+                    />
+                  </div>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontSize: '9px', opacity: 0.8 }}>Professional Role</label>
+                    <input 
+                      className="form-input" 
+                      style={{ background: C.white }}
+                      value={formData.authorRole} 
+                      onChange={e => setFormData({...formData, authorRole: e.target.value})} 
+                      placeholder="e.g., Neuroscientist"
+                    />
+                  </div>
+                </div>
+
+                <div className="form-group" style={{ marginTop: '16px', marginBottom: 0 }}>
+                  <label className="form-label" style={{ fontSize: '9px', opacity: 0.8 }}>Profile Image URL (Avatar)</label>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <input 
+                      className="form-input" 
+                      style={{ background: C.white, flex: 1 }}
+                      value={formData.authorImageUrl} 
+                      onChange={e => setFormData({...formData, authorImageUrl: e.target.value})} 
+                      placeholder="https://..."
+                    />
+                    <input 
+                      type="file" 
+                      hidden 
+                      ref={authorInputRef} 
+                      accept="image/*"
+                      onChange={(e) => handleFileUpload(e, 'authorImageUrl')} 
+                    />
+                    <button 
+                      type="button"
+                      onClick={() => authorInputRef.current.click()}
+                      disabled={isUploading.authorImageUrl}
+                      style={{ padding: '0 15px', borderRadius: '12px', border: `1px solid ${C.creamDarker}`, background: '#f8faf9', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                    >
+                      {isUploading.authorImageUrl ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+                  <div className="form-group">
+                    <label className="form-label"><FileText size={12} /> Source Link (Optional external credit)</label>
+                    <input 
+                      className="form-input" 
+                      value={formData.sourceLink} 
+                      onChange={e => setFormData({...formData, sourceLink: e.target.value})} 
+                      placeholder="e.g., https://verywellmind.com/article..."
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label"><FileText size={12} /> Main Content (Markdown supported)</label>
+                    <textarea 
+                      className="form-input" 
+                      value={formData.content} 
+                      onChange={e => setFormData({...formData, content: e.target.value})} 
+                      placeholder="The full article text (or leave empty if using Source Link)"
+                      style={{ minHeight: '300px' }}
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label"><Send size={12} /> Status</label>
+                    <select 
+                      className="form-input"
+                      value={formData.status}
+                      onChange={e => setFormData({...formData, status: e.target.value})}
+                    >
+                      <option value="draft">Draft (Hidden from App)</option>
+                      <option value="published">Published (Live in App)</option>
+                    </select>
+                  </div>
+                </>
+              ) : (
+                <div className="markdown-preview">
+                  <div style={{ marginBottom: '20px', borderRadius: '20px', overflow: 'hidden', height: '240px' }}>
+                    <img src={formData.imageUrl || 'https://via.placeholder.com/800x400'} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  </div>
+                  <h1 style={{ fontFamily: 'Playfair Display', fontSize: '32px', marginBottom: '8px' }}>{formData.title || 'Untitled Article'}</h1>
+                  <p style={{ color: C.muted, fontSize: '14px', marginBottom: '24px' }}>{formData.readingTime} · Published in <span style={{ color: C.primary, fontWeight: 700 }}>{formData.tag}</span></p>
+                  
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '16px', background: C.cream, borderRadius: '16px', marginBottom: '32px' }}>
+                    <img src={formData.authorImageUrl || 'https://via.placeholder.com/100'} style={{ width: '48px', height: '48px', borderRadius: '50%', objectFit: 'cover' }} />
+                    <div>
+                      <div style={{ fontWeight: 700, color: C.charcoal }}>{formData.authorName || 'Anonymous'}</div>
+                      <div style={{ fontSize: '12px', color: C.charcoalMuted }}>{formData.authorRole || 'Contributor'}</div>
+                    </div>
+                  </div>
+
+                  <div style={{ fontSize: '18px', fontStyle: 'italic', color: C.charcoalMuted, borderLeft: `4px solid ${C.primary}`, paddingLeft: '20px', marginBottom: '32px' }}>
+                    {formData.subtitle || 'No summary provided.'}
+                  </div>
+
+                  {/* Simple Markdown Preview simulation */}
+                  <div style={{ whiteSpace: 'pre-wrap' }}>
+                    {formData.content || 'No content yet.'}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="editor-footer">
+              <button 
+                onClick={handleCloseEditor}
+                style={{ padding: '10px 20px', background: 'transparent', border: `1px solid ${C.creamDarker}`, borderRadius: '12px', fontFamily: 'Outfit', fontWeight: 600, color: C.charcoalMuted, cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={handleSubmit}
+                style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '8px', 
+                  padding: '10px 24px', 
+                  background: C.primary, 
+                  color: 'white', 
+                  border: 'none', 
+                  borderRadius: '12px', 
+                  fontFamily: 'Outfit', 
+                  fontWeight: 600, 
+                  cursor: 'pointer', 
+                  boxShadow: '0 4px 12px rgba(124, 156, 132, 0.3)',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.background = C.primaryDark;
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                  e.currentTarget.style.boxShadow = '0 6px 16px rgba(124, 156, 132, 0.4)';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.background = C.primary;
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(124, 156, 132, 0.3)';
+                }}
+              >
+                {editingArticle ? <><Save size={16} /> Update Article</> : <><Send size={16} /> Publish Article</>}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
