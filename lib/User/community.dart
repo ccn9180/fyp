@@ -23,7 +23,7 @@ class _CommunityScreenState extends State<CommunityScreen> with AutomaticKeepAli
   late Stream<QuerySnapshot> _postsStream;
 
   // Common colors
-  final Color backgroundColor = const Color(0xFFEAE9E4);
+  final Color backgroundColor = const Color(0xFFF2F1EC);
   final Color primaryGreen = const Color(0xFF7C9C84);
   final Color textColorMain = const Color(0xFF333333);
   final Color textColorSub = const Color(0xFF888888);
@@ -37,6 +37,7 @@ class _CommunityScreenState extends State<CommunityScreen> with AutomaticKeepAli
   String _searchQuery = '';
   final User? currentUser = FirebaseAuth.instance.currentUser;
   File? _selectedImage;
+  late ScrollController _scrollController;
 
   @override
   bool get wantKeepAlive => true;
@@ -44,13 +45,25 @@ class _CommunityScreenState extends State<CommunityScreen> with AutomaticKeepAli
   @override
   void initState() {
     super.initState();
+    _scrollController = ScrollController();
     _postsStream = FirebaseFirestore.instance
         .collection('posts')
         .orderBy('timestamp', descending: true)
         .snapshots();
   }
 
+  void scrollToTop() {
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        0,
+        duration: const Duration(milliseconds: 600),
+        curve: Curves.easeInOutBack,
+      );
+    }
+  }
+
   void dispose() {
+    _scrollController.dispose();
     _postController.dispose();
     _searchController.dispose();
     super.dispose();
@@ -214,7 +227,7 @@ class _CommunityScreenState extends State<CommunityScreen> with AutomaticKeepAli
         child: Container(
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
-            color: const Color(0xFFEAE9E4),
+            color: const Color(0xFFF2F1EC),
             borderRadius: BorderRadius.circular(28),
             boxShadow: [
               BoxShadow(
@@ -315,28 +328,273 @@ class _CommunityScreenState extends State<CommunityScreen> with AutomaticKeepAli
     }
   }
 
+  Future<void> _toggleArchive(String postId, bool isArchived) async {
+    final newStatus = !isArchived;
+    await FirebaseFirestore.instance.collection('posts').doc(postId).update({'isArchived': newStatus});
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(newStatus ? 'Post archived from public feed' : 'Post restored to public feed', style: GoogleFonts.outfit()),
+          backgroundColor: primaryGreen,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
   Future<void> _editPost(Post post) async {
     final TextEditingController editController = TextEditingController(text: post.content);
+    bool isAnon = post.isAnonymous;
+    File? newImage;
+    String? currentImageUrl = post.imageUrl;
+
     bool updated = await showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Edit Post'),
-        content: TextField(
-          controller: editController,
-          maxLines: 4,
-          decoration: const InputDecoration(hintText: 'Edit your thoughts...'),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 400),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFBFBFA),
+              borderRadius: BorderRadius.circular(32),
+              boxShadow: [
+                BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 20, offset: const Offset(0, 10)),
+              ],
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Header
+                  Container(
+                    padding: const EdgeInsets.symmetric(vertical: 20),
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: primaryGreen.withOpacity(0.05),
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+                    ),
+                    child: Column(
+                      children: [
+                        Container(
+                          width: 40,
+                          height: 4,
+                          decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2)),
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Update Reflection',
+                          style: GoogleFonts.playfairDisplay(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            color: textColorMain,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Input Area
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: Colors.grey.withOpacity(0.1)),
+                          ),
+                          child: TextField(
+                            controller: editController,
+                            maxLines: 5,
+                            style: GoogleFonts.outfit(color: textColorMain, height: 1.5),
+                            decoration: InputDecoration(
+                              hintText: 'Share your thoughts...',
+                              hintStyle: GoogleFonts.outfit(color: Colors.grey[400]),
+                              border: InputBorder.none,
+                            ),
+                          ),
+                        ),
+                        
+                        const SizedBox(height: 20),
+                        
+                        // Image Section
+                        Text(
+                          'VISUALS',
+                          style: GoogleFonts.outfit(fontSize: 10, fontWeight: FontWeight.bold, color: textColorSub, letterSpacing: 1.2),
+                        ),
+                        const SizedBox(height: 12),
+                        
+                        if (newImage != null || currentImageUrl != null)
+                          Stack(
+                            children: [
+                              Container(
+                                height: 160,
+                                width: double.infinity,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(color: Colors.grey.withOpacity(0.1)),
+                                  image: DecorationImage(
+                                    image: newImage != null
+                                        ? FileImage(newImage!)
+                                        : (currentImageUrl!.startsWith('data:')
+                                            ? MemoryImage(base64Decode(currentImageUrl!.split(',').last))
+                                            : NetworkImage(currentImageUrl!) as ImageProvider),
+                                    fit: BoxFit.cover,
+                                  ),
+                                ),
+                              ),
+                              Positioned(
+                                right: 10,
+                                top: 10,
+                                child: GestureDetector(
+                                  onTap: () {
+                                    setDialogState(() {
+                                      newImage = null;
+                                      currentImageUrl = null;
+                                    });
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.all(6),
+                                    decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
+                                    child: const Icon(Icons.close, color: Colors.white, size: 14),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          )
+                        else
+                          GestureDetector(
+                            onTap: () async {
+                              final picker = ImagePicker();
+                              final picked = await picker.pickImage(source: ImageSource.gallery, maxWidth: 800, maxHeight: 800, imageQuality: 70);
+                              if (picked != null) {
+                                setDialogState(() => newImage = File(picked.path));
+                              }
+                            },
+                            child: Container(
+                              height: 100,
+                              width: double.infinity,
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(color: Colors.grey[300]!, width: 1.5, style: BorderStyle.solid),
+                              ),
+                              child: Center(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.add_photo_alternate_outlined, color: Colors.grey[400], size: 28),
+                                    const SizedBox(height: 8),
+                                    Text('Add a photo', style: GoogleFonts.outfit(color: Colors.grey[500], fontSize: 13)),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        
+                        const SizedBox(height: 24),
+                        
+                        // Settings Section
+                        Text(
+                          'PRIVACY',
+                          style: GoogleFonts.outfit(fontSize: 10, fontWeight: FontWeight.bold, color: textColorSub, letterSpacing: 1.2),
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: Colors.grey.withOpacity(0.05)),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(Icons.visibility_off_outlined, size: 20, color: isAnon ? primaryGreen : Colors.grey[400]),
+                                  const SizedBox(width: 12),
+                                  Text(
+                                    'Anonymity',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 14,
+                                      color: isAnon ? textColorMain : textColorSub,
+                                      fontWeight: isAnon ? FontWeight.w600 : FontWeight.w400,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              Switch.adaptive(
+                                value: isAnon,
+                                activeColor: primaryGreen,
+                                onChanged: (val) => setDialogState(() => isAnon = val),
+                              ),
+                            ],
+                          ),
+                        ),
+                        
+                        const SizedBox(height: 32),
+                        
+                        // Actions
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextButton(
+                                onPressed: () => Navigator.pop(context, false),
+                                style: TextButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(vertical: 16),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                ),
+                                child: Text('Discard', style: GoogleFonts.outfit(color: textColorSub, fontWeight: FontWeight.w500)),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              flex: 2,
+                              child: ElevatedButton(
+                                onPressed: () => Navigator.pop(context, true),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: primaryGreen,
+                                  foregroundColor: Colors.white,
+                                  elevation: 0,
+                                  padding: const EdgeInsets.symmetric(vertical: 16),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                ),
+                                child: Text('Save Changes', style: GoogleFonts.outfit(fontWeight: FontWeight.w700)),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Update')),
-        ],
       ),
     ) ?? false;
 
-    if (updated && editController.text.trim().isNotEmpty) {
-      await FirebaseFirestore.instance.collection('posts').doc(post.id).update({
+    if (updated) {
+      Map<String, dynamic> updates = {
         'content': editController.text.trim(),
-      });
+        'isAnonymous': isAnon,
+      };
+
+      if (newImage != null) {
+        final bytes = await newImage!.readAsBytes();
+        updates['imageUrl'] = 'data:image/jpeg;base64,${base64Encode(bytes)}';
+      } else if (currentImageUrl == null) {
+        updates['imageUrl'] = null;
+      }
+
+      await FirebaseFirestore.instance.collection('posts').doc(post.id).update(updates);
     }
   }
 
@@ -366,6 +624,7 @@ class _CommunityScreenState extends State<CommunityScreen> with AutomaticKeepAli
               backgroundColor: backgroundColor,
               body: SafeArea(
                 child: CustomScrollView(
+                  controller: _scrollController,
                   slivers: [
                     // Header
                     SliverToBoxAdapter(
@@ -639,6 +898,8 @@ class _CommunityScreenState extends State<CommunityScreen> with AutomaticKeepAli
 
                         // Filter by selected topic and search query
                         final filteredPosts = posts.where((post) {
+                          if (_activeFilter != 'MyPosts' && post.isArchived) return false;
+
                           final matchesAuthor = _activeFilter == 'MyPosts'
                               ? (currentUser != null && post.authorId == currentUser!.uid)
                               : true;
@@ -781,15 +1042,16 @@ class _CommunityScreenState extends State<CommunityScreen> with AutomaticKeepAli
   Widget _buildPostCard(Post post, {bool isFollowing = false, bool isRequested = false}) {
     bool isLiked = currentUser != null && post.likes.contains(currentUser!.uid);
     bool isOwner = currentUser != null && post.authorId == currentUser!.uid;
-    String displayAuthor = post.isAnonymous ? 'Anonymous' : post.authorName;
+    String displayAuthor = isOwner ? 'You' : (post.isAnonymous ? 'Anonymous' : post.authorName);
     String timeAgo = timeago.format(post.timestamp);
 
     return Container(
       margin: const EdgeInsets.only(left: 24, right: 24, bottom: 16),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: isOwner ? const Color(0xFFF1EFE8) : Colors.white,
+        color: post.isArchived ? const Color(0xFFF1F1F1) : Colors.white,
         borderRadius: BorderRadius.circular(24),
+        border: post.isArchived ? Border.all(color: Colors.grey.withOpacity(0.1)) : null,
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.02),
@@ -819,27 +1081,49 @@ class _CommunityScreenState extends State<CommunityScreen> with AutomaticKeepAli
                   children: [
                     CircleAvatar(
                       radius: 20,
-                      backgroundColor: isOwner ? primaryGreen.withOpacity(0.2) : const Color(0xFFEAF0ED),
-                      backgroundImage: (!post.isAnonymous && post.authorProfileImage != null)
+                      backgroundColor: const Color(0xFFEAF0ED),
+                      backgroundImage: ( (isOwner || !post.isAnonymous) && post.authorProfileImage != null)
                           ? (post.authorProfileImage!.startsWith('data:image')
                           ? MemoryImage(base64Decode(post.authorProfileImage!.split(',').last))
                           : NetworkImage(post.authorProfileImage!) as ImageProvider)
                           : null,
-                      child: (post.isAnonymous || post.authorProfileImage == null)
-                          ? Icon(Icons.person, color: isOwner ? Colors.white : primaryGreen, size: 22)
+                      child: ( (!isOwner && post.isAnonymous) || post.authorProfileImage == null)
+                          ? Icon(Icons.person, color: primaryGreen, size: 22)
                           : null,
                     ),
                     const SizedBox(width: 12),
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          isOwner ? 'You${post.isAnonymous ? ' (Anonymous)' : ''}' : displayAuthor,
-                          style: GoogleFonts.outfit(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            color: textColorMain,
-                          ),
+                        Row(
+                          children: [
+                            Text(
+                              displayAuthor,
+                              style: GoogleFonts.outfit(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                                color: textColorMain,
+                              ),
+                            ),
+                            if (isOwner && post.isAnonymous) ...[
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.amber.withOpacity(0.15),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  'ANONYMOUS',
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 8,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.amber[800],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                         const SizedBox(height: 2),
                         Text(
@@ -851,26 +1135,92 @@ class _CommunityScreenState extends State<CommunityScreen> with AutomaticKeepAli
                             color: textColorSub,
                           ),
                         ),
+                        if (post.isArchived)
+                          Container(
+                            margin: const EdgeInsets.only(top: 4),
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.blueGrey.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              'ARCHIVED',
+                              style: GoogleFonts.outfit(
+                                fontSize: 8,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.blueGrey,
+                              ),
+                            ),
+                          ),
                       ],
                     ),
                   ],
                 ),
               ),
               const Spacer(),
-              if (isOwner)
+              if (_activeFilter == 'MyPosts')
                 PopupMenuButton<String>(
+                  position: PopupMenuPosition.under,
+                  elevation: 4,
+                  shadowColor: Colors.black.withOpacity(0.2),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                  color: Colors.white,
+                  padding: EdgeInsets.zero,
                   onSelected: (value) {
                     if (value == 'edit') _editPost(post);
+                    if (value == 'archive') _toggleArchive(post.id, post.isArchived);
                     if (value == 'delete') _deletePost(post.id);
                   },
                   itemBuilder: (context) => [
-                    const PopupMenuItem(value: 'edit', child: Text('Edit')),
-                    const PopupMenuItem(value: 'delete', child: Text('Delete', style: TextStyle(color: Colors.red))),
+                    if (!post.isArchived)
+                      PopupMenuItem(
+                        value: 'edit',
+                        child: Row(
+                          children: [
+                            Icon(Icons.edit_outlined, color: primaryGreen, size: 18),
+                            const SizedBox(width: 12),
+                            Text('Edit Reflection', style: GoogleFonts.outfit(fontSize: 14)),
+                          ],
+                        ),
+                      ),
+                    PopupMenuItem(
+                      value: 'archive',
+                      child: Row(
+                        children: [
+                          Icon(
+                            post.isArchived ? Icons.unarchive_outlined : Icons.archive_outlined,
+                            color: Colors.blueGrey,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 12),
+                          Text(
+                            post.isArchived ? 'Unarchive Post' : 'Archive Post',
+                            style: GoogleFonts.outfit(fontSize: 14),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuDivider(height: 1),
+                    PopupMenuItem(
+                      value: 'delete',
+                      child: Row(
+                        children: [
+                          const Icon(Icons.delete_outline, color: Colors.redAccent, size: 18),
+                          const SizedBox(width: 12),
+                          Text('Delete Forever', style: GoogleFonts.outfit(fontSize: 14, color: Colors.redAccent)),
+                        ],
+                      ),
+                    ),
                   ],
-                  icon: const Icon(Icons.more_horiz, color: Color(0xFFB3B3B3), size: 20),
-                )
-              else
-                const Icon(Icons.more_horiz, color: Color(0xFFB3B3B3), size: 20),
+                  child: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[50],
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.more_horiz, color: Color(0xFFB3B3B3), size: 20),
+                  ),
+                ),
             ],
           ),
           const SizedBox(height: 12),
@@ -916,12 +1266,19 @@ class _CommunityScreenState extends State<CommunityScreen> with AutomaticKeepAli
             const SizedBox(height: 16),
             ClipRRect(
               borderRadius: BorderRadius.circular(16),
-              child: Image.network(
-                post.imageUrl!,
-                height: 180,
-                width: double.infinity,
-                fit: BoxFit.cover,
-              ),
+            child: post.imageUrl!.startsWith('data:')
+                ? Image.memory(
+                    base64Decode(post.imageUrl!.split(',').last),
+                    height: 180,
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                  )
+                : Image.network(
+                    post.imageUrl!,
+                    height: 180,
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                  ),
             ),
           ],
 

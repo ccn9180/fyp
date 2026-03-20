@@ -14,7 +14,7 @@ class SearchFriendScreen extends StatefulWidget {
 
 class _SearchFriendScreenState extends State<SearchFriendScreen> {
   final Color primaryGreen = const Color(0xFF7C9C84);
-  final Color backgroundColor = const Color(0xFFEAE9E4);
+  final Color backgroundColor = const Color(0xFFF2F1EC);
   final Color textColorMain = const Color(0xFF333333);
 
   final TextEditingController _searchController = TextEditingController();
@@ -490,7 +490,7 @@ Future<void> handleRequestActionGlobal(BuildContext context, User? currentUser, 
         child: Container(
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
-            color: const Color(0xFFEAE9E4),
+            color: const Color(0xFFF2F1EC),
             borderRadius: BorderRadius.circular(28),
             boxShadow: [
               BoxShadow(

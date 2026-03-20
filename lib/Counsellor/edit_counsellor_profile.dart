@@ -142,7 +142,7 @@ class _EditCounsellorProfileScreenState extends State<EditCounsellorProfileScree
     final Color primaryGreen = const Color(0xFF7C9C84);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFEAE9E4),
+      backgroundColor: const Color(0xFFF2F1EC),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,

@@ -34,6 +34,19 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _tabController.addListener(() {
+      if (_tabController.indexIsChanging) {
+        // Reset scroll position to top when tab changes
+        if (_scrollController.hasClients) {
+          _scrollController.animateTo(
+            0,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+          );
+        }
+      }
+    });
+
     _scrollController = ScrollController();
     _scrollController.addListener(() {
       if (_scrollController.offset > 300 && !_showBackToTop) {
@@ -50,6 +63,16 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
     });
     _loadFavorites();
     _preloadAssets();
+  }
+
+  void scrollToTop() {
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        0,
+        duration: const Duration(milliseconds: 600),
+        curve: Curves.easeInOutBack,
+      );
+    }
   }
 
   Future<void> _loadFavorites() async {
@@ -154,7 +177,7 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
   Widget build(BuildContext context) {
     if (_isPreloading) {
       return Scaffold(
-        backgroundColor: const Color(0xFFEAE9E4),
+        backgroundColor: const Color(0xFFF2F1EC),
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -179,7 +202,7 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFFEAE9E4), // Using consistent light beige/cream background
+      backgroundColor: const Color(0xFFF2F1EC), // Using consistent light beige/cream background
       floatingActionButton: _showBackToTop ? FloatingActionButton(
         onPressed: () {
           _scrollController.animateTo(0, duration: const Duration(milliseconds: 500), curve: Curves.easeInOut);
@@ -409,7 +432,7 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
               ),
               SliverAppBar(
                 pinned: true,
-                backgroundColor: const Color(0xFFEAE9E4),
+                backgroundColor: const Color(0xFFF2F1EC),
                 surfaceTintColor: Colors.transparent,
                 automaticallyImplyLeading: false,
                 toolbarHeight: 0,

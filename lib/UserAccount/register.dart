@@ -438,10 +438,10 @@ class _RegisterPageState extends State<RegisterPage> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(
-                          Icons.eco_rounded,
-                          color: Color(0xFF7B9E89),
-                          size: 24,
+                        Image.asset(
+                          'assets/google.png',
+                          width: 24,
+                          height: 24,
                         ),
                         const SizedBox(width: 12),
                         Flexible(

@@ -12,7 +12,7 @@ class CounsellorDashboardScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final Color primaryGreen = const Color(0xFF7C9C84);
-    final Color backgroundColor = const Color(0xFFEAE9E4);
+    final Color backgroundColor = const Color(0xFFF2F1EC);
 
     return Scaffold(
       backgroundColor: backgroundColor,

@@ -418,7 +418,7 @@ class _DiaryDetailScreenState extends State<DiaryDetailScreen> {
         child: Container(
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
-            color: const Color(0xFFEAE9E4),
+            color: const Color(0xFFF2F1EC),
             borderRadius: BorderRadius.circular(28),
             boxShadow: [
               BoxShadow(

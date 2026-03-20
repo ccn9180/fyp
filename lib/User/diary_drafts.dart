@@ -14,7 +14,7 @@ class DiaryDraftsScreen extends StatefulWidget {
 
 class _DiaryDraftsScreenState extends State<DiaryDraftsScreen> {
   final Color primaryGreen = const Color(0xFF7C9C84);
-  final Color backgroundColor = const Color(0xFFEAE9E4);
+  final Color backgroundColor = const Color(0xFFF2F1EC);
   final Color textColorMain = const Color(0xFF333333);
   final Color textColorSub = const Color(0xFF888888);
 

@@ -34,7 +34,7 @@ class _EntrySummaryScreenState extends State<EntrySummaryScreen> {
   };
 
   final Color primaryGreen = const Color(0xFF7C9C84);
-  final Color backgroundColor = const Color(0xFFEAE9E4);
+  final Color backgroundColor = const Color(0xFFF2F1EC);
   final Color textColorMain = const Color(0xFF333333);
 
   @override
@@ -437,7 +437,7 @@ class _EntrySummaryScreenState extends State<EntrySummaryScreen> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: const Color(0xFFEAE9E4),
+              color: const Color(0xFFF2F1EC),
               shape: BoxShape.circle,
             ),
             child: Icon(icon, color: Colors.grey[400], size: 24),

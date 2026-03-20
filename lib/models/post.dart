@@ -14,6 +14,7 @@ class Post {
   final List<String> likes; // User IDs who liked the post
   final int commentCount;
   final String? imageUrl;
+  final bool isArchived;
 
   Post({
     required this.id,
@@ -29,6 +30,7 @@ class Post {
     required this.likes,
     required this.commentCount,
     this.imageUrl,
+    this.isArchived = false,
   });
 
   factory Post.fromFirestore(DocumentSnapshot doc) {
@@ -47,6 +49,7 @@ class Post {
       likes: List<String>.from(data['likes'] ?? []),
       commentCount: data['commentCount'] ?? 0,
       imageUrl: data['imageUrl'],
+      isArchived: data['isArchived'] ?? false,
     );
   }
 
@@ -64,6 +67,7 @@ class Post {
       'likes': likes,
       'commentCount': commentCount,
       'imageUrl': imageUrl,
+      'isArchived': isArchived,
     };
   }
 }

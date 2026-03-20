@@ -27,7 +27,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> with TickerProviderStateM
   // Unified App Colors
   final Color primaryGreen = const Color(0xFF7C9C84); // The Sage Green from your Home/Profile
   final Color textColorMain = const Color(0xFF333333);
-  final Color backgroundColor = const Color(0xFFEAE9E4);
+  final Color backgroundColor = const Color(0xFFF2F1EC);
 
   final List<OnboardingData> _onboardingPages = [
     OnboardingData(

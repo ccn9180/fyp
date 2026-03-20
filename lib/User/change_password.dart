@@ -121,7 +121,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
   Widget build(BuildContext context) {
     if (_isGoogleUser) {
       return Scaffold(
-        backgroundColor: const Color(0xFFEAE9E4),
+        backgroundColor: const Color(0xFFF2F1EC),
         appBar: _buildAppBar(),
         body: Center(
           child: Padding(
@@ -164,7 +164,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFFEAE9E4),
+      backgroundColor: const Color(0xFFF2F1EC),
       appBar: _buildAppBar(),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),

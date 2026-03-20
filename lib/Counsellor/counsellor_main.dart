@@ -45,7 +45,7 @@ class _CounsellorMainScreenState extends State<CounsellorMainScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFEAE9E4),
+      backgroundColor: const Color(0xFFF2F1EC),
       body: IndexedStack(
         index: _selectedIndex,
         children: _pages,
@@ -116,7 +116,7 @@ class _CounsellorMainScreenState extends State<CounsellorMainScreen> {
       builder: (context) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
         decoration: const BoxDecoration(
-          color: Color(0xFFEAE9E4),
+          color: Color(0xFFF2F1EC),
           borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
         ),
         child: Column(

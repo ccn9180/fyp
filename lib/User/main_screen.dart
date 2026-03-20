@@ -23,6 +23,12 @@ class _MainScreenState extends State<MainScreen> {
   int _selectedIndex = 0;
   bool _isCounsellor = false;
 
+  final GlobalKey<State> _homeKey = GlobalKey();
+  final GlobalKey<State> _counselorKey = GlobalKey();
+  final GlobalKey<State> _communityKey = GlobalKey();
+  final GlobalKey<State> _selfHelpKey = GlobalKey();
+  final GlobalKey<State> _profileKey = GlobalKey();
+
   @override
   void initState() {
     super.initState();
@@ -39,32 +45,59 @@ class _MainScreenState extends State<MainScreen> {
     }
   }
 
-  final List<Widget> _pages = [
-    const HomeScreen(),
-    const CounsellorScreen(),
-    const CommunityScreen(),
-    const SelfHelpScreen(),
-    const ProfileScreen(),
-  ];
-
   void _onItemTapped(int index) {
-    setState(() {
-      _selectedIndex = index;
-    });
+    if (_selectedIndex == index) {
+      _triggerScrollToTop(index);
+    } else {
+      setState(() {
+        _selectedIndex = index;
+      });
+      // Small delay to allow IndexedStack to show the page before scrolling
+      Future.delayed(const Duration(milliseconds: 50), () {
+        _triggerScrollToTop(index);
+      });
+    }
+  }
+
+  void _triggerScrollToTop(int index) {
+    dynamic state;
+    switch (index) {
+      case 0: state = _homeKey.currentState; break;
+      case 1: state = _counselorKey.currentState; break;
+      case 2: state = _communityKey.currentState; break;
+      case 3: state = _selfHelpKey.currentState; break;
+      case 4: state = _profileKey.currentState; break;
+    }
+
+    if (state != null && state.mounted) {
+      try {
+        state.scrollToTop();
+      } catch (e) {
+        // Not all screens might have scrollToTop implemented yet
+        debugPrint("Screen $index does not have scrollToTop: $e");
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final List<Widget> pages = [
+      HomeScreen(key: _homeKey),
+      CounsellorScreen(key: _counselorKey),
+      CommunityScreen(key: _communityKey),
+      SelfHelpScreen(key: _selfHelpKey),
+      ProfileScreen(key: _profileKey),
+    ];
     SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-      systemNavigationBarColor: Color(0xFFEAE9E4),
+      systemNavigationBarColor: Color(0xFFF2F1EC),
       systemNavigationBarIconBrightness: Brightness.dark,
     ));
     return Scaffold(
-      backgroundColor: const Color(0xFFEAE9E4), // Light beige/cream background consistent with app theme
+      backgroundColor: const Color(0xFFF2F1EC), // Light beige/cream background consistent with app theme
       extendBody: false, // Prevents body from extending behind the navbar
       body: IndexedStack(
         index: _selectedIndex,
-        children: _pages,
+        children: pages,
       ),
       bottomNavigationBar: Container(
         margin: const EdgeInsets.only(left: 24, right: 24, bottom: 24),
@@ -176,7 +209,7 @@ class _MainScreenState extends State<MainScreen> {
       builder: (context) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
         decoration: const BoxDecoration(
-          color: Color(0xFFEAE9E4),
+          color: Color(0xFFF2F1EC),
           borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
         ),
         child: Column(
