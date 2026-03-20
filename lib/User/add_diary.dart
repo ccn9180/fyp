@@ -27,7 +27,7 @@ class AddDiaryScreen extends StatefulWidget {
 
 class _AddDiaryScreenState extends State<AddDiaryScreen> {
   final Color primaryGreen = const Color(0xFF7C9C84);
-  final Color backgroundColor = const Color(0xFFEAE9E4);
+  final Color backgroundColor = const Color(0xFFF2F1EC);
   final Color textColorMain = const Color(0xFF333333);
   final Color textColorSub = const Color(0xFF888888);
 
@@ -403,7 +403,7 @@ class _AddDiaryScreenState extends State<AddDiaryScreen> {
           child: Container(
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
-              color: const Color(0xFFEAE9E4),
+              color: const Color(0xFFF2F1EC),
               borderRadius: BorderRadius.circular(28),
               boxShadow: [
                 BoxShadow(
@@ -512,7 +512,7 @@ class _AddDiaryScreenState extends State<AddDiaryScreen> {
         child: Container(
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
-            color: const Color(0xFFEAE9E4),
+            color: const Color(0xFFF2F1EC),
             borderRadius: BorderRadius.circular(28),
             boxShadow: [
               BoxShadow(

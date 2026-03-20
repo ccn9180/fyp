@@ -20,6 +20,23 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   bool _isLoggingOut = false;
   User? get currentUser => FirebaseAuth.instance.currentUser;
+  final ScrollController _scrollController = ScrollController();
+
+  void scrollToTop() {
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        0,
+        duration: const Duration(milliseconds: 600),
+        curve: Curves.easeInOutBack,
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
 
   Future<void> _signOut() async {
     setState(() => _isLoggingOut = true);
@@ -43,7 +60,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFEAE9E4),
+      backgroundColor: const Color(0xFFF2F1EC),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -73,6 +90,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ],
       ),
       body: SingleChildScrollView(
+        controller: _scrollController,
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
         child: Column(
           children: [
@@ -721,7 +739,7 @@ class _FollowListBottomSheetState extends State<_FollowListBottomSheet> {
               return Container(
                 height: 300,
                 decoration: const BoxDecoration(
-                  color: Color(0xFFEAE9E4),
+                  color: Color(0xFFF2F1EC),
                   borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
                 ),
                 child: const Center(child: CircularProgressIndicator(color: Color(0xFF7C9C84))),
@@ -743,7 +761,7 @@ class _FollowListBottomSheetState extends State<_FollowListBottomSheet> {
             return Container(
               height: MediaQuery.of(context).size.height * 0.75,
               decoration: const BoxDecoration(
-                color: Color(0xFFEAE9E4),
+                color: Color(0xFFF2F1EC),
                 borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
               ),
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
@@ -902,7 +920,7 @@ Future<void> _handleRequestAction(BuildContext context, String currentUserId, St
         child: Container(
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
-            color: const Color(0xFFEAE9E4),
+            color: const Color(0xFFF2F1EC),
             borderRadius: BorderRadius.circular(28),
             boxShadow: [
               BoxShadow(

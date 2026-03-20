@@ -69,7 +69,7 @@ class AuthGate extends StatelessWidget {
       stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return Container(color: const Color(0xFFEAE9E4));
+          return Container(color: const Color(0xFFF2F1EC));
         }
 
         if (snapshot.hasData) {
@@ -95,7 +95,7 @@ class AuthGate extends StatelessWidget {
                   future: SharedPreferences.getInstance(),
                   builder: (context, prefsSnapshot) {
                     if (!prefsSnapshot.hasData) {
-                      return Container(color: const Color(0xFFEAE9E4));
+                      return Container(color: const Color(0xFFF2F1EC));
                     }
 
                     final prefs = prefsSnapshot.data!;

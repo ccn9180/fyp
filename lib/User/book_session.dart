@@ -134,7 +134,8 @@ class _BookSessionScreenState extends State<BookSessionScreen> {
                   GestureDetector(
                     onTap: () => Navigator.pop(context),
                     child: Container(
-                      padding: const EdgeInsets.all(12),
+                      width: 44,
+                      height: 44,
                       decoration: BoxDecoration(
                         color: Colors.white,
                         shape: BoxShape.circle,
@@ -146,19 +147,23 @@ class _BookSessionScreenState extends State<BookSessionScreen> {
                           ),
                         ],
                       ),
-                      child: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF333333), size: 20),
+                      child: const Center(
+                        child: Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF333333), size: 20),
+                      ),
                     ),
                   ),
+                  const Spacer(),
                   Text(
-                    'Book a Session',
-                    style: GoogleFonts.playfairDisplay(
-                      fontSize: 22,
+                    'BOOK A SESSION',
+                    style: GoogleFonts.outfit(
+                      fontSize: 14,
                       fontWeight: FontWeight.bold,
-                      color: const Color(0xFF333333),
+                      letterSpacing: 1.2,
+                      color: const Color(0xFF5D6D66),
                     ),
                   ),
+                  const Spacer(),
                   const SizedBox(width: 44), // Balanced placeholder for centering
-                  const SizedBox(width: 48), // Placeholder for balance
                 ],
               ),
             ),
@@ -182,7 +187,7 @@ class _BookSessionScreenState extends State<BookSessionScreen> {
                           'Select Date',
                           style: GoogleFonts.playfairDisplay(
                             fontSize: 24,
-                            fontWeight: FontWeight.bold,
+                            fontWeight: FontWeight.w600,
                             color: const Color(0xFF333333),
                           ),
                         ),
@@ -247,7 +252,7 @@ class _BookSessionScreenState extends State<BookSessionScreen> {
                       'Select Time',
                       style: GoogleFonts.playfairDisplay(
                         fontSize: 24,
-                        fontWeight: FontWeight.bold,
+                        fontWeight: FontWeight.w600,
                         color: const Color(0xFF333333),
                       ),
                     ),
@@ -274,9 +279,9 @@ class _BookSessionScreenState extends State<BookSessionScreen> {
                         ),
                         child: Text(
                           'Book Appointment',
-                          style: GoogleFonts.outfit(
+                          style: GoogleFonts.playfairDisplay(
                             fontSize: 18,
-                            fontWeight: FontWeight.w600,
+                            fontWeight: FontWeight.bold,
                             color: Colors.white,
                           ),
                         ),

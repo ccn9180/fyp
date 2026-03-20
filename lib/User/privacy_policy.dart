@@ -7,7 +7,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFEAE9E4), // Already applying the darker color
+      backgroundColor: const Color(0xFFF2F1EC), // Already applying the darker color
       appBar: AppBar(
         title: Text('Privacy Policy', style: GoogleFonts.playfairDisplay(fontWeight: FontWeight.bold)),
         backgroundColor: Colors.transparent,

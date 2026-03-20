@@ -130,13 +130,11 @@ class _LoginPageState extends State<LoginPage> {
                   color: const Color(0xFFF1F5F9),
                   shape: BoxShape.circle,
                 ),
-                child: const Center(
-                  child: Icon(
-                    Icons.eco_rounded,
-                    color: Color(0xFF7B9E89),
-                    size: 32,
+                  child: Image.asset(
+                    'assets/google.png',
+                    width: 32,
+                    height: 32,
                   ),
-                ),
               ),
               const SizedBox(height: 24),
               
@@ -179,10 +177,10 @@ class _LoginPageState extends State<LoginPage> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(
-                        Icons.eco_rounded,
-                        color: Color(0xFF7B9E89),
-                        size: 24,
+                      Image.asset(
+                        'assets/google.png',
+                        width: 24,
+                        height: 24,
                       ),
                       const SizedBox(width: 12),
                       Text(
@@ -445,10 +443,10 @@ class _LoginPageState extends State<LoginPage> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(
-                          Icons.eco_rounded,
-                          color: Color(0xFF7B9E89),
-                          size: 24,
+                        Image.asset(
+                          'assets/google.png',
+                          width: 24,
+                          height: 24,
                         ),
                         const SizedBox(width: 12),
                         Flexible(

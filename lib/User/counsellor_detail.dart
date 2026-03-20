@@ -1,9 +1,11 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'book_session.dart';
 
-class CounsellorDetailScreen extends StatelessWidget {
+class CounsellorDetailScreen extends StatefulWidget {
   final String counsellorId;
   final String name;
   final String specialty;
@@ -24,6 +26,63 @@ class CounsellorDetailScreen extends StatelessWidget {
     this.imageUrl = 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&q=80&w=2000',
     this.about = 'Dr. Sarah specializes in mindful-based cognitive therapy and trauma recovery...',
   });
+
+  @override
+  State<CounsellorDetailScreen> createState() => _CounsellorDetailScreenState();
+}
+
+class _CounsellorDetailScreenState extends State<CounsellorDetailScreen> {
+  final User? currentUser = FirebaseAuth.instance.currentUser;
+  bool isFavorited = false;
+  bool isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkFavoriteStatus();
+  }
+
+  Future<void> _checkFavoriteStatus() async {
+    if (currentUser == null) return;
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(currentUser!.uid)
+          .get();
+      
+      if (doc.exists) {
+        final List<dynamic> favorites = doc.data()?['favoriteCounsellors'] ?? [];
+        setState(() {
+          isFavorited = favorites.contains(widget.counsellorId);
+          isLoading = false;
+        });
+      }
+    } catch (e) {
+      print("Error checking favorite: $e");
+      setState(() => isLoading = false);
+    }
+  }
+
+  Future<void> _toggleFavorite() async {
+    if (currentUser == null) return;
+
+    final docRef = FirebaseFirestore.instance.collection('users').doc(currentUser!.uid);
+    
+    try {
+      if (isFavorited) {
+        await docRef.update({
+          'favoriteCounsellors': FieldValue.arrayRemove([widget.counsellorId])
+        });
+      } else {
+        await docRef.update({
+          'favoriteCounsellors': FieldValue.arrayUnion([widget.counsellorId])
+        });
+      }
+      setState(() => isFavorited = !isFavorited);
+    } catch (e) {
+      print("Error toggling favorite: $e");
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -48,18 +107,19 @@ class CounsellorDetailScreen extends StatelessWidget {
                     onTap: () => Navigator.pop(context),
                   ),
                   Text(
-                    'Counselor Profile',
+                    'COUNSELOR PROFILE',
                     style: GoogleFonts.outfit(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w500,
-                      color: textColorMain,
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.2,
+                      color: const Color(0xFF5D6D66),
                     ),
                   ),
                   _buildRoundButton(
-                    icon: Icons.favorite_border_rounded,
-                    isFavorite: true, // Should probably be dynamic, but following existing logic
+                    icon: isFavorited ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                    isFavorite: isFavorited,
                     isHeart: true,
-                    onTap: () {},
+                    onTap: _toggleFavorite,
                   ),
                 ],
               ),
@@ -84,9 +144,9 @@ class CounsellorDetailScreen extends StatelessWidget {
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(40),
                             image: DecorationImage(
-                              image: imageUrl.startsWith('data:image')
-                                  ? MemoryImage(base64Decode(imageUrl.split(',').last)) as ImageProvider
-                                  : NetworkImage(imageUrl),
+                              image: widget.imageUrl.startsWith('data:image')
+                                  ? MemoryImage(base64Decode(widget.imageUrl.split(',').last)) as ImageProvider
+                                  : NetworkImage(widget.imageUrl),
                               fit: BoxFit.cover,
                               alignment: Alignment.topCenter,
                             ),
@@ -117,16 +177,16 @@ class CounsellorDetailScreen extends StatelessWidget {
 
                     // Name and Title
                     Text(
-                      name,
+                      widget.name,
                       style: GoogleFonts.playfairDisplay(
-                        fontSize: 28,
+                        fontSize: 32,
                         fontWeight: FontWeight.w600,
                         color: textColorMain,
                       ),
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      specialty,
+                      widget.specialty,
                       style: GoogleFonts.outfit(
                         fontSize: 16,
                         color: const Color(0xFF98B3A1),
@@ -143,7 +203,7 @@ class CounsellorDetailScreen extends StatelessWidget {
                         const Icon(Icons.school_outlined, size: 16, color: Color(0xFF888888)),
                         const SizedBox(width: 6),
                         Text(
-                          'PhD, PsyD • $experience experience',
+                          'PhD, PsyD • ${widget.experience} experience',
                           style: GoogleFonts.outfit(
                             fontSize: 13,
                             color: textColorSub,
@@ -158,9 +218,9 @@ class CounsellorDetailScreen extends StatelessWidget {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        _buildStatCard('PATIENTS', patients),
-                        _buildStatCard('EXPERIENCE', experience),
-                        _buildStatCard('RATING', rating, isRating: true),
+                        _buildStatCard('PATIENTS', widget.patients),
+                        _buildStatCard('EXPERIENCE', widget.experience),
+                        _buildStatCard('RATING', widget.rating, isRating: true),
                       ],
                     ),
                   ],
@@ -183,7 +243,7 @@ class CounsellorDetailScreen extends StatelessWidget {
                         ),
                         const SizedBox(height: 12),
                         Text(
-                          about,
+                          widget.about,
                           style: GoogleFonts.outfit(
                             fontSize: 15,
                             color: const Color(0xFF7A8981),
@@ -329,11 +389,11 @@ class CounsellorDetailScreen extends StatelessWidget {
                 context,
                 MaterialPageRoute(
                   builder: (context) => BookSessionScreen(
-                    counsellorId: counsellorId,
-                    name: name,
-                    specialty: specialty,
-                    rating: rating,
-                    profileImage: imageUrl,
+                    counsellorId: widget.counsellorId,
+                    name: widget.name,
+                    specialty: widget.specialty,
+                    rating: widget.rating,
+                    profileImage: widget.imageUrl,
                     sessionsCount: 120,
                   ),
                 ),
@@ -342,9 +402,9 @@ class CounsellorDetailScreen extends StatelessWidget {
             icon: const Icon(Icons.calendar_month_outlined, color: Colors.white),
             label: Text(
               'Book a Session',
-              style: GoogleFonts.outfit(
+              style: GoogleFonts.playfairDisplay(
                 fontSize: 18,
-                fontWeight: FontWeight.w600,
+                fontWeight: FontWeight.bold,
                 color: Colors.white,
               ),
             ),
@@ -380,7 +440,7 @@ class CounsellorDetailScreen extends StatelessWidget {
         child: Icon(
           isHeart ? (isFavorite ? Icons.favorite_rounded : Icons.favorite_outline_rounded) : icon,
           size: 20,
-          color: isHeart && isFavorite ? Colors.redAccent : const Color(0xFF333333),
+          color: isHeart && isFavorite ? const Color(0xFF86A590) : const Color(0xFF333333),
         ),
       ),
     );

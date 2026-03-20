@@ -384,7 +384,7 @@ class _MeditationPlayerScreenState extends State<MeditationPlayerScreen> with Si
   @override
   Widget build(BuildContext context) {
     const Color primaryColor = Color(0xFF7C9C84); // Sage Green
-    const Color backgroundColor = Color(0xFFEAE9E4);
+    const Color backgroundColor = Color(0xFFF2F1EC);
     const Color textColorMain = Color(0xFF333333);
     const Color textColorSub = Color(0xFF9E9E9E);
 

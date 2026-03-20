@@ -77,7 +77,7 @@ class _SplashTransitionScreenState extends State<SplashTransitionScreen> with Si
   @override
   Widget build(BuildContext context) {
     const Color primaryGreen = Color(0xFF7C9C84);
-    const Color backgroundColor = Color(0xFFEAE9E4);
+    const Color backgroundColor = Color(0xFFF2F1EC);
 
     return Scaffold(
       backgroundColor: backgroundColor,

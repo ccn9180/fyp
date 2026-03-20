@@ -35,7 +35,7 @@ class DetailedHistoryScreen extends StatelessWidget {
     final currentUser = FirebaseAuth.instance.currentUser;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFEAE9E4),
+      backgroundColor: const Color(0xFFF2F1EC),
       appBar: AppBar(
         title: Text(
           'Your Journey History',
@@ -45,7 +45,7 @@ class DetailedHistoryScreen extends StatelessWidget {
             fontWeight: FontWeight.w600,
           ),
         ),
-        backgroundColor: const Color(0xFFEAE9E4),
+        backgroundColor: const Color(0xFFF2F1EC),
         elevation: 0,
         centerTitle: true,
         leading: IconButton(
