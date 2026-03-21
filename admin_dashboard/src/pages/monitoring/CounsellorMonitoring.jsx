@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Star, ShieldCheck, Activity, XCircle, Mail, BookOpen, Calendar, Award, ExternalLink, Briefcase, Search, Filter } from 'lucide-react';
+import { Star, ShieldCheck, Activity, XCircle, Mail, BookOpen, Calendar, Award, ExternalLink, Briefcase, Search, Filter, X, LayoutGrid, ChevronDown, Calendar as CalendarIcon } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { useUsers } from '../../hooks/useFirestore';
 
@@ -20,8 +20,16 @@ export default function CounsellorMonitoring() {
   const [selectedCounsellor, setSelectedCounsellor] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [specialtyFilter, setSpecialtyFilter] = useState('All');
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [isDateOpen, setIsDateOpen] = useState(false);
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 8;
+
+  const today = new Date().toISOString().split('T')[0];
   
-  const allCounsellors = useMemo(() => 
+  const allCounsellorsRaw = useMemo(() => 
     allUsers.filter(u => (u.role || '').toLowerCase() === 'counsellor'),
     [allUsers]
   );
@@ -29,27 +37,47 @@ export default function CounsellorMonitoring() {
   // Get unique specializations for filter dropdown
   const availableSpecialties = useMemo(() => {
     const specs = new Set();
-    allCounsellors.forEach(c => {
+    (allCounsellorsRaw || []).forEach(c => {
       const s = Array.isArray(c.specializations) ? c.specializations : (c.specialties || []);
       s.forEach(spec => specs.add(spec));
     });
     return ['All', ...Array.from(specs).sort()];
-  }, [allCounsellors]);
+  }, [allCounsellorsRaw]);
 
   const filteredCounsellors = useMemo(() => {
-    return allCounsellors.filter(c => {
+    return (allCounsellorsRaw || []).filter(c => {
+      // Basic Text Search
       const name = (c.name || c.fullName || '').toLowerCase();
       const email = (c.email || '').toLowerCase();
       const query = searchQuery.toLowerCase();
-      
       const matchesSearch = name.includes(query) || email.includes(query);
       
+      // Specialist Filter
       const s = Array.isArray(c.specializations) ? c.specializations : (c.specialties || []);
       const matchesSpecialty = specialtyFilter === 'All' || s.some(spec => spec === specialtyFilter);
+
+      // Date Range Filter (Using createdAt or Last Active)
+      const createdAt = c.createdAt?.toDate ? c.createdAt.toDate() : (c.createdAt ? new Date(c.createdAt) : null);
+      let matchesDate = true;
+      if (startDate) {
+        const sDate = new Date(startDate);
+        matchesDate = matchesDate && createdAt && createdAt >= sDate;
+      }
+      if (endDate) {
+        const eDate = new Date(endDate);
+        eDate.setHours(23, 59, 59);
+        matchesDate = matchesDate && createdAt && createdAt <= eDate;
+      }
       
-      return matchesSearch && matchesSpecialty;
+      return matchesSearch && matchesSpecialty && matchesDate;
     });
-  }, [allCounsellors, searchQuery, specialtyFilter]);
+  }, [allCounsellorsRaw, searchQuery, specialtyFilter, startDate, endDate]);
+
+  const totalPages = Math.ceil(filteredCounsellors.length / itemsPerPage);
+  const paginatedCounsellors = filteredCounsellors.slice(
+    (currentPage - 1) * itemsPerPage, 
+    currentPage * itemsPerPage
+  );
   
   const totalSessions = filteredCounsellors.reduce((sum, c) => sum + (c.totalSessions || 0), 0);
   const avgRating = filteredCounsellors.length > 0 
@@ -67,11 +95,11 @@ export default function CounsellorMonitoring() {
       <div className="flex flex-row items-center justify-between gap-4">
         <div>
           <p className="section-label mb-0.5">Monitoring & Analytics</p>
-          <h2 className="font-display font-semibold text-2xl text-charcoal">Counsellor Activity</h2>
+          <h2 className="font-display font-semibold text-2xl text-charcoal">Performance</h2>
         </div>
 
-        {/* Improved Search and Filter Bar Row */}
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Search Field */}
           <div className="relative">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-charcoal-muted" />
             <input 
@@ -79,36 +107,136 @@ export default function CounsellorMonitoring() {
               placeholder="Search counsellors..." 
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 pr-4 py-2 bg-white border border-cream-darker rounded-xl text-sm font-body outline-none focus:border-primary transition w-48 shadow-sm"
+              className="pl-9 pr-10 py-2 bg-white border border-cream-darker rounded-xl text-sm font-body outline-none focus:border-primary transition w-48 shadow-sm"
             />
+            {searchQuery && (
+              <button 
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-primary p-0.5 rounded-full hover:bg-sage-50 transition"
+              >
+                <X size={14} />
+              </button>
+            )}
           </div>
-          <div className="flex items-center bg-white border border-cream-darker rounded-xl px-3 py-2 shadow-sm">
-            <Filter size={14} className="text-charcoal-muted mr-2" />
-            <select 
-              value={specialtyFilter}
-              onChange={(e) => setSpecialtyFilter(e.target.value)}
-              className="bg-transparent text-sm font-body outline-none text-charcoal cursor-pointer"
+
+          {/* Premium Date Range Picker */}
+          <div className="relative">
+             <button 
+              onClick={() => { setIsDateOpen(!isDateOpen); setIsDropdownOpen(false); }}
+              className={`flex items-center gap-2 px-4 py-2 bg-white border ${isDateOpen ? 'border-primary ring-2 ring-primary/10' : 'border-cream-darker'} rounded-xl shadow-sm transition-all hover:bg-cream/30 active:scale-95`}
+             >
+               <CalendarIcon size={14} className={startDate || endDate ? 'text-primary' : 'text-charcoal-muted'} />
+               <span className="text-sm font-medium text-charcoal-muted whitespace-nowrap">
+                 {!startDate && !endDate ? 'Custom Range' : `${startDate || 'Start'} to ${endDate || 'End'}`}
+               </span>
+               <ChevronDown size={14} className={`text-muted transition-transform ${isDateOpen ? 'rotate-180' : ''}`} />
+             </button>
+
+             {isDateOpen && (
+               <>
+                 <div className="fixed inset-0 z-40" onClick={() => setIsDateOpen(false)} />
+                 <div className="absolute top-full right-0 mt-2 w-72 bg-white border border-cream-darker rounded-[1.5rem] shadow-2xl animate-in fade-in zoom-in-95 slide-in-from-top-2 duration-200 z-50 p-6 transform origin-top-right">
+                    <div className="flex justify-between items-center mb-5">
+                       <p className="section-label mb-0 !text-[10px]">Activity periods</p>
+                       {(startDate || endDate) && (
+                          <button 
+                            onClick={() => { setStartDate(''); setEndDate(''); setIsDateOpen(false); }}
+                            className="text-[10px] text-primary font-bold hover:underline"
+                          >
+                            Reset
+                          </button>
+                       )}
+                    </div>
+                    
+                    <div className="space-y-4">
+                       <div className="space-y-1.5">
+                          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">From Date</label>
+                          <input 
+                            type="date"
+                            value={startDate}
+                            max={today}
+                            onChange={(e) => setStartDate(e.target.value)}
+                            className="w-full bg-cream/30 border border-cream-darker rounded-xl px-3 py-2 text-xs font-body outline-none focus:border-primary transition"
+                          />
+                       </div>
+                       <div className="space-y-1.5">
+                          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">To Date</label>
+                          <input 
+                            type="date"
+                            value={endDate}
+                            max={today}
+                            onChange={(e) => setEndDate(e.target.value)}
+                            className="w-full bg-cream/30 border border-cream-darker rounded-xl px-3 py-2 text-xs font-body outline-none focus:border-primary transition"
+                          />
+                       </div>
+                       
+                       <button 
+                        onClick={() => setIsDateOpen(false)}
+                        className="w-full py-2.5 bg-[#7C9C84] text-white rounded-xl text-xs font-bold hover:opacity-90 transition shadow-md active:scale-95 mt-2"
+                       >
+                         Apply Range
+                       </button>
+                    </div>
+                 </div>
+               </>
+             )}
+          </div>
+
+          {/* Specialist Dropdown - Click Based */}
+          <div className="relative">
+            <button 
+              onClick={() => { setIsDropdownOpen(!isDropdownOpen); setIsDateOpen(false); }}
+              className={`flex items-center bg-white border ${isDropdownOpen ? 'border-primary ring-2 ring-primary/10' : 'border-cream-darker'} rounded-xl px-4 py-2 shadow-sm cursor-pointer transition-all hover:bg-cream/30 active:scale-95`}
             >
-              {availableSpecialties.map(s => (
-                <option key={s} value={s}>{s === 'All' ? 'All Specialties' : s}</option>
-              ))}
-            </select>
+              <div className="flex items-center gap-2">
+                <LayoutGrid size={13} className="text-primary" />
+                <span className="text-sm font-medium text-charcoal-muted whitespace-nowrap">
+                  {specialtyFilter === 'All' ? 'All Specialties' : specialtyFilter}
+                </span>
+                <ChevronDown size={14} className={`text-muted transition-transform duration-300 ${isDropdownOpen ? 'rotate-180 text-primary' : ''}`} />
+              </div>
+            </button>
+
+            {isDropdownOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setIsDropdownOpen(false)} />
+                <div className="absolute top-full right-0 mt-2 w-56 bg-white border border-cream-darker rounded-[1.5rem] shadow-2xl animate-in fade-in zoom-in-95 slide-in-from-top-2 duration-200 z-50 p-2 overflow-y-auto max-h-64 custom-scrollbar transform origin-top-right">
+                  {availableSpecialties.map(s => (
+                    <button
+                      key={s}
+                      onClick={() => {
+                        setSpecialtyFilter(s);
+                        setIsDropdownOpen(false);
+                      }}
+                      className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all font-body text-xs font-bold text-left ${
+                        specialtyFilter === s 
+                        ? 'bg-sage-100 text-primary' 
+                        : 'text-charcoal-muted hover:bg-cream'
+                      }`}
+                    >
+                      <div className={`w-1.5 h-1.5 rounded-full ${specialtyFilter === s ? 'bg-primary' : 'bg-charcoal-muted/20'}`} />
+                      {s === 'All' ? 'All Specialties' : s}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
 
       {loading ? (
-        <p className="font-body text-sm text-charcoal-muted">Loading monitoring data…</p>
+        <p className="font-body text-sm text-charcoal-muted">Sourcing counsellor activity data…</p>
       ) : (
         <>
-          {/* Summary metrics - Three in one line, different boxes, very compact */}
+          {/* Summary metrics */}
           <div className="grid grid-cols-3 gap-3">
             <div className="card flex items-center gap-3 py-3 px-4">
               <div className="w-8 h-8 rounded-full bg-sage-50 flex items-center justify-center text-primary shrink-0">
                 <ShieldCheck size={16} />
               </div>
               <div>
-                <p className="section-label !text-[9px] mb-0 leading-none">Active</p>
+                <p className="section-label !text-[9px] mb-0 leading-none">Counsellors</p>
                 <p className="font-display font-bold text-lg text-primary leading-tight">{filteredCounsellors.length}</p>
               </div>
             </div>
@@ -128,7 +256,7 @@ export default function CounsellorMonitoring() {
                 <Activity size={16} />
               </div>
               <div>
-                <p className="section-label !text-[9px] mb-0 leading-none">Sessions</p>
+                <p className="section-label !text-[9px] mb-0 leading-none">Total Sessions</p>
                 <p className="font-display font-bold text-lg text-charcoal leading-tight">{totalSessions}</p>
               </div>
             </div>
@@ -138,7 +266,7 @@ export default function CounsellorMonitoring() {
           <div className="card">
             <div className="flex justify-between items-center mb-4">
               <p className="section-label mb-0">Sessions per Counsellor</p>
-              <span className="text-[10px] text-charcoal-muted uppercase font-bold tracking-wider">Top performers</span>
+              <span className="text-[10px] text-charcoal-muted uppercase font-bold tracking-wider">Filtered View</span>
             </div>
             {chartData.length > 0 ? (
               <ResponsiveContainer width="100%" height={200}>
@@ -157,20 +285,20 @@ export default function CounsellorMonitoring() {
 
           {/* Table */}
           <div className="card">
-            <p className="section-label mb-4">Counsellor Details</p>
+            <p className="section-label mb-4">Counsellor Performance Audit</p>
             <div className="overflow-x-auto">
               <table className="w-full font-body text-sm">
                 <thead>
                   <tr className="text-left text-charcoal-muted text-xs uppercase tracking-wide border-b border-cream-darker">
                     <th className="pb-2 font-semibold font-display">Counsellor</th>
-                    <th className="pb-2 font-semibold font-display">Specialization</th>
-                    <th className="pb-2 font-semibold font-display">Sessions</th>
+                    <th className="pb-2 font-semibold font-display">Expertise</th>
+                    <th className="pb-2 font-semibold font-display">Total Sessions</th>
                     <th className="pb-2 font-semibold font-display">Rating</th>
                     <th className="pb-2 font-semibold font-display">Status</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredCounsellors.map((c) => (
+                  {paginatedCounsellors.map((c) => (
                     <tr 
                       key={c.id} 
                       onClick={() => setSelectedCounsellor(c)}
@@ -198,11 +326,6 @@ export default function CounsellorMonitoring() {
                               {s}
                             </span>
                           )) || <span className="text-xs italic opacity-50">General</span>}
-                          {(Array.isArray(c.specializations) ? c.specializations : (c.specialties || [])).length > 1 && (
-                            <span className="text-[10px] text-primary self-center ml-1">
-                              +{(Array.isArray(c.specializations) ? c.specializations : (c.specialties || [])).length - 1} more
-                            </span>
-                          )}
                         </div>
                       </td>
                       <td className="py-3 text-charcoal-muted font-mono">{c.totalSessions || 0}</td>
@@ -214,153 +337,139 @@ export default function CounsellorMonitoring() {
                       </td>
                     </tr>
                   ))}
-                  {filteredCounsellors.length === 0 && (
-                    <tr>
-                      <td colSpan="5" className="py-12 text-center text-charcoal-muted opacity-60 italic">No counsellors match your search.</td>
-                    </tr>
-                  )}
                 </tbody>
               </table>
+            </div>
+
+            {/* Pagination UI */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '24px', padding: '0 4px' }}>
+              <p style={{ fontFamily: 'Outfit', fontSize: '12px', color: C.muted, fontWeight: 500 }}>
+                Showing {paginatedCounsellors.length} of {filteredCounsellors.length} counsellors
+              </p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <button 
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage(prev => prev - 1)}
+                  style={{ padding: '6px 14px', borderRadius: '10px', border: `1px solid ${C.creamDarker}`, background: 'white', fontFamily: 'Outfit', fontSize: '12px', fontWeight: 600, color: C.charcoal, cursor: currentPage === 1 ? 'default' : 'pointer', opacity: currentPage === 1 ? 0.4 : 1 }}
+                >
+                  Previous
+                </button>
+                {[...Array(totalPages)].map((_, i) => (
+                  <button 
+                    key={i}
+                    onClick={() => setCurrentPage(i + 1)}
+                    style={{ width: '32px', height: '32px', borderRadius: '10px', border: currentPage === i + 1 ? `1px solid ${C.primary}` : `1px solid ${C.creamDarker}`, background: currentPage === i + 1 ? C.primary : 'white', fontFamily: 'Outfit', fontSize: '12px', fontWeight: 700, color: currentPage === i + 1 ? 'white' : C.charcoal, cursor: 'pointer' }}
+                  >
+                    {i + 1}
+                  </button>
+                ))}
+                <button 
+                  disabled={currentPage === totalPages || totalPages === 0}
+                  onClick={() => setCurrentPage(prev => prev + 1)}
+                  style={{ padding: '6px 14px', borderRadius: '10px', border: `1px solid ${C.creamDarker}`, background: 'white', fontFamily: 'Outfit', fontSize: '12px', fontWeight: 600, color: C.charcoal, cursor: (currentPage === totalPages || totalPages === 0) ? 'default' : 'pointer', opacity: (currentPage === totalPages || totalPages === 0) ? 0.4 : 1 }}
+                >
+                  Next
+                </button>
+              </div>
             </div>
           </div>
         </>
       )}
 
-      {/* Counsellor Info Modal */}
+      {/* HIGH-FIDELITY INTELLIGENCE MODAL: PROFESSIONAL REDESIGN */}
       {selectedCounsellor && (
         <div 
-          className="fixed inset-0 bg-black/40 backdrop-blur-sm flex justify-center items-center z-[1000] p-4"
+          className="fixed inset-0 bg-black/60 backdrop-blur-md flex justify-center items-center z-[1000] p-4"
           onClick={() => setSelectedCounsellor(null)}
         >
           <div 
-            className="w-full max-w-2xl bg-white rounded-[2rem] shadow-2xl relative animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh] overflow-hidden"
+            className="w-full max-w-xl bg-white rounded-[2.5rem] shadow-2xl relative animate-in zoom-in-95 duration-300 flex flex-col max-h-[90vh] overflow-hidden border border-cream-darker"
             onClick={e => e.stopPropagation()}
           >
-            {/* Modal Header */}
-            <div className="bg-sage-100 p-8 flex items-start justify-between relative">
-              <div className="flex items-center gap-6">
-                <div className="w-24 h-24 rounded-2xl bg-white shadow-lg overflow-hidden border-4 border-white shrink-0">
+            {/* Minimalist Close Button */}
+            <button 
+              onClick={() => setSelectedCounsellor(null)}
+              className="absolute top-6 right-6 z-50 p-2 bg-cream/80 hover:bg-white rounded-full transition text-charcoal/40 hover:text-charcoal shadow-sm active:scale-95"
+            >
+              <X size={20} />
+            </button>
+
+            <div className="flex-1 overflow-y-auto custom-scrollbar bg-white">
+              {/* Profile Header Block */}
+              <div className="bg-sage-100/50 p-10 flex flex-col items-center border-b border-cream-darker relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-full h-1 bg-primary/20 opacity-30" />
+                
+                <div className="w-28 h-28 rounded-full bg-white shadow-xl overflow-hidden border-4 border-white mb-6 relative z-10">
                   {selectedCounsellor.counsellorImageUrl || selectedCounsellor.profileImageUrl ? (
                     <img src={selectedCounsellor.counsellorImageUrl || selectedCounsellor.profileImageUrl} alt="" className="w-full h-full object-cover" />
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center text-3xl font-bold text-primary">
+                    <div className="w-full h-full flex items-center justify-center text-4xl font-bold text-primary">
                        {(selectedCounsellor.name || selectedCounsellor.fullName || '?').charAt(0).toUpperCase()}
                     </div>
                   )}
                 </div>
-                <div>
-                  <div className="flex items-center gap-3 mb-1">
-                    <h2 className="font-display font-bold text-2xl text-charcoal">{selectedCounsellor.name || selectedCounsellor.fullName || 'Anonymous'}</h2>
-                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest ${selectedCounsellor.status === 'active' || !selectedCounsellor.status ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
-                      {selectedCounsellor.status || 'Active'}
-                    </span>
+
+                <h2 className="font-display font-black text-3xl text-charcoal leading-tight mb-2 text-center">{selectedCounsellor.name || selectedCounsellor.fullName || 'Anonymous'}</h2>
+                <div className="flex items-center gap-2 mb-6">
+                  <span className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest ${selectedCounsellor.status === 'Active' ? 'bg-primary/10 text-primary border border-primary/10' : 'bg-amber-100 text-amber-700 border border-amber-200'}`}>
+                    Counsellor Status: {selectedCounsellor.status || 'Active'}
+                  </span>
+                  <div className="flex items-center gap-1.5 text-charcoal-muted font-bold text-[10px] uppercase tracking-wider bg-white/60 px-3 py-1 rounded-lg border border-white">
+                    <Mail size={12} className="text-primary" /> {selectedCounsellor.email || 'Email Restricted'}
                   </div>
-                  <p className="text-primary font-medium flex items-center gap-1.5 text-sm">
-                    <Briefcase size={14} />
-                    {Array.isArray(selectedCounsellor.specializations) ? selectedCounsellor.specializations[0] : (selectedCounsellor.specialties?.[0] || 'Mental Health Specialist')}
-                  </p>
-                  <p className="text-charcoal-muted flex items-center gap-1.5 text-xs mt-1">
-                    <Mail size={12} />
-                    {selectedCounsellor.email || 'No email provided'}
-                  </p>
+                </div>
+
+                {/* Performance Stats Grid */}
+                <div className="grid grid-cols-2 gap-3 w-full max-w-sm">
+                   <div className="bg-white/80 p-4 rounded-2xl border border-white shadow-sm flex flex-col items-center">
+                      <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Total Impact</p>
+                      <div className="flex items-center gap-2">
+                        <Activity size={14} className="text-primary" />
+                        <span className="text-xl font-display font-bold text-charcoal">{selectedCounsellor.totalSessions || 0} Sessions</span>
+                      </div>
+                   </div>
+                   <div className="bg-white/80 p-4 rounded-2xl border border-white shadow-sm flex flex-col items-center">
+                      <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Success Rating</p>
+                      <div className="flex items-center gap-2 text-amber-600">
+                        <Star size={14} fill="currentColor" />
+                        <span className="text-xl font-display font-bold">{selectedCounsellor.rating || '0.0'} Trust</span>
+                      </div>
+                   </div>
                 </div>
               </div>
-              <button 
-                onClick={() => setSelectedCounsellor(null)}
-                className="p-2 hover:bg-white/50 rounded-full transition text-charcoal/40 hover:text-charcoal"
-              >
-                <XCircle size={24} />
-              </button>
-            </div>
 
-            {/* Modal Scrollable Body */}
-            <div className="p-8 overflow-y-auto custom-scrollbar flex-1 bg-white">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                {/* Left Column - Stats */}
-                <div className="space-y-6">
-                  <div>
-                    <p className="section-label mb-3">Professional Snapshot</p>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="bg-cream/50 p-4 rounded-2xl border border-cream-darker">
-                        <div className="flex items-center gap-2 text-amber-500 mb-1">
-                          <Star size={16} fill="currentColor" />
-                          <span className="text-xs font-bold uppercase tracking-wider">Rating</span>
-                        </div>
-                        <p className="text-xl font-display font-bold text-charcoal">{selectedCounsellor.rating || '0.0'}</p>
-                      </div>
-                      <div className="bg-cream/50 p-4 rounded-2xl border border-cream-darker">
-                        <div className="flex items-center gap-2 text-primary mb-1">
-                          <Activity size={16} />
-                          <span className="text-xs font-bold uppercase tracking-wider">Sessions</span>
-                        </div>
-                        <p className="text-xl font-display font-bold text-charcoal">{selectedCounsellor.totalSessions || 0}</p>
-                      </div>
-                      <div className="bg-cream/50 p-4 rounded-2xl border border-cream-darker">
-                        <div className="flex items-center gap-2 text-blue-500 mb-1">
-                          <Award size={16} />
-                          <span className="text-xs font-bold uppercase tracking-wider">Exp</span>
-                        </div>
-                        <p className="text-xl font-display font-bold text-charcoal">{selectedCounsellor.experience || '5+ yrs'}</p>
-                      </div>
-                      <div className="bg-cream/50 p-4 rounded-2xl border border-cream-darker">
-                        <div className="flex items-center gap-2 text-emerald-500 mb-1">
-                          <Calendar size={16} />
-                          <span className="text-xs font-bold uppercase tracking-wider">Rate</span>
-                        </div>
-                        <p className="text-xl font-display font-bold text-charcoal">{selectedCounsellor.price || 'Free'}</p>
-                      </div>
-                    </div>
-                  </div>
+              {/* Detailed Content Hub */}
+              <div className="p-10 space-y-8">
+                 {/* Bio Section */}
+                 <div>
+                    <p className="section-label mb-3 flex items-center gap-2"><BookOpen size={14} className="text-primary" /> Professional Profile</p>
+                    <p className="text-sm text-charcoal-muted leading-relaxed font-body">
+                       {selectedCounsellor.counsellorBio || selectedCounsellor.about || 'A dedicated mental health professional focused on providing high-quality support and personalized wellness guidance to our user community.'}
+                    </p>
+                 </div>
 
-                  <div>
-                    <p className="section-label mb-3">Expertise & Specialties</p>
+                 {/* Specializations Tags */}
+                 <div>
+                    <p className="section-label mb-3 flex items-center gap-2"><Award size={14} className="text-primary" /> Expert Domains</p>
                     <div className="flex flex-wrap gap-2">
-                      {(Array.isArray(selectedCounsellor.specializations) ? selectedCounsellor.specializations : (selectedCounsellor.specialties || [])).map((s, i) => (
-                        <span key={i} className="px-3 py-1 bg-sage-50 text-primary text-xs font-semibold rounded-lg border border-primary/10">
-                          {s}
-                        </span>
-                      ))}
-                      {(Array.isArray(selectedCounsellor.specializations) ? selectedCounsellor.specializations : (selectedCounsellor.specialties || [])).length === 0 && (
-                        <span className="text-xs italic text-charcoal-muted">No specialties listed</span>
-                      )}
+                       {(Array.isArray(selectedCounsellor.specializations) ? selectedCounsellor.specializations : (selectedCounsellor.specialties || [])).map((s, i) => (
+                          <span key={i} className="px-3 py-1.5 bg-cream/50 text-charcoal border border-cream-darker rounded-xl text-xs font-bold hover:border-primary/30 transition cursor-default shadow-sm">
+                             {s}
+                          </span>
+                       ))}
+                       {(Array.isArray(selectedCounsellor.specializations) ? selectedCounsellor.specializations : (selectedCounsellor.specialties || [])).length === 0 && (
+                          <p className="text-xs italic text-charcoal-muted">General Counsellor</p>
+                       )}
                     </div>
-                  </div>
-                </div>
-
-                {/* Right Column - About */}
-                <div className="space-y-6">
-                  <div>
-                    <p className="section-label mb-3">About Counsellor</p>
-                    <div className="bg-cream/30 p-5 rounded-2xl border border-cream-darker relative">
-                      <BookOpen size={20} className="absolute -top-2.5 -right-2.5 text-primary bg-white rounded-full p-0.5" />
-                      <p className="text-sm text-charcoal-muted leading-relaxed italic">
-                        "{selectedCounsellor.counsellorBio || selectedCounsellor.about || 'This counsellor hasn\'t provided a bio yet. They are a dedicated professional committed to patient wellness and mental health support.'}"
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="pt-4 border-t border-cream-darker">
-                    <div className="flex items-center justify-between mb-4">
-                      <div>
-                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Counselor ID</p>
-                        <p className="text-xs font-mono text-charcoal/60">{selectedCounsellor.id}</p>
-                      </div>
-                      <button className="flex items-center gap-2 text-primary hover:underline text-sm font-bold">
-                        Full User Record <ExternalLink size={14} />
-                      </button>
-                    </div>
-                  </div>
-                </div>
+                 </div>
               </div>
             </div>
 
-            <div className="px-8 py-5 bg-cream/50 border-t border-cream-darker flex justify-end gap-3 shrink-0">
-               <button 
-                onClick={() => setSelectedCounsellor(null)}
-                className="px-6 py-2.5 rounded-xl border border-cream-darker text-sm font-bold text-charcoal-muted hover:bg-white transition"
-               >
-                 Close
-               </button>
+            {/* Subtle Footer Hub */}
+            <div className="px-10 py-6 bg-cream/20 border-t border-cream-darker flex justify-center items-center shrink-0">
+               <div className="flex items-center gap-2 text-[10px] text-charcoal-muted font-bold uppercase tracking-widest">
+                  <ShieldCheck size={14} className="text-primary" /> Verified Platform Counsellor
+               </div>
             </div>
           </div>
         </div>

@@ -84,10 +84,10 @@ export default function Dashboard() {
     };
   };
 
-  const pendingApps = applications.filter(a => (a.status || '').toLowerCase() === 'pending');
-  const crisisChats = chats.filter(c => c.crisisDetected || c.crisis_detected);
+  const pendingApps = (applications || []).filter(a => (a.status || '').toLowerCase() === 'pending');
+  const crisisChats = (chats || []).filter(c => c.crisisDetected || c.crisis_detected);
   
-  const chartData = generateChartData(users, chats);
+  const chartData = generateChartData(users || [], chats || []);
 
   const handleUpdateAppStatus = async (app, status) => {
     if (!window.confirm(`Are you sure you want to ${status} this application?`)) return;
@@ -133,14 +133,14 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard 
           label="Total Users" 
-          value={users.length.toLocaleString()} 
+          value={(users || []).length.toLocaleString()} 
           icon={Users} 
           sub="Registered accounts" 
           loading={uLoading}
         />
         <StatCard 
           label="Counsellor Apps" 
-          value={applications.length} 
+          value={(applications || []).length} 
           icon={Star} 
           sub={`${pendingApps.length} pending review`} 
           subColor={pendingApps.length > 0 ? '#d97706' : null}
@@ -148,14 +148,14 @@ export default function Dashboard() {
         />
         <StatCard 
           label="Articles" 
-          value={articles.length} 
+          value={(articles || []).length} 
           icon={BookOpen} 
           sub="Published resources" 
           loading={artLoading}
         />
         <StatCard 
           label="Guides" 
-          value={guides.length} 
+          value={(guides || []).length} 
           icon={Music} 
           sub="Meditation sessions" 
           loading={gLoading}

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { collection, getDocs, onSnapshot, query, orderBy, limit, where } from 'firebase/firestore';
+import { collection, getDocs, onSnapshot, query, orderBy, limit, where, collectionGroup } from 'firebase/firestore';
 import { db } from '../firebase';
 
 /**
@@ -18,6 +18,30 @@ export function useCollection(col, constraints = []) {
       q,
       (snap) => {
         setData(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        setLoading(false);
+      },
+      (err) => { setError(err.message); setLoading(false); }
+    );
+    return () => unsub();
+  }, [col]);
+
+  return { data, loading, error };
+}
+
+/**
+ * Generic hook: subscribe to a Firestore collection group in real-time.
+ */
+export function useCollectionGroup(col, constraints = []) {
+  const [data, setData] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    const q = query(collectionGroup(db, col), ...constraints);
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        setData(snap.docs.map(d => ({ id: d.id, parentId: d.ref.parent.parent?.id, ...d.data() })));
         setLoading(false);
       },
       (err) => { setError(err.message); setLoading(false); }
@@ -71,8 +95,29 @@ export function useVouchers() {
 }
 
 /**
+ * Hook: fetch XP acquisition rules (collection: 'xp_rules')
+ */
+export function useXPRules() {
+  return useCollection('xp_rules', [orderBy('xp', 'desc')]);
+}
+
+/**
+ * Hook: fetch badge milestones (collection: 'badges')
+ */
+export function useBadges() {
+  return useCollection('badges', [orderBy('xp', 'asc')]);
+}
+
+/**
  * Hook: fetch chat/chatbot sessions (collection: 'chat_sessions')
  */
 export function useChatSessions() {
   return useCollection('chat_sessions');
+}
+
+/**
+ * Hook: fetch all diary entries (cross-user) using collection group
+ */
+export function useAllDiaries() {
+  return useCollectionGroup('diary_entries');
 }

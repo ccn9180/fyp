@@ -5,7 +5,7 @@ import { doc, getDoc, collection, query, where, getDocs, limit } from 'firebase/
 import { auth, db } from './firebase';
 import AdminLayout from './components/AdminLayout.jsx';
 import LoginPage from './pages/LoginPage.jsx';
-import logo from './assets/logo.svg';
+import logo from './assets/leaf.png';
 import Dashboard from './pages/Dashboard.jsx';
 import Articles from './pages/content/Articles.jsx';
 import Meditation from './pages/content/Meditation.jsx';
@@ -14,19 +14,18 @@ import CounsellorMonitoring from './pages/monitoring/CounsellorMonitoring.jsx';
 import CounsellorApplications from './pages/monitoring/CounsellorApplications.jsx';
 import ChatbotMonitoring from './pages/monitoring/ChatbotMonitoring.jsx';
 import ContentMonitoring from './pages/monitoring/ContentMonitoring.jsx';
-import Vouchers from './pages/gamification/Vouchers.jsx';
-import Rewards from './pages/gamification/Rewards.jsx';
+import GamificationMonitoring from './pages/monitoring/GamificationMonitoring.jsx';
+import Engagement from './pages/gamification/Engagement.jsx';
 import AccountSettings from './pages/account/AccountSettings.jsx';
+import CrisisCenter from './pages/monitoring/CrisisCenter.jsx';
 
 const C = { primary: '#7C9C84', cream: '#F6F5F2', charcoal: '#333' };
 
 function LoadingScreen() {
   return (
     <div style={{ minHeight: '100vh', background: C.cream, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '16px' }}>
-      <div style={{ width: '60px', height: '60px', borderRadius: '50%', background: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 10px 30px rgba(124,156,132,0.15)' }}>
-        <span style={{ color: C.primary, fontSize: '30px', display: 'flex', alignItems: 'center' }}>
-          <img src={logo} alt="Logo" style={{ width: '36px', height: '36px' }} />
-        </span>
+      <div style={{ width: '100px', height: '100px', borderRadius: '50%', background: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 10px 40px rgba(124,156,132,0.08)' }}>
+        <img src={logo} alt="Logo" style={{ width: '56px', height: '56px' }} />
       </div>
       <p style={{ fontFamily: 'Outfit, sans-serif', fontSize: '14px', color: '#888' }}>Loading Eunoia Admin…</p>
     </div>
@@ -91,8 +90,9 @@ export default function App() {
         <Route path="/monitoring/applications" element={<CounsellorApplications />} />
         <Route path="/monitoring/chatbot" element={<ChatbotMonitoring />} />
         <Route path="/monitoring/content" element={<ContentMonitoring />} />
-        <Route path="/gamification/vouchers" element={<Vouchers />} />
-        <Route path="/gamification/rewards" element={<Rewards />} />
+        <Route path="/monitoring/gamification" element={<GamificationMonitoring />} />
+        <Route path="/monitoring/crisis" element={<CrisisCenter />} />
+        <Route path="/gamification/engagement" element={<Engagement />} />
         <Route path="/account" element={<AccountSettings />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>

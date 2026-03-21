@@ -438,8 +438,8 @@ class _RegisterPageState extends State<RegisterPage> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Image.asset(
-                          'assets/google.png',
+                        SvgPicture.asset(
+                          'assets/Group.svg',
                           width: 24,
                           height: 24,
                         ),

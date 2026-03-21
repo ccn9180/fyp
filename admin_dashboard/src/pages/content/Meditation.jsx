@@ -28,6 +28,8 @@ export default function Meditation() {
   const [deleting, setDeleting] = useState(null);
   const [viewingGuide, setViewingGuide] = useState(null);
   const [preloading, setPreloading] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 6;
 
   const viewWithPreload = (m) => {
     if (preloading) return;
@@ -104,9 +106,14 @@ export default function Meditation() {
     status: 'draft'
   });
 
-  const filtered = guides.filter(m =>
-    (m.title || '').toLowerCase().includes(search.toLowerCase()) ||
+  const filtered = (guides || []).filter(m =>
     (m.category || '').toLowerCase().includes(search.toLowerCase())
+  );
+
+  const totalPages = Math.ceil(filtered.length / itemsPerPage);
+  const paginatedItems = filtered.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
   );
 
   const handleOpenEditor = (guide = null) => {
@@ -213,7 +220,8 @@ export default function Meditation() {
         ) : filtered.length === 0 ? (
           <p style={{ fontFamily: 'Outfit', fontSize: '13px', color: C.muted }}>No guides found.</p>
         ) : (
-          <div style={{ overflowX: 'auto' }}>
+          <>
+            <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'Outfit', fontSize: '13px' }}>
               <thead>
                 <tr style={{ borderBottom: `1px solid ${C.creamDarker}` }}>
@@ -223,17 +231,38 @@ export default function Meditation() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((m, i) => (
+                {paginatedItems.map((m, i) => (
                   <tr 
                     key={m.id} 
                     onClick={() => viewWithPreload(m)}
-                    style={{ borderBottom: i < filtered.length - 1 ? `1px solid ${C.creamDarker}` : 'none', cursor: 'pointer' }} 
+                    style={{ borderBottom: i < paginatedItems.length - 1 ? `1px solid ${C.creamDarker}` : 'none', cursor: 'pointer' }} 
                     className="hover:bg-cream transition-colors group"
                   >
-                    <td style={{ padding: '12px 0', fontWeight: 600, color: C.charcoal, maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} className="group-hover:text-primary transition-colors">
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        {preloading === m.id ? <Loader2 size={14} className="animate-spin text-primary" /> : <Music size={14} style={{ opacity: 0.5 }} />}
-                        {m.title || 'Untitled'}
+                    <td style={{ padding: '12px 0', color: C.charcoal }} className="group-hover:text-primary transition-colors">
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <div style={{ 
+                          width: '36px', height: '36px', borderRadius: '10px', backgroundColor: C.sage100, 
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                          overflow: 'hidden', border: `1px solid ${C.creamDarker}`, flexShrink: 0
+                        }}>
+                          {m.imageUrl ? (
+                            <img src={m.imageUrl} alt="" style={{ width: '100%', height: '100%', objectCover: 'cover' }} />
+                          ) : (
+                            <span style={{ fontSize: '12px', fontWeight: 800, color: C.primary }}>
+                              {(m.title || '?').charAt(0).toUpperCase()}
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                          <span style={{ fontWeight: 600, maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {m.title || 'Untitled'}
+                          </span>
+                          {preloading === m.id && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: C.primary }}>
+                              <Loader2 size={10} className="animate-spin" /> <span>Preloading Content...</span>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </td>
                     <td style={{ padding: '12px 0' }}>
@@ -274,6 +303,39 @@ export default function Meditation() {
               </tbody>
             </table>
           </div>
+
+          {/* Pagination UI */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '24px', padding: '0 4px' }}>
+            <p style={{ fontFamily: 'Outfit', fontSize: '12px', color: C.muted, fontWeight: 500 }}>
+              Showing {paginatedItems.length} of {filtered.length} guides
+            </p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <button 
+                disabled={currentPage === 1}
+                onClick={() => setCurrentPage(prev => prev - 1)}
+                style={{ padding: '6px 14px', borderRadius: '10px', border: `1px solid ${C.creamDarker}`, background: 'white', fontFamily: 'Outfit', fontSize: '12px', fontWeight: 600, color: C.charcoal, cursor: currentPage === 1 ? 'default' : 'pointer', opacity: currentPage === 1 ? 0.4 : 1 }}
+              >
+                Previous
+              </button>
+              {[...Array(totalPages)].map((_, i) => (
+                <button 
+                  key={i}
+                  onClick={() => setCurrentPage(i + 1)}
+                  style={{ width: '32px', height: '32px', borderRadius: '10px', border: currentPage === i + 1 ? `1px solid ${C.primary}` : `1px solid ${C.creamDarker}`, background: currentPage === i + 1 ? C.primary : 'white', fontFamily: 'Outfit', fontSize: '12px', fontWeight: 700, color: currentPage === i + 1 ? 'white' : C.charcoal, cursor: 'pointer' }}
+                >
+                  {i + 1}
+                </button>
+              ))}
+              <button 
+                disabled={currentPage === totalPages || totalPages === 0}
+                onClick={() => setCurrentPage(prev => prev + 1)}
+                style={{ padding: '6px 14px', borderRadius: '10px', border: `1px solid ${C.creamDarker}`, background: 'white', fontFamily: 'Outfit', fontSize: '12px', fontWeight: 600, color: C.charcoal, cursor: (currentPage === totalPages || totalPages === 0) ? 'default' : 'pointer', opacity: (currentPage === totalPages || totalPages === 0) ? 0.4 : 1 }}
+              >
+                Next
+              </button>
+            </div>
+          </div>
+          </>
         )}
       </div>
 

@@ -1,16 +1,22 @@
 import { useState, useEffect } from 'react';
-import { signInWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '../firebase';
+import { signInWithEmailAndPassword, signInWithPopup } from 'firebase/auth';
+import { auth, googleProvider } from '../firebase';
 import { Eye, EyeOff, Lock, Mail } from 'lucide-react';
-import logo from '../assets/logo.svg';
+import logo from '../assets/leaf.png';
+import googleIcon from '../assets/google_logo.svg';
 
 const s = {
   wrap: { minHeight: '100vh', background: '#F6F5F2', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' },
   box: { width: '100%', maxWidth: '380px' },
   logoWrap: { display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '32px' },
-  logoIcon: { width: '80px', height: '80px', borderRadius: '50%', background: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px', boxShadow: '0 10px 30px rgba(124,156,132,0.15)' },
-  logoTitle: { fontFamily: '"Playfair Display", serif', fontWeight: 600, fontSize: '24px', color: '#333' },
-  logoSub: { fontFamily: 'Outfit, sans-serif', fontSize: '13px', color: '#888', marginTop: '2px' },
+  logoIcon: { 
+    width: '100px', height: '100px', borderRadius: '50%', 
+    background: 'white', display: 'flex', alignItems: 'center', 
+    justifyContent: 'center', marginBottom: '20px', 
+    boxShadow: '0 10px 40px rgba(124,156,132,0.08)' 
+  },
+  logoTitle: { fontFamily: '"Playfair Display", serif', fontWeight: 600, fontSize: '26px', color: '#333' },
+  logoSub: { fontFamily: 'Outfit, sans-serif', fontSize: '13px', color: '#888', marginTop: '1px' },
   card: { background: 'white', borderRadius: '24px', boxShadow: '0 2px 16px rgba(0,0,0,0.06)', padding: '28px' },
   cardTitle: { fontFamily: '"Playfair Display", serif', fontWeight: 600, fontSize: '18px', color: '#333', marginBottom: '4px' },
   cardSub: { fontFamily: 'Outfit, sans-serif', fontSize: '13px', color: '#888', marginBottom: '24px' },
@@ -22,6 +28,10 @@ const s = {
   forgotBtn: { background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Outfit, sans-serif', fontSize: '12px', color: '#7C9C84' },
   error: { fontFamily: 'Outfit, sans-serif', fontSize: '12px', color: '#ef4444', background: '#fef2f2', borderRadius: '12px', padding: '10px 14px' },
   submitBtn: (loading) => ({ width: '100%', background: loading ? '#A3BBA9' : '#7C9C84', color: 'white', fontFamily: 'Outfit, sans-serif', fontWeight: 600, fontSize: '15px', padding: '14px', borderRadius: '14px', border: 'none', cursor: loading ? 'not-allowed' : 'pointer', marginTop: '4px', transition: 'background 0.2s' }),
+  googleBtn: { width: '100%', background: 'white', border: '1px solid #E5E4E0', color: '#1E2742', fontFamily: 'Outfit, sans-serif', fontWeight: 600, fontSize: '15px', padding: '14px', borderRadius: '14px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', transition: 'all 0.2s', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' },
+  divider: { display: 'flex', alignItems: 'center', gap: '12px', margin: '24px 0' },
+  dividerLine: { flex: 1, height: '1px', background: '#E5E4E0' },
+  dividerText: { fontFamily: 'Outfit, sans-serif', fontSize: '12px', color: '#AAAAAA' },
   footer: { textAlign: 'center', fontFamily: 'Outfit, sans-serif', fontSize: '11px', color: '#AAAAAA', marginTop: '20px' },
 };
 
@@ -47,6 +57,17 @@ export default function LoginPage({ externalError }) {
     }
   }, [externalError]);
 
+  const handleGoogleLogin = async () => {
+    setError('');
+    setLoading(true);
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (err) {
+      setError(FIREBASE_ERRORS[err.code] || 'Google login failed.');
+      setLoading(false);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
@@ -66,7 +87,7 @@ export default function LoginPage({ externalError }) {
       <div style={s.box}>
         <div style={s.logoWrap}>
           <div style={s.logoIcon}>
-            <img src={logo} alt="Eunoia Logo" style={{ width: '48px', height: '48px' }} />
+            <img src={logo} alt="Eunoia Logo" style={{ width: '80px', height: '80px' }} />
           </div>
           <div style={s.logoTitle}>Eunoia</div>
           <div style={s.logoSub}>Admin Portal</div>
@@ -122,6 +143,17 @@ export default function LoginPage({ externalError }) {
               {loading ? 'Signing in…' : 'Sign In'}
             </button>
           </form>
+
+          <div style={s.divider}>
+            <div style={s.dividerLine} />
+            <span style={s.dividerText}>or continue with</span>
+            <div style={s.dividerLine} />
+          </div>
+
+          <button onClick={handleGoogleLogin} disabled={loading} style={s.googleBtn} onMouseEnter={e => { e.currentTarget.style.background = '#f8faf9'; e.currentTarget.style.borderColor = '#d1d5db'; }} onMouseLeave={e => { e.currentTarget.style.background = 'white'; e.currentTarget.style.borderColor = '#E5E4E0'; }}>
+            <img src={googleIcon} alt="G" style={{ width: '20px', height: '20px' }} />
+            Sign in with Google
+          </button>
         </div>
 
         <p style={s.footer}>Eunoia © {new Date().getFullYear()} · Admin Access Only</p>

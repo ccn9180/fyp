@@ -3,11 +3,11 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, FileText, Music, Tag, Users, MessageSquare,
   BarChart2, Gift, Award, Settings, LogOut, ChevronDown, ChevronRight,
-  Menu, Bell, ShieldCheck
+  Menu, Bell, ShieldCheck, AlertTriangle
 } from 'lucide-react';
 import { auth, db } from '../firebase';
 import { doc, getDoc, collection, query, where, getDocs, limit } from 'firebase/firestore';
-import logo from '../assets/logo.svg';
+import logo from '../assets/leaf.png';
 
 const C = { primary: '#7C9C84', cream: '#F6F5F2', charcoal: '#333' };
 
@@ -23,8 +23,8 @@ const NAV = [
   },
   {
     label: 'Expert Oversight', icon: Users, children: [
-      { label: 'Performance Metrics', path: '/monitoring/counsellors', icon: Users },
-      { label: 'Recruitment Hub', path: '/monitoring/applications', icon: ShieldCheck },
+      { label: 'Applications', path: '/monitoring/applications', icon: ShieldCheck },
+      { label: 'Performance', path: '/monitoring/counsellors', icon: Users },
     ]
   },
   {
@@ -32,11 +32,16 @@ const NAV = [
       { label: 'Eunoia AI Monitoring', path: '/monitoring/chatbot', icon: MessageSquare },
     ]
   },
+  {
+    label: 'Safety Hub', icon: AlertTriangle, children: [
+      { label: 'Crisis Center', path: '/monitoring/crisis', icon: AlertTriangle },
+    ]
+  },
   { type: 'divider' },
   {
     label: 'Engagement Hub', icon: Gift, children: [
-      { label: 'Vouchers', path: '/gamification/vouchers', icon: Gift },
-      { label: 'Rewards', path: '/gamification/rewards', icon: Award },
+      { label: 'Gamification System', path: '/gamification/engagement', icon: Award },
+      { label: 'Engagement Metrics', path: '/monitoring/gamification', icon: BarChart2 },
     ]
   },
 ];
@@ -57,10 +62,11 @@ const S = {
     padding: '20px 16px', borderBottom: '1px solid #E5E4E0',
   },
   logoIcon: {
-    width: '36px', height: '36px', borderRadius: '50%',
+    width: '48px', height: '48px', borderRadius: '50%',
     background: 'white', display: 'flex', alignItems: 'center',
     justifyContent: 'center', flexShrink: 0,
-    boxShadow: '0 4px 12px rgba(124,156,132,0.15)'
+    border: '1px solid #E5E4E0',
+    boxShadow: '0 10px 30px rgba(124,156,132,0.08)', // Match exact 0.08 Flutter opacity
   },
   logoText: {
     fontFamily: '"Playfair Display", serif', fontWeight: 600,
@@ -185,10 +191,12 @@ export default function AdminLayout({ children, onLogout }) {
         }}>
           {!collapsed && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <img src={logo} alt="Logo" style={{ width: '28px', height: '28px' }} />
+              <div style={S.logoIcon}>
+                <img src={logo} alt="Logo" style={{ width: '28px', height: '28px' }} />
+              </div>
               <div>
                 <p style={{ margin: 0, fontFamily: '"Playfair Display", serif', fontWeight: 600, fontSize: '22px', color: C.charcoal, lineHeight: 1 }}>Eunoia</p>
-                <p style={{ margin: 0, fontFamily: 'Outfit, sans-serif', fontWeight: 600, fontSize: '10px', color: C.muted, textTransform: 'uppercase', letterSpacing: '0.08em', marginTop: '2px' }}>Management Hub</p>
+                <p style={{ margin: 0, fontFamily: 'Outfit, sans-serif', fontWeight: 600, fontSize: '10px', color: C.muted, textTransform: 'uppercase', letterSpacing: '0.08em', marginTop: '2px' }}>Admin</p>
               </div>
             </div>
           )}
