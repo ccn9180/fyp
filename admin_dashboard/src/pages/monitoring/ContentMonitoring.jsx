@@ -1,399 +1,457 @@
 import { useState, useMemo } from 'react';
+import {
+  Search, Filter, ArrowUpDown, Eye, Headphones,
+  XCircle, Image as ImageIcon, Loader2, Star,
+  TrendingUp, Activity, FileText, Music, BookOpen, ChevronDown, LayoutGrid, X, Calendar as CalendarIcon
+} from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { useArticles, useMeditationGuides } from '../../hooks/useFirestore';
-import { Search, Filter, ArrowUpDown, Eye, Headphones, XCircle, Image as ImageIcon, Loader2 } from 'lucide-react';
 
-const C = { 
-  primary: '#7C9C84', 
+const C = {
+  primary: '#7C9C84',
   primaryLight: '#BBCBC2',
-  cream: '#F6F5F2', 
-  creamDarker: '#E5E4E0', 
-  charcoal: '#333', 
-  charcoalMuted: '#666' 
+  cream: '#F6F5F2',
+  creamDarker: '#E5E4E0',
+  sage100: '#E5EDE8',
+  charcoal: '#333',
+  charcoalMuted: '#666',
+  muted: '#888',
+  amber: '#d97706'
 };
 
 export default function ContentMonitoring() {
   const { data: articles, loading: artLoading } = useArticles();
   const { data: guides, loading: gLoading } = useMeditationGuides();
-  
-  // Interactive Report States
-  const [filterType, setFilterType] = useState('All'); // 'All', 'Article', 'Guide'
+
+  const [filterType, setFilterType] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
-  const [sortField, setSortField] = useState('engagement'); // 'engagement', 'rating', 'title'
-  const [sortDir, setSortDir] = useState('desc'); // 'asc', 'desc'
-  const [currentPage, setCurrentPage] = useState(1);
+  const [sortField, setSortField] = useState('engagement');
+  const [sortDir, setSortDir] = useState('desc');
   const [viewingDetails, setViewingDetails] = useState(null);
-  const [loadingDetails, setLoadingDetails] = useState(null); // ID of the content being pre-loaded
-  const itemsPerPage = 8;
+  const [loadingDetails, setLoadingDetails] = useState(null);
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [isDateOpen, setIsDateOpen] = useState(false);
 
   const loading = artLoading || gLoading;
 
-  // Transform data for charts
-  const articleChartData = articles
-    .sort((a, b) => (b.views || 0) - (a.views || 0))
-    .slice(0, 5)
-    .map(a => ({ title: a.title.length > 15 ? a.title.substring(0, 15) + '...' : a.title, value: a.views || 0 }));
-
-  const guideChartData = guides
-    .sort((a, b) => (b.plays || 0) - (a.plays || 0))
-    .slice(0, 5)
-    .map(g => ({ title: g.title.length > 15 ? g.title.substring(0, 15) + '...' : g.title, value: g.plays || 0 }));
-
-  // Comprehensive Data Processing for Table
+  // Process Data for Table
   const processedData = useMemo(() => {
-    // 1. Map & Combine
     let combined = [
-      ...articles.map(a => ({ 
-        id: a.id, 
-        title: a.title || 'Untitled', 
-        type: 'Article', 
-        category: a.tag || 'General',
-        duration: a.readingTime || 'N/A',
-        status: a.status || 'draft',
-        engagement: a.views || 0, 
-        rating: a.rating || 0,
-        imageUrl: a.imageUrl,
-        content: a.content || 'No detailed content or text available for this article.',
-        authorName: a.authorName,
+      ...(articles || []).map(a => ({
+        id: a.id, title: a.title || 'Untitled', type: 'Article',
+        category: a.tag || 'General', duration: a.readingTime || 'N/A',
+        status: a.status || 'draft', engagement: a.views || 0,
+        rating: a.rating || 0, imageUrl: a.imageUrl,
+        content: a.content || 'N/A', authorName: a.authorName,
+        createdAt: a.createdAt?.toDate ? a.createdAt.toDate() : (a.createdAt || null)
       })),
-      ...guides.map(g => ({ 
-        id: g.id, 
-        title: g.title || 'Untitled', 
-        type: 'Guide', 
-        category: g.category || 'General',
-        duration: g.duration || 'N/A',
-        status: g.status || 'draft',
-        engagement: g.plays || 0, 
-        rating: g.rating || 0,
-        imageUrl: g.imageUrl,
-        content: g.subtitle || 'No detailed description provided for this session.',
-        audioUrl: g.audioUrl,
+      ...(guides || []).map(g => ({
+        id: g.id, title: g.title || 'Untitled', type: 'Guide',
+        category: g.category || 'General', duration: g.duration || 'N/A',
+        status: g.status || 'draft', engagement: g.plays || 0,
+        rating: g.rating || 0, imageUrl: g.imageUrl,
+        content: g.subtitle || 'N/A', audioUrl: g.audioUrl,
+        createdAt: g.createdAt?.toDate ? g.createdAt.toDate() : (g.createdAt || null)
       }))
     ];
 
-    // 2. Filter by Search Query
     if (searchQuery.trim() !== '') {
       const q = searchQuery.toLowerCase();
       combined = combined.filter(c => c.title.toLowerCase().includes(q) || c.category.toLowerCase().includes(q));
     }
 
-    // 3. Filter by Type
     if (filterType !== 'All') {
       combined = combined.filter(c => c.type === filterType);
     }
 
-    // 4. Sort
+    if (startDate) {
+      const s = new Date(startDate);
+      combined = combined.filter(c => c.createdAt && c.createdAt >= s);
+    }
+    if (endDate) {
+      const e = new Date(endDate);
+      e.setHours(23, 59, 59);
+      combined = combined.filter(c => c.createdAt && c.createdAt <= e);
+    }
+
     combined.sort((a, b) => {
       let valA = a[sortField];
       let valB = b[sortField];
-      
-      if (typeof valA === 'string') valA = valA.toLowerCase();
-      if (typeof valB === 'string') valB = valB.toLowerCase();
-
       if (valA < valB) return sortDir === 'asc' ? -1 : 1;
       if (valA > valB) return sortDir === 'asc' ? 1 : -1;
       return 0;
     });
 
     return combined;
-  }, [articles, guides, searchQuery, filterType, sortField, sortDir]);
+  }, [articles, guides, searchQuery, filterType, sortField, sortDir, startDate, endDate]);
 
-  // Pagination Logic
-  const totalPages = Math.ceil(processedData.length / itemsPerPage);
-  const paginatedData = processedData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  // Aggregate Stats (Mirroring Counsellor Stats)
+  const totalEngagement = processedData.reduce((s, c) => s + c.engagement, 0);
+  const avgRating = processedData.length > 0
+    ? (processedData.reduce((s, c) => s + (c.rating || 0), 0) / processedData.length).toFixed(1)
+    : '0.0';
+
+  // Chart Data (Top 8 for visibility)
+  const chartData = processedData.slice(0, 8).map(c => ({
+    name: c.title.length > 15 ? c.title.substring(0, 15) + '...' : c.title,
+    engagement: c.engagement,
+    type: c.type
+  }));
 
   const handleSort = (field) => {
-    if (sortField === field) {
-      setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortField(field);
-      setSortDir('desc'); // Default to descending when changing sort to see highest performers first
-    }
+    if (sortField === field) setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
+    else { setSortField(field); setSortDir('desc'); }
   };
 
   const handleViewDetails = (content) => {
     if (loadingDetails) return;
-    
-    // If no image, show immediately
-    if (!content.imageUrl) {
-      setViewingDetails(content);
-      return;
-    }
-
+    if (!content.imageUrl) { setViewingDetails(content); return; }
     setLoadingDetails(content.id);
     const img = new Image();
     img.src = content.imageUrl;
-    img.onload = () => {
-      setLoadingDetails(null);
-      setViewingDetails(content);
-    };
-    img.onerror = () => {
-      setLoadingDetails(null);
-      setViewingDetails(content); // Show anyway even if image fails
-    };
+    img.onload = () => { setLoadingDetails(null); setViewingDetails(content); };
+    img.onerror = () => { setLoadingDetails(null); setViewingDetails(content); };
   };
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <p className="section-label mb-1">Monitoring & Analytics</p>
-        <h2 className="font-display font-semibold text-2xl text-charcoal">Content Reports</h2>
+      {/* Header - Mirrored from Counsellor Monitoring */}
+      <div className="flex flex-row items-center justify-between gap-4">
+        <div>
+          <p className="section-label mb-0.5">Monitoring & Analytics</p>
+          <h2 className="font-display font-semibold text-2xl text-charcoal">Content Report</h2>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Search Box with Clear Button */}
+          <div className="relative">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-charcoal-muted" />
+            <input
+              type="text"
+              placeholder="Search resource..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 pr-10 py-2 bg-white border border-cream-darker rounded-xl text-sm font-body outline-none focus:border-primary transition w-48 shadow-sm"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-primary p-0.5 rounded-full hover:bg-sage-50 transition"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+
+          {/* Premium Date Range Picker */}
+          <div className="relative">
+            <button
+              onClick={() => { setIsDateOpen(!isDateOpen); setIsDropdownOpen(false); }}
+              className={`flex items-center gap-2 px-4 py-2 bg-white border ${isDateOpen ? 'border-primary ring-2 ring-primary/10' : 'border-cream-darker'} rounded-xl shadow-sm transition-all hover:bg-cream/30 active:scale-95`}
+            >
+              <CalendarIcon size={14} className={startDate || endDate ? 'text-primary' : 'text-charcoal-muted'} />
+              <span className="text-sm font-medium text-charcoal-muted whitespace-nowrap">
+                {!startDate && !endDate ? 'Custom Range' : `${startDate || 'Start'} to ${endDate || 'End'}`}
+              </span>
+              <ChevronDown size={14} className={`text-muted transition-transform ${isDateOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            {isDateOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setIsDateOpen(false)} />
+                <div className="absolute top-full right-0 mt-2 w-72 bg-white border border-cream-darker rounded-[1.5rem] shadow-2xl animate-in fade-in zoom-in-95 slide-in-from-top-2 duration-200 z-50 p-6 transform origin-top-right">
+                  <div className="flex justify-between items-center mb-5">
+                    <p className="section-label mb-0 !text-[10px]">Analysis Period</p>
+                    {(startDate || endDate) && (
+                      <button
+                        onClick={() => { setStartDate(''); setEndDate(''); setIsDateOpen(false); }}
+                        className="text-[10px] text-primary font-bold hover:underline"
+                      >
+                        Reset
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">From Date</label>
+                      <input
+                        type="date"
+                        value={startDate}
+                        onChange={(e) => setStartDate(e.target.value)}
+                        className="w-full bg-cream/30 border border-cream-darker rounded-xl px-3 py-2 text-xs font-body outline-none focus:border-primary transition"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">To Date</label>
+                      <input
+                        type="date"
+                        value={endDate}
+                        onChange={(e) => setEndDate(e.target.value)}
+                        className="w-full bg-cream/30 border border-cream-darker rounded-xl px-3 py-2 text-xs font-body outline-none focus:border-primary transition"
+                      />
+                    </div>
+
+                    <button
+                      onClick={() => setIsDateOpen(false)}
+                      className="w-full py-2.5 bg-[#7C9C84] text-white rounded-xl text-xs font-bold hover:opacity-90 transition shadow-md active:scale-95 mt-2"
+                    >
+                      Apply Range
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Custom Designed Dropdown - Click Based */}
+          <div className="relative">
+            <button
+              onClick={() => { setIsDropdownOpen(!isDropdownOpen); setIsDateOpen(false); }}
+              className={`flex items-center bg-white border ${isDropdownOpen ? 'border-primary ring-2 ring-primary/10' : 'border-cream-darker'} rounded-xl px-4 py-2 shadow-sm cursor-pointer transition-all hover:bg-cream/30 active:scale-95`}
+            >
+              <div className="flex items-center gap-2">
+                {filterType === 'All' && <LayoutGrid size={13} className="text-primary" />}
+                {filterType === 'Article' && <FileText size={13} className="text-amber-500" />}
+                {filterType === 'Guide' && <Music size={13} className="text-emerald-500" />}
+                <span className="text-sm font-medium text-charcoal-muted whitespace-nowrap">
+                  {filterType === 'All' ? 'All Formats' : filterType === 'Article' ? 'Articles' : 'Meditations'}
+                </span>
+                <ChevronDown size={14} className={`text-muted transition-transform duration-300 ${isDropdownOpen ? 'rotate-180 text-primary' : ''}`} />
+              </div>
+            </button>
+
+            {isDropdownOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setIsDropdownOpen(false)} />
+                <div className="absolute top-full right-0 mt-2 w-48 bg-white border border-cream-darker rounded-[1.5rem] shadow-2xl animate-in fade-in zoom-in-95 slide-in-from-top-2 duration-200 z-50 p-2 overflow-hidden transform origin-top-right">
+                  {[
+                    { id: 'All', icon: LayoutGrid, label: 'All Content', color: 'text-primary' },
+                    { id: 'Article', icon: FileText, label: 'Articles Only', color: 'text-amber-500' },
+                    { id: 'Guide', icon: Music, label: 'Meditations Only', color: 'text-emerald-500' }
+                  ].map(opt => (
+                    <button
+                      key={opt.id}
+                      onClick={() => {
+                        setFilterType(opt.id);
+                        setIsDropdownOpen(false);
+                      }}
+                      className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all font-body text-xs font-bold ${filterType === opt.id
+                          ? 'bg-sage-100 text-primary'
+                          : 'text-charcoal-muted hover:bg-cream'
+                        }`}
+                    >
+                      <opt.icon size={14} className={opt.color} />
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       </div>
 
       {loading ? (
-        <p className="font-body text-sm text-charcoal-muted">Gathering report data…</p>
+        <p className="font-body text-sm text-charcoal-muted">Sourcing performance telemetry…</p>
       ) : (
         <>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* Articles chart */}
-            <div className="card">
-              <p className="section-label mb-1">Articles</p>
-              <h3 className="font-body font-semibold text-charcoal mb-4">View Frequency</h3>
-              <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={articleChartData} layout="vertical" barSize={16}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#EEEDE9" horizontal={false} />
-                  <XAxis type="number" tick={{ fontFamily: 'Outfit', fontSize: 11, fill: '#aaa' }} axisLine={false} tickLine={false} />
-                  <YAxis dataKey="title" type="category" width={110} tick={{ fontFamily: 'Outfit', fontSize: 10, fill: '#888' }} axisLine={false} tickLine={false} />
-                  <Tooltip contentStyle={{ fontFamily: 'Outfit', borderRadius: '12px', border: '1px solid #EEEDE9', fontSize: 12 }} />
-                  <Bar dataKey="value" fill={C.primary} radius={[0, 8, 8, 0]} name="Views" />
-                </BarChart>
-              </ResponsiveContainer>
+          {/* Summary Stats Grid */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="card flex items-center gap-3 py-3 px-4">
+              <div className="w-8 h-8 rounded-full bg-sage-50 flex items-center justify-center text-primary shrink-0">
+                <FileText size={16} />
+              </div>
+              <div>
+                <p className="section-label !text-[9px] mb-0 leading-none">Resources</p>
+                <p className="font-display font-bold text-lg text-primary leading-tight">{processedData.length}</p>
+              </div>
             </div>
 
-            {/* Meditation chart */}
-            <div className="card">
-              <p className="section-label mb-1">Meditation Guides</p>
-              <h3 className="font-body font-semibold text-charcoal mb-4">Play Frequency</h3>
-              <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={guideChartData} layout="vertical" barSize={16}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#EEEDE9" horizontal={false} />
-                  <XAxis type="number" tick={{ fontFamily: 'Outfit', fontSize: 11, fill: '#aaa' }} axisLine={false} tickLine={false} />
-                  <YAxis dataKey="title" type="category" width={110} tick={{ fontFamily: 'Outfit', fontSize: 10, fill: '#888' }} axisLine={false} tickLine={false} />
-                  <Tooltip contentStyle={{ fontFamily: 'Outfit', borderRadius: '12px', border: '1px solid #EEEDE9', fontSize: 12 }} />
-                  <Bar dataKey="value" fill={C.primaryLight} radius={[0, 8, 8, 0]} name="Plays" />
-                </BarChart>
-              </ResponsiveContainer>
+            <div className="card flex items-center gap-3 py-3 px-4">
+              <div className="w-8 h-8 rounded-full bg-amber-50 flex items-center justify-center text-amber-500 shrink-0">
+                <Star size={16} fill="currentColor" />
+              </div>
+              <div>
+                <p className="section-label !text-[9px] mb-0 leading-none">Rating</p>
+                <p className="font-display font-bold text-lg text-amber-500 leading-tight">{avgRating} ★</p>
+              </div>
+            </div>
+
+            <div className="card flex items-center gap-3 py-3 px-4">
+              <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center text-blue-500 shrink-0">
+                <Activity size={16} />
+              </div>
+              <div>
+                <p className="section-label !text-[9px] mb-0 leading-none">Engagement</p>
+                <p className="font-display font-bold text-lg text-charcoal leading-tight">{totalEngagement.toLocaleString()}</p>
+              </div>
             </div>
           </div>
 
-          {/* Comprehensive Content Report Table */}
-          <div className="card mt-2">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+          {/* Performance Bar Chart */}
+          <div className="card">
+            <div className="flex justify-between items-center mb-6">
               <div>
-                <p className="section-label mb-1">Content Engagement Overview</p>
-                <h3 className="font-body font-semibold text-charcoal">Detailed Performance Report</h3>
+                <p className="section-label mb-0">Resource Performance</p>
+                <h3 className="font-body font-semibold text-charcoal text-sm">Engagement analysis for current selection</h3>
               </div>
-              
-              <div className="flex flex-wrap items-center gap-3">
-                {/* Search Bar */}
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Search size={14} className="text-gray-400" />
-                  </div>
-                  <input
-                    type="text"
-                    placeholder="Search titles..."
-                    value={searchQuery}
-                    onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
-                    className="pl-9 pr-4 py-2 border border-cream-darker rounded-xl text-sm font-body outline-none focus:border-[#7C9C84] transition w-56"
-                  />
-                </div>
-                
-                {/* Type Filter Dropdown */}
-                <div className="relative flex items-center bg-white border border-cream-darker rounded-xl px-3 py-2">
-                  <Filter size={14} className="text-gray-400 mr-2" />
-                  <select
-                    value={filterType}
-                    onChange={(e) => { setFilterType(e.target.value); setCurrentPage(1); }}
-                    className="bg-transparent text-sm font-body outline-none text-charcoal cursor-pointer"
-                  >
-                    <option value="All">All Types</option>
-                    <option value="Article">Articles</option>
-                    <option value="Guide">Meditation Guides</option>
-                  </select>
-                </div>
-              </div>
+              <span className="text-[10px] text-charcoal-muted uppercase font-bold tracking-wider bg-cream px-2 py-1 rounded-md">Relative View Rank</span>
             </div>
 
+            {chartData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={chartData} barSize={32}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#EEEDE9" vertical={false} />
+                  <XAxis dataKey="name" tick={{ fontFamily: 'Outfit', fontSize: 10, fill: '#aaa' }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontFamily: 'Outfit', fontSize: 10, fill: '#aaa' }} axisLine={false} tickLine={false} />
+                  <Tooltip
+                    cursor={{ fill: '#F6F5F2' }}
+                    contentStyle={{ fontFamily: 'Outfit', borderRadius: '12px', border: 'none', boxShadow: '0 8px 16px rgba(0,0,0,0.08)', fontSize: '11px' }}
+                  />
+                  <Bar dataKey="engagement" fill={C.primary} radius={[8, 8, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="py-20 text-center">
+                <p className="font-body text-sm text-charcoal-muted">No data points for this filter.</p>
+              </div>
+            )}
+          </div>
+
+          {/* Content Performance Audit Table */}
+          <div className="card">
+            <p className="section-label mb-4">Content Performance Audit</p>
             <div className="overflow-x-auto">
               <table className="w-full font-body text-sm">
                 <thead>
-                  <tr className="text-left text-charcoal-muted text-xs uppercase tracking-wide border-b border-cream-darker">
-                    <th className="pb-3 font-semibold cursor-pointer hover:text-charcoal transition" onClick={() => handleSort('title')}>
-                      <div className="flex items-center gap-1">Content Title <ArrowUpDown size={12} opacity={sortField === 'title' ? 1 : 0.3} /></div>
+                  <tr className="text-left text-charcoal-muted text-[10px] uppercase font-bold tracking-widest border-b border-cream-darker">
+                    <th className="pb-3 cursor-pointer hover:text-charcoal transition" onClick={() => handleSort('title')}>
+                      <div className="flex items-center gap-1">Identifier <ArrowUpDown size={10} opacity={sortField === 'title' ? 1 : 0.4} /></div>
                     </th>
-                    <th className="pb-3 font-semibold">Type & Category</th>
-                    <th className="pb-3 font-semibold">Duration</th>
-                    <th className="pb-3 font-semibold">Status</th>
-                    <th className="pb-3 font-semibold cursor-pointer hover:text-charcoal transition" onClick={() => handleSort('engagement')}>
-                      <div className="flex items-center gap-1"><Eye size={12} className="mr-1"/> Engagement <ArrowUpDown size={12} opacity={sortField === 'engagement' ? 1 : 0.3} /></div>
+                    <th className="pb-3">Type & Focus</th>
+                    <th className="pb-3 text-center">Length</th>
+                    <th className="pb-3 text-right pr-4 cursor-pointer hover:text-charcoal transition" onClick={() => handleSort('engagement')}>
+                      <div className="flex justify-end items-center gap-1">Engagement <ArrowUpDown size={10} opacity={sortField === 'engagement' ? 1 : 0.4} /></div>
                     </th>
-                    <th className="pb-3 font-semibold cursor-pointer hover:text-charcoal transition" onClick={() => handleSort('rating')}>
-                      <div className="flex items-center gap-1">Rating <ArrowUpDown size={12} opacity={sortField === 'rating' ? 1 : 0.3} /></div>
-                    </th>
+                    <th className="pb-3 text-right pr-4">Quality Score</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {paginatedData.map((c, i) => (
-                    <tr 
-                      key={c.id || i} 
+                  {processedData.map((c, i) => (
+                    <tr
+                      key={c.id || i}
                       onClick={() => handleViewDetails(c)}
-                      className={`border-b border-cream-darker last:border-0 transition group cursor-pointer ${loadingDetails === c.id ? 'bg-sage-50' : 'hover:bg-sage-100'}`}
+                      className="border-b border-cream-darker last:border-0 hover:bg-sage-50 transition group cursor-pointer"
                     >
-                      <td className="py-4 pr-4">
-                        <div className="flex items-center gap-2">
-                          {loadingDetails === c.id && <Loader2 size={14} className="animate-spin text-primary" />}
-                          <p className="font-medium text-charcoal group-hover:text-[#7C9C84] transition truncate max-w-[250px]">{c.title}</p>
+                      <td className="py-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 rounded-xl bg-sage-100 flex items-center justify-center text-primary font-bold text-xs overflow-hidden border border-cream-darker shrink-0">
+                            {c.imageUrl ? (
+                              <img src={c.imageUrl} alt="" className="w-full h-full object-cover shadow-inner" />
+                            ) : (
+                              (c.title || '?').charAt(0).toUpperCase()
+                            )}
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="font-bold text-charcoal group-hover:text-primary transition truncate max-w-[280px] leading-tight">{c.title}</span>
+                            <span className={`text-[9px] font-bold uppercase tracking-tight mt-0.5 ${c.status === 'published' ? 'text-primary' : 'text-amber-500'}`}>{c.status}</span>
+                          </div>
                         </div>
                       </td>
                       <td className="py-4">
-                        <div className="flex flex-col items-start gap-1">
-                          <span className={c.type === 'Article' ? 'badge-amber !bg-amber-50 !text-amber-600 border border-amber-100' : 'badge-green !bg-emerald-50 !text-emerald-600 border border-emerald-100'}>
+                        <div className="flex flex-col gap-0.5">
+                          <span className={`text-[10px] font-black uppercase tracking-tight ${c.type === 'Article' ? 'text-amber-600' : 'text-emerald-600'}`}>
                             {c.type === 'Article' ? '📝 Article' : '🎧 Guide'}
                           </span>
-                          <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider ml-1">{c.category}</span>
+                          <span className="text-[9px] font-bold text-charcoal-muted uppercase">{c.category}</span>
                         </div>
                       </td>
-                      <td className="py-4 text-charcoal-muted text-xs font-medium">{c.duration}</td>
-                      <td className="py-4">
-                         <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${c.status === 'published' ? 'bg-green-50 text-green-600 border-green-200' : 'bg-gray-100 text-gray-500 border-gray-200'}`}>
-                           {c.status.toUpperCase()}
-                         </span>
+                      <td className="py-4 text-center text-charcoal-muted font-mono text-[11px]">{c.duration}</td>
+                      <td className="py-4 text-right pr-4 font-display font-black text-charcoal">
+                        {c.engagement.toLocaleString()}
                       </td>
-                      <td className="py-4 font-mono text-charcoal font-semibold">{c.engagement.toLocaleString()}</td>
-                      <td className="py-4 text-amber-500 font-semibold flex items-center gap-1 mt-1">
-                        ★ {c.rating > 0 ? c.rating.toFixed(1) : '–'}
+                      <td className="py-4 text-right pr-4">
+                        <div className="flex items-center justify-end gap-1 text-amber-500 font-bold">
+                          <Star size={11} fill="currentColor" /> {c.rating ? c.rating.toFixed(1) : '0.0'}
+                        </div>
                       </td>
                     </tr>
                   ))}
-                  {paginatedData.length === 0 && (
-                    <tr>
-                      <td colSpan="6" className="py-12 text-center text-charcoal-muted opacity-60">
-                        No content matches your filters.
-                      </td>
-                    </tr>
-                  )}
                 </tbody>
               </table>
             </div>
-
-            {/* Pagination Controls */}
-            {totalPages > 1 && (
-              <div className="flex items-center justify-between border-t border-cream-darker pt-4 mt-2">
-                <p className="text-xs font-body text-charcoal-muted">
-                  Showing <span className="font-bold text-charcoal">{(currentPage - 1) * itemsPerPage + 1}</span> to <span className="font-bold text-charcoal">{Math.min(currentPage * itemsPerPage, processedData.length)}</span> of <span className="font-bold text-charcoal">{processedData.length}</span> results
-                </p>
-                <div className="flex gap-2">
-                  <button 
-                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                    disabled={currentPage === 1}
-                    className="px-3 py-1.5 rounded-lg border border-cream-darker text-xs font-bold text-charcoal disabled:opacity-30 hover:bg-cream transition"
-                  >
-                    Previous
-                  </button>
-                  <button 
-                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                    disabled={currentPage === totalPages}
-                    className="px-3 py-1.5 rounded-lg border border-cream-darker text-xs font-bold text-charcoal disabled:opacity-30 hover:bg-cream transition"
-                  >
-                    Next
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
         </>
       )}
 
-      {/* Detail Modal Overlay */}
+      {/* Intelligence Modal */}
       {viewingDetails && (
-        <div 
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex justify-center items-center z-[1000] p-4 sm:p-6"
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex justify-center items-center z-[1000] p-4"
           onClick={() => setViewingDetails(null)}
         >
-          <div 
-            className="w-full max-w-2xl bg-white rounded-3xl shadow-2xl relative animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]"
+          <div
+            className="w-full max-w-2xl bg-white rounded-[2rem] shadow-2xl relative animate-in zoom-in-95 duration-200 overflow-hidden flex flex-col max-h-[90vh]"
             onClick={e => e.stopPropagation()}
           >
-            {/* Header (Sticky) */}
-            <div className="flex justify-between items-center px-8 py-6 border-b border-cream-darker shrink-0">
-              <div className="flex items-center gap-3">
-                 <span className={viewingDetails.type === 'Article' ? 'badge-amber !bg-amber-50 !text-amber-600 border border-amber-100' : 'badge-green !bg-emerald-50 !text-emerald-600 border border-emerald-100'}>
-                   {viewingDetails.type === 'Article' ? '📝 Article' : '🎧 Guide'}
-                 </span>
-                 <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${viewingDetails.status === 'published' ? 'bg-green-50 text-green-600 border-green-200' : 'bg-gray-100 text-gray-500 border-gray-200'}`}>
-                   {viewingDetails.status.toUpperCase()}
-                 </span>
+            <div className="bg-sage-100 p-8 flex items-start justify-between relative shrink-0">
+              <div className="flex items-center gap-6">
+                <div className="w-24 h-20 rounded-2xl bg-white shadow-lg overflow-hidden border-4 border-white shrink-0">
+                  {viewingDetails.imageUrl ? (
+                    <img src={viewingDetails.imageUrl} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-primary-light">
+                      <ImageIcon size={32} />
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-[9px] font-black uppercase tracking-widest text-primary bg-white/60 px-2 py-0.5 rounded-md">{viewingDetails.type}</span>
+                    <span className="text-[9px] font-black uppercase tracking-widest text-charcoal-muted bg-white/60 px-2 py-0.5 rounded-md">{viewingDetails.status}</span>
+                  </div>
+                  <h2 className="font-display font-bold text-2xl text-charcoal leading-tight">{viewingDetails.title}</h2>
+                  <p className="text-primary font-medium text-xs mt-1">Focus: {viewingDetails.category}</p>
+                </div>
               </div>
-              <button 
-                  onClick={() => setViewingDetails(null)} 
-                  className="text-gray-400 hover:text-charcoal hover:bg-cream p-2 rounded-full transition"
-              >
-                  <XCircle size={24}/>
-              </button>
+              <button onClick={() => setViewingDetails(null)} className="text-gray-400 hover:text-charcoal transition bg-white/50 p-2 rounded-full"><XCircle size={24} /></button>
             </div>
 
-            {/* Scrollable Body */}
-            <div className="p-8 overflow-y-auto hidden-scrollbar flex-1">
-               <div className="flex flex-col sm:flex-row gap-6 mb-8 items-start border-b border-cream-darker pb-8">
-                 <div className="w-52 h-28 sm:w-64 sm:h-32 shrink-0 bg-sage-100 rounded-2xl flex items-center justify-center overflow-hidden shadow-sm border border-cream-darker">
-                   {viewingDetails.imageUrl ? (
-                     <img src={viewingDetails.imageUrl} alt={viewingDetails.title} className="w-full h-full object-cover" />
-                   ) : (
-                     <ImageIcon size={32} className="text-[#7C9C84]/40" />
-                   )}
-                 </div>
-                 
-                 <div className="flex flex-col flex-1 h-full w-full">
-                   <h2 className="font-display text-2xl font-bold text-charcoal leading-tight mb-2">
-                     {viewingDetails.title}
-                   </h2>
-                   {viewingDetails.authorName && (
-                     <p className="font-body text-sm text-charcoal-muted mb-4 font-semibold">By {viewingDetails.authorName}</p>
-                   )}
-                   
-                   <div className="flex flex-wrap gap-x-6 gap-y-3 mt-auto pt-2">
-                     <div>
-                       <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block mb-0.5">Category</span>
-                       <span className="text-sm font-semibold text-charcoal">{viewingDetails.category}</span>
-                     </div>
-                     <div>
-                       <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block mb-0.5">Duration</span>
-                       <span className="text-sm font-semibold text-charcoal">{viewingDetails.duration}</span>
-                     </div>
-                     <div>
-                       <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block mb-0.5">Rating</span>
-                       <span className="text-sm font-bold text-amber-500">★ {viewingDetails.rating > 0 ? viewingDetails.rating.toFixed(1) : '-'}</span>
-                     </div>
-                     <div>
-                       <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block mb-0.5">Engagement</span>
-                       <span className="text-sm font-bold text-[#7C9C84]">{viewingDetails.engagement.toLocaleString()} {viewingDetails.type === 'Article' ? 'Views' : 'Plays'}</span>
-                     </div>
-                   </div>
-                 </div>
-               </div>
+            <div className="p-8 overflow-y-auto custom-scrollbar flex-1 bg-white">
+              <div className="grid grid-cols-2 gap-3 mb-8">
+                <div className="p-4 bg-cream/50 rounded-2xl border border-cream-darker">
+                  <p className="text-[9px] font-black text-charcoal-muted uppercase mb-1 flex items-center gap-1.5"><Eye size={12} /> Interaction Count</p>
+                  <p className="font-display font-bold text-xl text-charcoal">{viewingDetails.engagement.toLocaleString()}</p>
+                </div>
+                <div className="p-4 bg-cream/50 rounded-2xl border border-cream-darker">
+                  <p className="text-[9px] font-black text-charcoal-muted uppercase mb-1 flex items-center gap-1.5"><Star size={12} fill="currentColor" className="text-amber-500" /> Satisfaction Score</p>
+                  <p className="font-display font-bold text-xl text-charcoal">{viewingDetails.rating ? viewingDetails.rating.toFixed(1) : '–'}</p>
+                </div>
+              </div>
 
-               <p className="section-label mb-4">Content Inspect</p>
-               {viewingDetails.audioUrl && (
-                 <div className="mb-6 p-4 bg-sage-100 rounded-xl flex items-center gap-4 border border-[#7C9C84]/20 shadow-sm inline-flex">
-                   <div className="w-10 h-10 bg-[#7C9C84] rounded-full flex items-center justify-center text-white shadow-md">
-                     <Headphones size={20} />
-                   </div>
-                   <div>
-                     <p className="font-bold text-sm text-[#7C9C84]">Audio Attached</p>
-                     <p className="text-xs text-[#6A8671]">Users can stream this guide</p>
-                   </div>
-                 </div>
-               )}
-               <div className="font-body text-sm text-charcoal leading-relaxed whitespace-pre-wrap">
-                 {viewingDetails.content ? (
-                   viewingDetails.content
-                 ) : (
-                   <div className="py-10 text-center opacity-60">
-                       <p className="italic">No detailed content or description available.</p>
-                   </div>
-                 )}
-               </div>
+              <p className="section-label mb-3">Resource Insight</p>
+              <div className="bg-cream/30 p-5 rounded-2xl border border-creamDarker relative italic text-sm text-charcoal-muted leading-relaxed">
+                {viewingDetails.content}
+              </div>
+
+              {viewingDetails.audioUrl && (
+                <div className="mt-6 p-4 bg-sage-50 rounded-xl border border-primary/10 flex items-center gap-3">
+                  <div className="w-10 h-10 bg-primary rounded-full flex items-center justify-center text-white shadow-md">
+                    <Music size={20} />
+                  </div>
+                  <div>
+                    <p className="text-xs font-black text-primary uppercase">Audio Companion Attached</p>
+                    <p className="text-[10px] text-charcoal-muted">Valid for meditation streaming</p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="px-8 py-5 bg-cream/50 border-t border-cream-darker flex justify-end shrink-0">
+              <button onClick={() => setViewingDetails(null)} className="px-6 py-2.5 rounded-xl border border-cream-darker text-xs font-bold text-charcoal-muted hover:bg-white transition">Dismiss Analysis</button>
             </div>
           </div>
         </div>

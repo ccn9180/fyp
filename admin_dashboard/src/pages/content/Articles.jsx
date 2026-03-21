@@ -46,6 +46,8 @@ export default function Articles() {
   const [deleting, setDeleting] = useState(null);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [editingArticle, setEditingArticle] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 8;
   
   const [uploadProgress, setUploadProgress] = useState({ imageUrl: 0, authorImageUrl: 0 });
   const [isUploading, setIsUploading] = useState({ imageUrl: false, authorImageUrl: false });
@@ -162,78 +164,8 @@ export default function Articles() {
     }
   };
 
-  const handleDuplicate = async (article) => {
-    if (!window.confirm('Duplicate this article?')) return;
-    try {
-      await addDoc(collection(db, 'articles'), {
-        ...article,
-        title: `${article.title} (Copy)`,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-        views: 0,
-        clicks: 0,
-        rating: 0
-      });
-      alert("Article duplicated successfully!");
-    } catch (e) { console.error(e); }
-  };
 
-  const handleBulkImport = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      try {
-        const json = JSON.parse(event.target.result);
-        const articlesToImport = Array.isArray(json) ? json : [json];
-        
-        if (!window.confirm(`Are you sure you want to import ${articlesToImport.length} articles?`)) return;
-        
-        setIsBulkImporting(true);
-        let successCount = 0;
-
-        for (const meta of articlesToImport) {
-          // Basic validation and auto-summary if missing
-          let summary = meta.subtitle || meta.summary || "";
-          if (!summary && meta.content) {
-            const cleanContent = meta.content.replace(/[#*`]/g, '').trim();
-            const sentences = cleanContent.match(/[^.!?]+[.!?]+/g) || [cleanContent];
-            summary = sentences.slice(0, 2).join(" ");
-            if (summary.length > 200) summary = summary.substring(0, 197) + "...";
-          }
-
-          await addDoc(collection(db, 'articles'), {
-            title: meta.title || "Untitiled Article",
-            subtitle: summary,
-            content: meta.content || "",
-            tag: meta.tag || meta.category || "General",
-            imageUrl: meta.imageUrl || "",
-            authorName: meta.authorName || "FYP Editor",
-            authorRole: meta.authorRole || "Health Specialist",
-            authorImageUrl: meta.authorImageUrl || "",
-            readingTime: meta.readingTime || "5 min read",
-            status: meta.status || "published",
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-            views: 0,
-            clicks: 0,
-            rating: 0
-          });
-          successCount++;
-        }
-
-        alert(`Successfully imported ${successCount} articles!`);
-      } catch (error) {
-        console.error("Bulk import error:", error);
-        alert("Failed to import. Ensure the JSON format is an array of article objects.");
-      } finally {
-        setIsBulkImporting(false);
-        e.target.value = null; // Reset input
-      }
-    };
-    reader.readAsText(file);
-  };
   
   // Form State
   const [formData, setFormData] = useState({
@@ -250,9 +182,16 @@ export default function Articles() {
     status: 'draft'
   });
 
-  const filtered = articles.filter(a =>
+  const filtered = (articles || []).filter(a =>
     (a.title || '').toLowerCase().includes(search.toLowerCase()) ||
     (a.tag || '').toLowerCase().includes(search.toLowerCase())
+  );
+
+  // Pagination
+  const totalPages = Math.ceil(filtered.length / itemsPerPage);
+  const paginatedItems = filtered.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
   );
 
   const handleOpenEditor = (article = null) => {
@@ -352,24 +291,6 @@ export default function Articles() {
           <span style={{ ...sLabel, display: 'block', marginBottom: '4px' }}>Content Management</span>
           <h2 style={{ fontFamily: '"Playfair Display", serif', fontWeight: 600, fontSize: '24px', color: C.charcoal, margin: 0 }}>Article Content</h2>
         </div>
-        <div style={{ display: 'flex', gap: '10px' }}>
-          <input 
-            type="file" 
-            accept=".json" 
-            hidden 
-            ref={importInputRef} 
-            onChange={handleBulkImport} 
-          />
-          <button
-            onClick={() => importInputRef.current.click()}
-            disabled={isBulkImporting}
-            style={{ display: 'flex', alignItems: 'center', gap: '6px', background: C.cream, color: C.charcoalMuted, border: `1px solid ${C.creamDarker}`, borderRadius: '14px', padding: '10px 18px', fontFamily: 'Outfit', fontWeight: 600, fontSize: '14px', cursor: 'pointer', transition: 'all 0.2s' }}
-            onMouseOver={(e) => e.target.style.background = C.creamDarker}
-            onMouseOut={(e) => e.target.style.background = C.cream}
-          >
-            {isBulkImporting ? <Loader2 size={15} className="animate-spin" /> : <FileUp size={15} />} 
-            Bulk Import
-          </button>
           <button
             onClick={() => handleOpenEditor()}
             style={{ display: 'flex', alignItems: 'center', gap: '6px', background: C.primary, color: 'white', border: 'none', borderRadius: '14px', padding: '10px 18px', fontFamily: 'Outfit', fontWeight: 600, fontSize: '14px', cursor: 'pointer', transition: 'background 0.2s', boxShadow: '0 4px 12px rgba(124, 156, 132, 0.2)' }}
@@ -379,7 +300,6 @@ export default function Articles() {
             <Plus size={15} /> New Article
           </button>
         </div>
-      </div>
 
       <div style={card}>
         <div style={{ position: 'relative', maxWidth: '280px', marginBottom: '20px' }}>
@@ -390,14 +310,13 @@ export default function Articles() {
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
-        </div>
-
-        {loading ? (
+        </div>        {loading ? (
           <p style={{ fontFamily: 'Outfit', fontSize: '13px', color: C.muted }}>Loading articles…</p>
         ) : filtered.length === 0 ? (
           <p style={{ fontFamily: 'Outfit', fontSize: '13px', color: C.muted }}>No articles found.</p>
         ) : (
-          <div style={{ overflowX: 'auto' }}>
+          <>
+            <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'Outfit', fontSize: '13px' }}>
               <thead>
                 <tr style={{ borderBottom: `1px solid ${C.creamDarker}` }}>
@@ -407,17 +326,38 @@ export default function Articles() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((a, i) => (
+                {paginatedItems.map((a, i) => (
                   <tr 
                     key={a.id} 
                     onClick={() => viewWithPreload(a)}
-                    style={{ borderBottom: i < filtered.length - 1 ? `1px solid ${C.creamDarker}` : 'none', cursor: 'pointer' }} 
+                    style={{ borderBottom: i < paginatedItems.length - 1 ? `1px solid ${C.creamDarker}` : 'none', cursor: 'pointer' }} 
                     className="hover:bg-cream transition-colors group"
                   >
-                    <td style={{ padding: '12px 0', fontWeight: 600, color: C.charcoal, maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} className="group-hover:text-primary transition-colors">
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        {preloading === a.id && <Loader2 size={14} className="animate-spin text-primary" />}
-                        {a.title || 'Untitled'}
+                    <td style={{ padding: '12px 0', color: C.charcoal }} className="group-hover:text-primary transition-colors">
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <div style={{ 
+                          width: '36px', height: '36px', borderRadius: '10px', backgroundColor: C.sage100, 
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                          overflow: 'hidden', border: `1px solid ${C.creamDarker}`, flexShrink: 0
+                        }}>
+                          {a.imageUrl ? (
+                            <img src={a.imageUrl} alt="" style={{ width: '100%', height: '100%', objectCover: 'cover' }} />
+                          ) : (
+                            <span style={{ fontSize: '12px', fontWeight: 800, color: C.primary }}>
+                              {(a.title || '?').charAt(0).toUpperCase()}
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                          <span style={{ fontWeight: 600, maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {a.title || 'Untitled'}
+                          </span>
+                          {preloading === a.id && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: C.primary }}>
+                              <Loader2 size={10} className="animate-spin" /> <span>Preloading Content...</span>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </td>
                     <td style={{ padding: '12px 0' }}>
@@ -436,13 +376,6 @@ export default function Articles() {
                     </td>
                     <td style={{ padding: '12px 0' }}>
                       <div style={{ display: 'flex', gap: '4px' }} onClick={e => e.stopPropagation()}>
-                        <button 
-                          onClick={() => handleDuplicate(a)}
-                          title="Duplicate Content"
-                          style={{ padding: '6px', border: 'none', background: C.cream, borderRadius: '8px', cursor: 'pointer', color: C.indigo }}
-                        >
-                          <Plus size={14} />
-                        </button>
                         <button 
                           onClick={() => handleOpenEditor(a)}
                           style={{ padding: '6px', border: 'none', background: C.cream, borderRadius: '8px', cursor: 'pointer', color: C.muted }}
@@ -463,8 +396,41 @@ export default function Articles() {
               </tbody>
             </table>
           </div>
-        )}
-      </div>
+
+          {/* Pagination UI */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '24px', padding: '0 4px' }}>
+            <p style={{ fontFamily: 'Outfit', fontSize: '12px', color: C.muted, fontWeight: 500 }}>
+              Showing {paginatedItems.length} of {filtered.length} articles
+            </p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <button 
+                disabled={currentPage === 1}
+                onClick={() => setCurrentPage(prev => prev - 1)}
+                style={{ padding: '6px 14px', borderRadius: '10px', border: `1px solid ${C.creamDarker}`, background: 'white', fontFamily: 'Outfit', fontSize: '12px', fontWeight: 600, color: C.charcoal, cursor: currentPage === 1 ? 'default' : 'pointer', opacity: currentPage === 1 ? 0.4 : 1 }}
+              >
+                Previous
+              </button>
+              {[...Array(totalPages)].map((_, i) => (
+                <button 
+                  key={i}
+                  onClick={() => setCurrentPage(i + 1)}
+                  style={{ width: '32px', height: '32px', borderRadius: '10px', border: currentPage === i + 1 ? `1px solid ${C.primary}` : `1px solid ${C.creamDarker}`, background: currentPage === i + 1 ? C.primary : 'white', fontFamily: 'Outfit', fontSize: '12px', fontWeight: 700, color: currentPage === i + 1 ? 'white' : C.charcoal, cursor: 'pointer', transition: 'all 0.2s' }}
+                >
+                  {i + 1}
+                </button>
+              ))}
+              <button 
+                disabled={currentPage === totalPages || totalPages === 0}
+                onClick={() => setCurrentPage(prev => prev + 1)}
+                style={{ padding: '6px 14px', borderRadius: '10px', border: `1px solid ${C.creamDarker}`, background: 'white', fontFamily: 'Outfit', fontSize: '12px', fontWeight: 600, color: C.charcoal, cursor: (currentPage === totalPages || totalPages === 0) ? 'default' : 'pointer', opacity: (currentPage === totalPages || totalPages === 0) ? 0.4 : 1 }}
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
 
       {/* Article Preview Modal */}
       {viewingArticle && (

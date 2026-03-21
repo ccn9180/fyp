@@ -130,8 +130,8 @@ class _LoginPageState extends State<LoginPage> {
                   color: const Color(0xFFF1F5F9),
                   shape: BoxShape.circle,
                 ),
-                  child: Image.asset(
-                    'assets/google.png',
+                  child: SvgPicture.asset(
+                    'assets/Group.svg',
                     width: 32,
                     height: 32,
                   ),
@@ -177,8 +177,8 @@ class _LoginPageState extends State<LoginPage> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Image.asset(
-                        'assets/google.png',
+                      SvgPicture.asset(
+                        'assets/Group.svg',
                         width: 24,
                         height: 24,
                       ),
@@ -443,8 +443,8 @@ class _LoginPageState extends State<LoginPage> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Image.asset(
-                          'assets/google.png',
+                        SvgPicture.asset(
+                          'assets/Group.svg',
                           width: 24,
                           height: 24,
                         ),
