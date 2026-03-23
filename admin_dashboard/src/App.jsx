@@ -18,6 +18,7 @@ import GamificationMonitoring from './pages/monitoring/GamificationMonitoring.js
 import Engagement from './pages/gamification/Engagement.jsx';
 import AccountSettings from './pages/account/AccountSettings.jsx';
 import CrisisCenter from './pages/monitoring/CrisisCenter.jsx';
+import CommunityMonitoring from './pages/monitoring/CommunityMonitoring.jsx';
 
 const C = { primary: '#7C9C84', cream: '#F6F5F2', charcoal: '#333' };
 

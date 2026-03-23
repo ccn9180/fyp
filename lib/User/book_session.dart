@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import 'booking_summary.dart';
 
 class BookSessionScreen extends StatefulWidget {
   final String counsellorId;
@@ -267,7 +268,23 @@ class _BookSessionScreenState extends State<BookSessionScreen> {
                       height: 60,
                       child: ElevatedButton(
                         onPressed: selectedTime != null ? () {
-                          // TODO: Implement booking confirmation
+                          final counselorData = {
+                            'id': widget.counsellorId,
+                            'name': widget.name,
+                            'specialty': widget.specialty,
+                            'image': widget.profileImage,
+                          };
+
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => BookingSummaryScreen(
+                                counselor: counselorData,
+                                selectedDate: _selectedDate,
+                                selectedTime: selectedTime!,
+                              ),
+                            ),
+                          );
                         } : null, // Disable if no time selected
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF86A590),

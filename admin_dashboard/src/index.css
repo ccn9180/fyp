@@ -23,7 +23,7 @@
   --color-charcoal: #333333;
   --color-charcoal-light: #555555;
   --color-charcoal-muted: #888888;
-  --color-charcoal-subtle: #AAAAAA;
+  --color-charcoal-subtle: #CCCCCC;
 
   --font-family-display: "Playfair Display", Georgia, serif;
   --font-family-body: "Outfit", Inter, sans-serif;
@@ -40,6 +40,11 @@ body {
   background-color: var(--color-cream);
   color: var(--color-charcoal);
   -webkit-font-smoothing: antialiased;
+}
+
+input::placeholder, textarea::placeholder {
+  color: var(--color-charcoal-subtle);
+  opacity: 1;
 }
 
 /* Reusable components */
@@ -72,6 +77,21 @@ body {
 }
 .btn-ghost:hover { background-color: var(--color-sage-50); }
 .btn-ghost:active { transform: scale(0.97); }
+
+.btn-secondary {
+  display: inline-flex; align-items: center; justify-content: center;
+  background-color: var(--color-sage-100);
+  color: var(--color-primary);
+  font-family: var(--font-family-body);
+  font-weight: 600;
+  padding: 0.625rem 1.5rem;
+  border-radius: 1rem;
+  border: 1px solid var(--color-primary-lighter);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-secondary:hover { background-color: var(--color-primary-lighter); }
+.btn-secondary:active { transform: scale(0.97); }
 
 .card {
   background: white;

@@ -121,3 +121,9 @@ export function useChatSessions() {
 export function useAllDiaries() {
   return useCollectionGroup('diary_entries');
 }
+/**
+ * Hook: fetch all community posts (collection: 'posts')
+ */
+export function usePosts() {
+  return useCollection('posts', [orderBy('timestamp', 'desc')]);
+}

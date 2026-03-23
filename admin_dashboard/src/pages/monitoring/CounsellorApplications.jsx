@@ -117,10 +117,10 @@ export default function CounsellorApplications() {
     const pending = filteredApps.filter(a => a.status === 'pending');
     const history = filteredApps.filter(a => a.status !== 'pending');
 
-    const paginatedPending = pending.slice((pendingPage-1)*itemsPerPage, pendingPage*itemsPerPage);
-    const paginatedHistory = history.slice((historyPage-1)*itemsPerPage, historyPage*itemsPerPage);
-    const totalPendingPages = Math.ceil(pending.length/itemsPerPage);
-    const totalHistoryPages = Math.ceil(history.length/itemsPerPage);
+    const paginatedPending = pending.slice((pendingPage - 1) * itemsPerPage, pendingPage * itemsPerPage);
+    const paginatedHistory = history.slice((historyPage - 1) * itemsPerPage, historyPage * itemsPerPage);
+    const totalPendingPages = Math.ceil(pending.length / itemsPerPage);
+    const totalHistoryPages = Math.ceil(history.length / itemsPerPage);
 
     return (
         <div className="flex flex-col gap-6" style={{ position: 'relative' }}>
@@ -308,8 +308,8 @@ export default function CounsellorApplications() {
                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '20px' }}>
                                     <p style={{ ...sLabel, textTransform: 'none', color: C.muted }}>Showing {paginatedPending.length} of {pending.length} pending</p>
                                     <div style={{ display: 'flex', gap: '6px' }}>
-                                        <button disabled={pendingPage === 1} onClick={() => setPendingPage(p => p-1)} className="px-3 py-1 bg-white border border-creamDarker rounded-lg text-xs font-semibold disabled:opacity-30 transition">Prev</button>
-                                        <button disabled={pendingPage >= totalPendingPages} onClick={() => setPendingPage(p => p+1)} className="px-3 py-1 bg-white border border-creamDarker rounded-lg text-xs font-semibold disabled:opacity-30 transition">Next</button>
+                                        <button disabled={pendingPage === 1} onClick={() => setPendingPage(p => p - 1)} className="px-3 py-1 bg-white border border-creamDarker rounded-lg text-xs font-semibold disabled:opacity-30 transition">Prev</button>
+                                        <button disabled={pendingPage >= totalPendingPages} onClick={() => setPendingPage(p => p + 1)} className="px-3 py-1 bg-white border border-creamDarker rounded-lg text-xs font-semibold disabled:opacity-30 transition">Next</button>
                                     </div>
                                 </div>
                             </div>
@@ -493,8 +493,8 @@ export default function CounsellorApplications() {
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '20px' }}>
                                 <p style={{ ...sLabel, textTransform: 'none', color: C.muted }}>Showing {paginatedHistory.length} of {history.length} reviews</p>
                                 <div style={{ display: 'flex', gap: '6px' }}>
-                                    <button disabled={historyPage === 1} onClick={() => setHistoryPage(p => p-1)} className="px-3 py-1 bg-white border border-creamDarker rounded-lg text-xs font-semibold disabled:opacity-30 transition">Prev</button>
-                                    <button disabled={historyPage >= totalHistoryPages} onClick={() => setHistoryPage(p => p+1)} className="px-3 py-1 bg-white border border-creamDarker rounded-lg text-xs font-semibold disabled:opacity-30 transition">Next</button>
+                                    <button disabled={historyPage === 1} onClick={() => setHistoryPage(p => p - 1)} className="px-3 py-1 bg-white border border-creamDarker rounded-lg text-xs font-semibold disabled:opacity-30 transition">Prev</button>
+                                    <button disabled={historyPage >= totalHistoryPages} onClick={() => setHistoryPage(p => p + 1)} className="px-3 py-1 bg-white border border-creamDarker rounded-lg text-xs font-semibold disabled:opacity-30 transition">Next</button>
                                 </div>
                             </div>
                         </div>

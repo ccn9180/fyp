@@ -11,6 +11,7 @@ import 'package:timeago/timeago.dart' as timeago;
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import 'dart:convert';
+import 'post_feeds.dart';
 
 class CommunityScreen extends StatefulWidget {
   const CommunityScreen({super.key});
@@ -622,6 +623,18 @@ class _CommunityScreenState extends State<CommunityScreen> with AutomaticKeepAli
 
             return Scaffold(
               backgroundColor: backgroundColor,
+              floatingActionButton: FloatingActionButton(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const PostFeedsPage()),
+                  );
+                },
+                backgroundColor: primaryGreen,
+                elevation: 4,
+                shape: const CircleBorder(),
+                child: const Icon(Icons.add, color: Colors.white, size: 28),
+              ),
               body: SafeArea(
                 child: CustomScrollView(
                   controller: _scrollController,

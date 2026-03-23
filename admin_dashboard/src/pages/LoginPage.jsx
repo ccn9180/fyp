@@ -7,13 +7,15 @@ import googleIcon from '../assets/google_logo.svg';
 
 const s = {
   wrap: { minHeight: '100vh', background: '#F6F5F2', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' },
-  box: { width: '100%', maxWidth: '380px' },
+  box: { width: '100%', maxWidth: '380px', marginTop: '40px' },
   logoWrap: { display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '32px' },
-  logoIcon: { 
-    width: '100px', height: '100px', borderRadius: '50%', 
-    background: 'white', display: 'flex', alignItems: 'center', 
-    justifyContent: 'center', marginBottom: '20px', 
-    boxShadow: '0 10px 40px rgba(124,156,132,0.08)' 
+  logoIcon: {
+    width: '100px', height: '100px', borderRadius: '50%',
+    background: 'white', display: 'flex', alignItems: 'center',
+    justifyContent: 'center', marginBottom: '20px',
+    boxShadow: '0 10px 40px rgba(124,156,132,0.08)',
+    border: '1px solid #E5E4E0',
+    overflow: 'hidden'
   },
   logoTitle: { fontFamily: '"Playfair Display", serif', fontWeight: 600, fontSize: '26px', color: '#333' },
   logoSub: { fontFamily: 'Outfit, sans-serif', fontSize: '13px', color: '#888', marginTop: '1px' },

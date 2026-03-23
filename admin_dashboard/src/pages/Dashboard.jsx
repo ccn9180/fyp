@@ -123,10 +123,6 @@ export default function Dashboard() {
           <h2 className="font-display font-semibold text-2xl text-charcoal">Dashboard</h2>
           <p className="font-body text-sm text-charcoal-muted mt-1">Live overview of your platform</p>
         </div>
-        <div className="flex items-center gap-2 bg-sage-100 px-3 py-1.5 rounded-xl text-primary font-body text-xs font-bold">
-          <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-          LIVE UPDATES
-        </div>
       </div>
 
       {/* Stats Grid */}

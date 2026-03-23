@@ -9,7 +9,7 @@ import { auth, db } from '../firebase';
 import { doc, getDoc, collection, query, where, getDocs, limit } from 'firebase/firestore';
 import logo from '../assets/leaf.png';
 
-const C = { primary: '#7C9C84', cream: '#F6F5F2', charcoal: '#333' };
+const C = { primary: '#7C9C84', cream: '#F6F5F2', creamDarker: '#E5E4E0', charcoal: '#333', muted: '#888' };
 
 const NAV = [
   { label: 'Overview', icon: LayoutDashboard, path: '/dashboard' },
@@ -39,9 +39,9 @@ const NAV = [
   },
   { type: 'divider' },
   {
-    label: 'Engagement Hub', icon: Gift, children: [
-      { label: 'Gamification System', path: '/gamification/engagement', icon: Award },
-      { label: 'Engagement Metrics', path: '/monitoring/gamification', icon: BarChart2 },
+    label: 'Gamification Hub', icon: Gift, children: [
+      { label: 'Gamification Management', path: '/gamification/engagement', icon: Award },
+      { label: 'Gamification Metrics', path: '/monitoring/gamification', icon: BarChart2 },
     ]
   },
 ];
@@ -181,27 +181,36 @@ export default function AdminLayout({ children, onLogout }) {
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: '#F6F5F2' }}>
       {/* Sidebar */}
       <aside style={S.sidebar(collapsed)}>
-        <div style={{ 
-          padding: '28px 20px', 
-          display: 'flex', 
-          alignItems: 'center', 
+        <div style={{
+          padding: '28px 20px',
+          display: 'flex',
+          alignItems: 'center',
           justifyContent: collapsed ? 'center' : 'space-between',
           borderBottom: collapsed ? 'none' : `1px solid ${C.creamDarker}`,
           marginBottom: '10px'
         }}>
-          {!collapsed && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <div style={S.logoIcon}>
-                <img src={logo} alt="Logo" style={{ width: '28px', height: '28px' }} />
-              </div>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            justifyContent: collapsed ? 'center' : 'flex-start'
+          }}>
+            <div style={{
+              ...S.logoIcon,
+              width: collapsed ? '40px' : '48px',
+              height: collapsed ? '40px' : '48px',
+            }}>
+              <img src={logo} alt="Logo" style={{ width: collapsed ? '22px' : '28px', height: collapsed ? '22px' : '28px' }} />
+            </div>
+            {!collapsed && (
               <div>
                 <p style={{ margin: 0, fontFamily: '"Playfair Display", serif', fontWeight: 600, fontSize: '22px', color: C.charcoal, lineHeight: 1 }}>Eunoia</p>
                 <p style={{ margin: 0, fontFamily: 'Outfit, sans-serif', fontWeight: 600, fontSize: '10px', color: C.muted, textTransform: 'uppercase', letterSpacing: '0.08em', marginTop: '2px' }}>Admin</p>
               </div>
-            </div>
-          )}
-          
-          <button 
+            )}
+          </div>
+
+          <button
             onClick={() => setCollapsed(!collapsed)}
             style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '6px', color: C.charcoal, display: 'flex', alignItems: 'center', borderRadius: '8px' }}
             className="hover:bg-cream transition-colors"
@@ -213,46 +222,47 @@ export default function AdminLayout({ children, onLogout }) {
           {NAV.map((item, index) => <SidebarGroup key={item.label || `divider-${index}`} item={item} collapsed={collapsed} />)}
         </nav>
         <div style={{ padding: '16px', borderTop: collapsed ? 'none' : `1px solid ${C.creamDarker}`, marginTop: 'auto' }}>
-            <NavLink to="/account" style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: '12px', 
-                textDecoration: 'none', 
-                color: 'inherit',
-                background: C.cream,
-                padding: '12px',
-                borderRadius: '16px',
-                border: `1px solid ${C.creamDarker}`,
-                width: '100%',
-                justifyContent: collapsed ? 'center' : 'flex-start'
-            }} className="hover:bg-cream-darker transition-all group">
-                <div style={{ 
-                    width: '32px', height: '32px', 
-                    borderRadius: '8px', 
-                    background: C.primary, 
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    overflow: 'hidden', flexShrink: 0
-                }}>
-                    {adminUser.photo ? (
-                        <img src={adminUser.photo} alt="P" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    ) : (
-                        <span style={{ color: 'white', fontWeight: 700, fontSize: '13px' }}>{adminUser.name?.charAt(0)}</span>
-                    )}
-                </div>
-                {!collapsed && (
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                        <p style={{ margin: 0, fontSize: '13px', fontWeight: 700, color: '#333', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{adminUser.name}</p>
-                        <p style={{ margin: 0, fontSize: '10px', color: C.primary, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{adminUser.role}</p>
-                    </div>
-                )}
-            </NavLink>
+          <NavLink to="/account" style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            textDecoration: 'none',
+            color: 'inherit',
+            background: C.cream,
+            padding: '12px',
+            borderRadius: '16px',
+            border: `1px solid ${C.creamDarker}`,
+            width: '100%',
+            justifyContent: collapsed ? 'center' : 'flex-start'
+          }} className="hover:bg-cream-darker transition-all group">
+            <div style={{
+              width: '32px', height: '32px',
+              borderRadius: '50%',
+              background: C.primary,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              overflow: 'hidden', flexShrink: 0,
+              border: `1px solid ${C.creamDarker}`,
+            }}>
+              {adminUser.photo ? (
+                <img src={adminUser.photo} alt="P" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              ) : (
+                <span style={{ color: 'white', fontWeight: 700, fontSize: '13px' }}>{adminUser.name?.charAt(0)}</span>
+              )}
+            </div>
+            {!collapsed && (
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ margin: 0, fontSize: '13px', fontWeight: 700, color: '#333', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{adminUser.name}</p>
+                <p style={{ margin: 0, fontSize: '10px', color: C.primary, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{adminUser.role}</p>
+              </div>
+            )}
+          </NavLink>
         </div>
       </aside>
 
       {/* Main */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <header style={S.topbar}>
-          <span style={S.topbarTitle}>Strategic Control Console</span>
+          <span style={S.topbarTitle}>System Oversight Hub</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div style={{ position: 'relative' }}>
               <button
@@ -260,7 +270,7 @@ export default function AdminLayout({ children, onLogout }) {
                 style={{ position: 'relative', padding: '8px', border: 'none', background: showNotify ? '#E8ECE9' : 'transparent', cursor: 'pointer', borderRadius: '10px', transition: 'all 0.2s' }}
               >
                 <Bell size={18} color={showNotify ? C.primary : "#888"} />
-                <span style={{ position: 'absolute', top: '8px', right: '8px', width: '8px', height: '8px', background: '#f87171', borderRadius: '50%', border: '2px solid white' }} />
+                  <span style={{ position: 'absolute', top: '8px', right: '8px', width: '8px', height: '8px', background: '#f87171', borderRadius: '50%', border: '2px solid white' }} />
               </button>
 
               {showNotify && (
@@ -271,17 +281,17 @@ export default function AdminLayout({ children, onLogout }) {
               )}
             </div>
 
-            <button 
-              onClick={onLogout} 
-              style={{ 
+            <button
+              onClick={onLogout}
+              style={{
                 marginLeft: '12px',
-                padding: '10px 18px', 
-                border: `1px solid ${C.creamDarker}`, 
-                background: 'white', 
-                cursor: 'pointer', 
-                borderRadius: '12px', 
-                color: '#f87171', 
-                fontWeight: 600, 
+                padding: '10px 18px',
+                border: `1px solid ${C.creamDarker}`,
+                background: 'white',
+                cursor: 'pointer',
+                borderRadius: '12px',
+                color: '#f87171',
+                fontWeight: 600,
                 fontSize: '13px',
                 display: 'flex',
                 alignItems: 'center',
