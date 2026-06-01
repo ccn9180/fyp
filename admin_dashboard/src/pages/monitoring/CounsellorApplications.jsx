@@ -1,8 +1,15 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { useCounsellorApplications } from '../../hooks/useFirestore';
-import { CheckCircle, XCircle, Clock, ExternalLink, ShieldCheck, Mail, BookOpen, Award, Loader2, Search, Filter, X, LayoutGrid, ChevronDown } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, ExternalLink, ShieldCheck, Mail, BookOpen, Award, Loader2, Search, Filter, X, LayoutGrid, ChevronDown, Download, Upload } from 'lucide-react';
+import { customAlert, customConfirm } from '../../utils/dialogUtils';
+import {
+    BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
+    CartesianGrid
+} from 'recharts';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 
 const C = {
     primary: '#7C9C84',
@@ -34,6 +41,8 @@ const badge = (type) => ({
 
 export default function CounsellorApplications() {
     const { data: applications, loading } = useCounsellorApplications();
+    const reportRef = useRef(null);
+    const paperRef = useRef(null);
     const [processing, setProcessing] = useState(null);
     const [viewingApp, setViewingApp] = useState(null);
     const [preloading, setPreloading] = useState(null);
@@ -42,6 +51,7 @@ export default function CounsellorApplications() {
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const [pendingPage, setPendingPage] = useState(1);
     const [historyPage, setHistoryPage] = useState(1);
+    const [isExporting, setIsExporting] = useState(false);
     const itemsPerPage = 6;
 
     const viewDetailsWithPreload = (app) => {
@@ -60,7 +70,8 @@ export default function CounsellorApplications() {
     };
 
     const handleAction = async (app, newStatus) => {
-        if (!window.confirm(`Are you sure you want to ${newStatus} this application?`)) return;
+        const confirmed = await customConfirm(`Are you sure you want to ${newStatus} this application?`, 'Confirm Action');
+        if (!confirmed) return;
         setProcessing(app.id);
         try {
             // 1. Update Application Status
@@ -80,13 +91,44 @@ export default function CounsellorApplications() {
                 });
             }
 
-            alert(`Application ${newStatus} successfully.`);
+            await customAlert(`Application ${newStatus} successfully.`, 'Success');
             setViewingApp(null);
         } catch (error) {
             console.error("Action error:", error);
-            alert("Error processing application. Check console.");
+            await customAlert("Error processing application. Check console.", "Error");
         } finally {
             setProcessing(null);
+        }
+    };
+
+    const handleExportPDF = async () => {
+        if (isExporting) return;
+        setIsExporting(true);
+
+        try {
+            await new Promise(resolve => setTimeout(resolve, 600));
+            const input = paperRef.current;
+            const canvas = await html2canvas(input, {
+                scale: 2,
+                useCORS: true,
+                logging: false,
+                backgroundColor: '#FFFFFF',
+                width: 794
+            });
+
+            const imgData = canvas.toDataURL('image/png');
+            const pdf = new jsPDF('p', 'mm', 'a4');
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+
+            pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+            pdf.save(`Eunoia_Recruitment_Audit_${new Date().toISOString().split('T')[0]}.pdf`);
+            await customAlert("Formal Recruitment Audit generated successfully.", "Success");
+        } catch (err) {
+            console.error('Export failed:', err);
+            await customAlert("Formal Export failed. High memory load.", "Error");
+        } finally {
+            setIsExporting(false);
         }
     };
 
@@ -100,8 +142,18 @@ export default function CounsellorApplications() {
         return ['All', ...Array.from(specs).sort()];
     }, [applications]);
 
+    const MOCK_DATA = [
+        { id: 'm1', name: 'Dr. Elizabeth Chen', email: 'e.chen@wellness.com', specializations: ['Trauma & PTSD', 'Crisis Intervention'], experience: '12', licenseNumber: 'PSY-99281', status: 'pending', motivation: 'I have dedicated my career to trauma recovery and believe Eunoia is the perfect platform for remote support.', certificateUrl: 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?w=800', submittedAt: { toDate: () => new Date('2026-03-28') } },
+        { id: 'm2', name: 'Dr. Marcus Thorne', email: 'm.thorne@mentalhealth.org', specializations: ['Anxiety Disorders', 'CBT'], experience: '8', licenseNumber: 'LCSW-8821', status: 'pending', motivation: 'My focus is on cognitive behavioral therapy for young adults dealing with high-stress environments.', certificateUrl: 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?w=800', submittedAt: { toDate: () => new Date('2026-03-30') } },
+        { id: 'm3', name: 'Dr. Sarah Winters', email: 's.winters@clinical.edu', specializations: ['Child Psychology', 'Developmental'], experience: '15', licenseNumber: 'PSY-11029', status: 'approved', motivation: 'Childhood mental health is often overlooked. I want to contribute my expertise here.', certificateUrl: 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?w=800', submittedAt: { toDate: () => new Date('2026-03-15') }, reviewedAt: { toDate: () => new Date('2026-03-20') } },
+        { id: 'm4', name: 'Dr. James Halloway', email: 'j.halloway@private.me', specializations: ['Relationship Counseling', 'Family'], experience: '10', licenseNumber: 'MFT-5561', status: 'rejected', motivation: 'Looking to expand my practice into the digital realm.', certificateUrl: 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?w=800', submittedAt: { toDate: () => new Date('2026-03-10') }, reviewedAt: { toDate: () => new Date('2026-03-12') } },
+        { id: 'm5', name: 'Dr. Linda Vo', email: 'l.vo@unity.com', specializations: ['Depression', 'Mindfulness'], experience: '6', licenseNumber: 'PSY-6672', status: 'pending', motivation: 'Mindfulness-based stress reduction is the core of my practice.', certificateUrl: 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?w=800', submittedAt: { toDate: () => new Date('2026-04-01') } },
+    ];
+
+    const allApps = useMemo(() => [...(applications || []), ...MOCK_DATA], [applications]);
+
     const filteredApps = useMemo(() => {
-        return (applications || []).filter(app => {
+        return allApps.filter(app => {
             const name = (app.name || '').toLowerCase();
             const email = (app.email || '').toLowerCase();
             const query = searchQuery.toLowerCase();
@@ -112,7 +164,20 @@ export default function CounsellorApplications() {
 
             return matchesSearch && matchesSpecialty;
         });
-    }, [applications, searchQuery, specialtyFilter]);
+    }, [allApps, searchQuery, specialtyFilter]);
+
+    const chartData = useMemo(() => {
+        const stats = { pending: 0, approved: 0, rejected: 0 };
+        filteredApps.forEach(a => {
+            const s = (a.status || 'pending').toLowerCase();
+            if (stats[s] !== undefined) stats[s]++;
+        });
+        return [
+            { name: 'Pending Review', count: stats.pending, fill: '#d97706' },
+            { name: 'Approved', count: stats.approved, fill: '#10b981' },
+            { name: 'Rejected', count: stats.rejected, fill: '#f87171' }
+        ];
+    }, [filteredApps]);
 
     const pending = filteredApps.filter(a => a.status === 'pending');
     const history = filteredApps.filter(a => a.status !== 'pending');
@@ -131,6 +196,14 @@ export default function CounsellorApplications() {
                 </div>
 
                 <div className="flex flex-wrap items-center gap-3">
+                    <button
+                        onClick={handleExportPDF}
+                        disabled={isExporting}
+                        className="flex items-center gap-2 px-4 py-2 bg-[#7C9C84] text-white rounded-xl shadow-sm transition-all hover:bg-opacity-90 active:scale-95 disabled:opacity-50"
+                    >
+                        {isExporting ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+                        <span className="text-sm font-bold">Export Report</span>
+                    </button>
                     {/* Search Field */}
                     <div className="relative">
                         <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-charcoal-muted" />
@@ -190,159 +263,160 @@ export default function CounsellorApplications() {
                 </div>
             </div>
 
-            {loading ? (
-                <p className="font-body text-sm text-charcoal-muted">Loading applications...</p>
-            ) : (
-                <>
-                    {/* Recruitment Funnel Stats - Matched to Analytics Style */}
-                    <div className="grid grid-cols-3 gap-3 mb-2">
-                        <div className="card flex items-center gap-3 py-3 px-4 animate-in slide-in-from-top-4 duration-300">
-                            <div className="w-8 h-8 rounded-full bg-amber-50 flex items-center justify-center text-amber-600 shrink-0 border border-amber-100 shadow-sm">
-                                <Clock size={16} />
-                            </div>
-                            <div>
-                                <p className="section-label mb-0 !text-[9px] !leading-none text-amber-600/70 whitespace-nowrap uppercase tracking-widest">Pending Intake</p>
-                                <h3 className="font-display text-lg font-bold text-charcoal">{pending.length}</h3>
-                            </div>
-                        </div>
-
-                        <div className="card flex items-center gap-3 py-3 px-4 animate-in slide-in-from-top-4 duration-500 delay-75">
-                            <div className="w-8 h-8 rounded-full bg-sage-50 flex items-center justify-center text-primary shrink-0 border border-primary/10 shadow-sm">
-                                <ShieldCheck size={16} />
-                            </div>
-                            <div>
-                                <p className="section-label mb-0 !text-[9px] !leading-none text-primary/70 whitespace-nowrap uppercase tracking-widest">Qualified Counsellor</p>
-                                <h3 className="font-display text-lg font-bold text-charcoal">
-                                    {(applications || []).filter(a => a.status === 'approved').length}
-                                </h3>
-                            </div>
-                        </div>
-
-                        <div className="card flex items-center gap-3 py-3 px-4 animate-in slide-in-from-top-4 duration-700 delay-150">
-                            <div className="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center text-charcoal-muted shrink-0 border border-gray-100 shadow-sm">
-                                <XCircle size={16} />
-                            </div>
-                            <div>
-                                <p className="section-label mb-0 !text-[9px] !leading-none text-charcoal-muted/70 whitespace-nowrap uppercase tracking-widest">Rejected Counsellor</p>
-                                <h3 className="font-display text-lg font-bold text-charcoal">
-                                    {(applications || []).filter(a => a.status === 'rejected').length}
-                                </h3>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="card">
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
-                            <Clock size={18} color={C.amber} />
-                            <h3 className="font-display text-lg font-semibold">Pending Intake ({pending.length})</h3>
-                        </div>
-
-                        {pending.length === 0 ? (
-                            <p style={{ fontFamily: 'Outfit', fontSize: '14px', color: C.muted, textAlign: 'center', padding: '40px 0' }}>No active applications to review.</p>
-                        ) : (
-                            <div className="overflow-x-auto">
-                                <table className="w-full font-body text-sm">
-                                    <thead>
-                                        <tr style={{ borderBottom: `1px solid ${C.creamDarker}`, textAlign: 'left' }}>
-                                            {['Applicant', 'Expertise', 'Exp.', 'License', 'Action'].map(h => (
-                                                <th key={h} className="pb-3 font-semibold section-label text-[10px]">{h}</th>
-                                            ))}
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {paginatedPending.map(app => (
-                                            <tr
-                                                key={app.id}
-                                                onClick={() => viewDetailsWithPreload(app)}
-                                                style={{ borderBottom: `1px solid ${C.creamDarker}`, cursor: 'pointer' }}
-                                                className="hover:bg-cream transition-colors group"
-                                            >
-                                                <td className="py-4 pr-4">
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                                        <div style={{
-                                                            width: '32px', height: '32px',
-                                                            background: preloading === app.id ? 'transparent' : C.sage100,
-                                                            borderRadius: '50%',
-                                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                            fontWeight: 'bold', color: C.primary, fontSize: '11px', flexShrink: 0
-                                                        }}>
-                                                            {preloading === app.id ? <Loader2 size={16} className="animate-spin" /> : (app.name ? app.name.charAt(0).toUpperCase() : '?')}
-                                                        </div>
-                                                        <div>
-                                                            <p style={{ margin: 0, fontWeight: 600, fontSize: '14px' }} className="text-charcoal group-hover:text-primary transition-colors">{app.name}</p>
-                                                            <p style={{ margin: 0, fontSize: '11px', color: C.muted }}>{app.email}</p>
-                                                        </div>
-                                                    </div>
-                                                </td>
-                                                <td className="py-4 pr-4">
-                                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                                                        {(app.specializations || []).slice(0, 2).map(s => <span key={s} style={{ fontSize: '10px', background: C.cream, padding: '2px 8px', borderRadius: '4px', color: C.charcoalMuted }}>{s}</span>)}
-                                                    </div>
-                                                </td>
-                                                <td className="py-4 pr-4 font-medium text-charcoal">{app.experience} Yrs</td>
-                                                <td className="py-4 pr-4 font-mono text-xs text-charcoal-muted">{app.licenseNumber}</td>
-                                                <td className="py-4">
-                                                    <div style={{ display: 'flex', gap: '8px' }} onClick={e => e.stopPropagation()}>
-                                                        <button
-                                                            onClick={() => handleAction(app, 'rejected')}
-                                                            disabled={processing === app.id}
-                                                            className="bg-red-50 hover:bg-red-100 text-red-500 px-3 py-1.5 rounded-xl text-[11px] font-bold shadow-sm transition-all border border-red-100"
-                                                        >
-                                                            Reject
-                                                        </button>
-                                                        <button
-                                                            onClick={() => handleAction(app, 'approved')}
-                                                            disabled={processing === app.id}
-                                                            className="bg-primary hover:bg-primary-dark text-white px-3 py-1.5 rounded-xl text-[11px] font-bold shadow-sm transition-all"
-                                                        >
-                                                            {processing === app.id ? <Loader2 size={12} className="animate-spin" /> : 'Approve'}
-                                                        </button>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-
-                                {/* Pagination for Pending */}
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '20px' }}>
-                                    <p style={{ ...sLabel, textTransform: 'none', color: C.muted }}>Showing {paginatedPending.length} of {pending.length} pending</p>
-                                    <div style={{ display: 'flex', gap: '6px' }}>
-                                        <button disabled={pendingPage === 1} onClick={() => setPendingPage(p => p - 1)} className="px-3 py-1 bg-white border border-creamDarker rounded-lg text-xs font-semibold disabled:opacity-30 transition">Prev</button>
-                                        <button disabled={pendingPage >= totalPendingPages} onClick={() => setPendingPage(p => p + 1)} className="px-3 py-1 bg-white border border-creamDarker rounded-lg text-xs font-semibold disabled:opacity-30 transition">Next</button>
-                                    </div>
+            <div ref={reportRef} className="flex flex-col gap-6 p-1">
+                {loading ? (
+                    <p className="font-body text-sm text-charcoal-muted">Loading applications...</p>
+                ) : (
+                    <>
+                        {/* Recruitment Funnel Stats - Matched to Analytics Style */}
+                        <div className="grid grid-cols-3 gap-3 mb-2">
+                            <div className="card flex items-center gap-3 py-3 px-4 animate-in slide-in-from-top-4 duration-300">
+                                <div className="w-8 h-8 rounded-full bg-amber-50 flex items-center justify-center text-amber-600 shrink-0 border border-amber-100 shadow-sm">
+                                    <Clock size={16} />
+                                </div>
+                                <div>
+                                    <p className="section-label mb-0 !text-[9px] !leading-none text-amber-600/70 whitespace-nowrap uppercase tracking-widest">Pending Intake</p>
+                                    <h3 className="font-display text-lg font-bold text-charcoal">{pending.length}</h3>
                                 </div>
                             </div>
-                        )}
-                    </div>
 
-                    {/* Application Detail Modal Overlay */}
-                    {viewingApp && (
-                        <div
-                            className="animate-in fade-in duration-300"
-                            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}
-                            onClick={() => setViewingApp(null)}
-                        >
+                            <div className="card flex items-center gap-3 py-3 px-4 animate-in slide-in-from-top-4 duration-500 delay-75">
+                                <div className="w-8 h-8 rounded-full bg-sage-50 flex items-center justify-center text-primary shrink-0 border border-primary/10 shadow-sm">
+                                    <ShieldCheck size={16} />
+                                </div>
+                                <div>
+                                    <p className="section-label mb-0 !text-[9px] !leading-none text-primary/70 whitespace-nowrap uppercase tracking-widest">Qualified Counsellor</p>
+                                    <h3 className="font-display text-lg font-bold text-charcoal">
+                                        {allApps.filter(a => a.status === 'approved').length}
+                                    </h3>
+                                </div>
+                            </div>
+
+                            <div className="card flex items-center gap-3 py-3 px-4 animate-in slide-in-from-top-4 duration-700 delay-150">
+                                <div className="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center text-charcoal-muted shrink-0 border border-gray-100 shadow-sm">
+                                    <XCircle size={16} />
+                                </div>
+                                <div>
+                                    <p className="section-label mb-0 !text-[9px] !leading-none text-charcoal-muted/70 whitespace-nowrap uppercase tracking-widest">Rejected Counsellor</p>
+                                    <h3 className="font-display text-lg font-bold text-charcoal">
+                                        {allApps.filter(a => a.status === 'rejected').length}
+                                    </h3>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="card">
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
+                                <Clock size={18} color={C.amber} />
+                                <h3 className="font-display text-lg font-semibold">Pending Intake ({pending.length})</h3>
+                            </div>
+
+                            {pending.length === 0 ? (
+                                <p style={{ fontFamily: 'Outfit', fontSize: '14px', color: C.muted, textAlign: 'center', padding: '40px 0' }}>No active applications to review.</p>
+                            ) : (
+                                <div className="overflow-x-auto">
+                                    <table className="w-full font-body text-sm">
+                                        <thead>
+                                            <tr style={{ borderBottom: `1px solid ${C.creamDarker}`, textAlign: 'left' }}>
+                                                {['Applicant', 'Expertise', 'Exp.', 'License', 'Action'].map(h => (
+                                                    <th key={h} className="pb-3 font-semibold section-label text-[10px]">{h}</th>
+                                                ))}
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {paginatedPending.map(app => (
+                                                <tr
+                                                    key={app.id}
+                                                    onClick={() => viewDetailsWithPreload(app)}
+                                                    style={{ borderBottom: `1px solid ${C.creamDarker}`, cursor: 'pointer' }}
+                                                    className="hover:bg-cream transition-colors group"
+                                                >
+                                                    <td className="py-4 pr-4">
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                                            <div style={{
+                                                                width: '32px', height: '32px',
+                                                                background: preloading === app.id ? 'transparent' : C.sage100,
+                                                                borderRadius: '50%',
+                                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                                fontWeight: 'bold', color: C.primary, fontSize: '11px', flexShrink: 0
+                                                            }}>
+                                                                {preloading === app.id ? <Loader2 size={16} className="animate-spin" /> : (app.name ? app.name.charAt(0).toUpperCase() : '?')}
+                                                            </div>
+                                                            <div>
+                                                                <p style={{ margin: 0, fontWeight: 600, fontSize: '14px' }} className="text-charcoal group-hover:text-primary transition-colors">{app.name}</p>
+                                                                <p style={{ margin: 0, fontSize: '11px', color: C.muted }}>{app.email}</p>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    <td className="py-4 pr-4">
+                                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                                                            {(app.specializations || []).slice(0, 2).map(s => <span key={s} style={{ fontSize: '10px', background: C.cream, padding: '2px 8px', borderRadius: '4px', color: C.charcoalMuted }}>{s}</span>)}
+                                                        </div>
+                                                    </td>
+                                                    <td className="py-4 pr-4 font-medium text-charcoal">{app.experience} Yrs</td>
+                                                    <td className="py-4 pr-4 font-mono text-xs text-charcoal-muted">{app.licenseNumber}</td>
+                                                    <td className="py-4">
+                                                        <div style={{ display: 'flex', gap: '8px' }} onClick={e => e.stopPropagation()}>
+                                                            <button
+                                                                onClick={() => handleAction(app, 'rejected')}
+                                                                disabled={processing === app.id}
+                                                                className="bg-red-50 hover:bg-red-100 text-red-500 px-3 py-1.5 rounded-xl text-[11px] font-bold shadow-sm transition-all border border-red-100"
+                                                            >
+                                                                Reject
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleAction(app, 'approved')}
+                                                                disabled={processing === app.id}
+                                                                className="bg-primary hover:bg-primary-dark text-white px-3 py-1.5 rounded-xl text-[11px] font-bold shadow-sm transition-all"
+                                                            >
+                                                                {processing === app.id ? <Loader2 size={12} className="animate-spin" /> : 'Approve'}
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+
+                                    {/* Pagination for Pending */}
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '20px' }}>
+                                        <p style={{ ...sLabel, textTransform: 'none', color: C.muted }}>Showing {paginatedPending.length} of {pending.length} pending</p>
+                                        <div style={{ display: 'flex', gap: '6px' }}>
+                                            <button disabled={pendingPage === 1} onClick={() => setPendingPage(p => p - 1)} className="px-3 py-1 bg-white border border-creamDarker rounded-lg text-xs font-semibold disabled:opacity-30 transition">Prev</button>
+                                            <button disabled={pendingPage >= totalPendingPages} onClick={() => setPendingPage(p => p + 1)} className="px-3 py-1 bg-white border border-creamDarker rounded-lg text-xs font-semibold disabled:opacity-30 transition">Next</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Application Detail Modal Overlay */}
+                        {viewingApp && (
                             <div
-                                style={{ position: 'relative', background: 'white', width: '100%', maxWidth: '1000px', borderRadius: '32px', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.35)', animation: 'modalIn 0.3s cubic-bezier(0.16, 1, 0.3, 1)' }}
-                                onClick={e => e.stopPropagation()}
+                                className="animate-in fade-in duration-300"
+                                style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}
+                                onClick={() => setViewingApp(null)}
                             >
-                                {/* Close Button */}
-                                <button
-                                    onClick={() => setViewingApp(null)}
-                                    style={{
-                                        position: 'absolute', top: '24px', right: '32px', zIndex: 10,
-                                        border: 'none', background: 'white', borderRadius: '50%', width: '44px', height: '44px',
-                                        cursor: 'pointer', color: C.muted, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                        boxShadow: '0 4px 12px rgba(0,0,0,0.1)', transition: 'all 0.2s'
-                                    }}
-                                    onMouseEnter={e => { e.currentTarget.style.transform = 'rotate(90deg)'; e.currentTarget.style.color = C.charcoal; }}
-                                    onMouseLeave={e => { e.currentTarget.style.transform = 'rotate(0deg)'; e.currentTarget.style.color = C.muted; }}
+                                <div
+                                    style={{ position: 'relative', background: 'white', width: '100%', maxWidth: '1000px', borderRadius: '32px', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.35)', animation: 'modalIn 0.3s cubic-bezier(0.16, 1, 0.3, 1)' }}
+                                    onClick={e => e.stopPropagation()}
                                 >
-                                    <XCircle size={24} />
-                                </button>
+                                    {/* Close Button */}
+                                    <button
+                                        onClick={() => setViewingApp(null)}
+                                        style={{
+                                            position: 'absolute', top: '24px', right: '32px', zIndex: 10,
+                                            border: 'none', background: 'white', borderRadius: '50%', width: '44px', height: '44px',
+                                            cursor: 'pointer', color: C.muted, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                            boxShadow: '0 4px 12px rgba(0,0,0,0.1)', transition: 'all 0.2s'
+                                        }}
+                                        onMouseEnter={e => { e.currentTarget.style.transform = 'rotate(90deg)'; e.currentTarget.style.color = C.charcoal; }}
+                                        onMouseLeave={e => { e.currentTarget.style.transform = 'rotate(0deg)'; e.currentTarget.style.color = C.muted; }}
+                                    >
+                                        <XCircle size={24} />
+                                    </button>
 
-                                <style>{`
+                                    <style>{`
                             @keyframes modalIn {
                                 from { opacity: 0; transform: scale(0.9) translateY(40px); }
                                 to { opacity: 1; transform: scale(1) translateY(0); }
@@ -352,155 +426,240 @@ export default function CounsellorApplications() {
                             .custom-scrollbar::-webkit-scrollbar-thumb { background: #E5E4E0; borderRadius: 10px; }
                         `}</style>
 
-                                <div style={{ display: 'flex', flexDirection: 'column', maxHeight: '92vh' }}>
-                                    {/* Modal Header */}
-                                    <div style={{ padding: '32px 40px', borderBottom: `1px solid ${C.creamDarker}`, background: 'white', flexShrink: 0 }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-                                            <div style={{ width: '64px', height: '64px', background: C.sage100, borderRadius: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', color: C.primary, fontSize: '24px' }}>
-                                                {viewingApp.name ? viewingApp.name.charAt(0).toUpperCase() : '?'}
-                                            </div>
-                                            <div>
-                                                <h4 style={{ margin: 0, fontFamily: 'Playfair Display', fontSize: '28px', color: C.charcoal }}>{viewingApp.name}</h4>
-                                                <div style={{ display: 'flex', gap: '12px', marginTop: '4px' }}>
-                                                    <span style={{ color: C.muted, fontSize: '14px', display: 'flex', alignItems: 'center', gap: '4px' }}><Mail size={14} /> {viewingApp.email}</span>
-                                                    <span style={{ color: C.muted, fontSize: '14px' }}>• Applied {viewingApp.submittedAt?.toDate().toLocaleDateString()}</span>
+                                    <div style={{ display: 'flex', flexDirection: 'column', maxHeight: '92vh' }}>
+                                        {/* Modal Header */}
+                                        <div style={{ padding: '32px 40px', borderBottom: `1px solid ${C.creamDarker}`, background: 'white', flexShrink: 0 }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+                                                <div style={{ width: '64px', height: '64px', background: C.sage100, borderRadius: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', color: C.primary, fontSize: '24px' }}>
+                                                    {viewingApp.name ? viewingApp.name.charAt(0).toUpperCase() : '?'}
+                                                </div>
+                                                <div>
+                                                    <h4 style={{ margin: 0, fontFamily: 'Playfair Display', fontSize: '28px', color: C.charcoal }}>{viewingApp.name}</h4>
+                                                    <div style={{ display: 'flex', gap: '12px', marginTop: '4px' }}>
+                                                        <span style={{ color: C.muted, fontSize: '14px', display: 'flex', alignItems: 'center', gap: '4px' }}><Mail size={14} /> {viewingApp.email}</span>
+                                                        <span style={{ color: C.muted, fontSize: '14px' }}>• Applied {viewingApp.submittedAt?.toDate().toLocaleDateString()}</span>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
-                                    </div>
 
-                                    {/* Modal Content - Two Columns */}
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', flex: 1, overflow: 'hidden' }}>
-                                        {/* Left Side: Details */}
-                                        <div style={{ padding: '40px', overflowY: 'auto', borderRight: `1px solid ${C.creamDarker}` }} className="custom-scrollbar">
-                                            <section style={{ marginBottom: '40px' }}>
-                                                <h5 style={sLabel}>Self-Introduction & Motivation</h5>
-                                                <p style={{ marginTop: '16px', fontSize: '16px', lineHeight: 1.8, color: C.charcoal, fontStyle: 'italic', background: C.cream, padding: '24px', borderRadius: '24px', borderLeft: `4px solid ${C.primary}` }}>
-                                                    "{viewingApp.motivation}"
-                                                </p>
-                                            </section>
+                                        {/* Modal Content - Two Columns */}
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', flex: 1, overflow: 'hidden' }}>
+                                            {/* Left Side: Details */}
+                                            <div style={{ padding: '40px', overflowY: 'auto', borderRight: `1px solid ${C.creamDarker}` }} className="custom-scrollbar">
+                                                <section style={{ marginBottom: '40px' }}>
+                                                    <h5 style={sLabel}>Self-Introduction & Motivation</h5>
+                                                    <p style={{ marginTop: '16px', fontSize: '16px', lineHeight: 1.8, color: C.charcoal, fontStyle: 'italic', background: C.cream, padding: '24px', borderRadius: '24px', borderLeft: `4px solid ${C.primary}` }}>
+                                                        "{viewingApp.motivation}"
+                                                    </p>
+                                                </section>
 
-                                            <section>
-                                                <h5 style={sLabel}>Qualifications & Expertise</h5>
-                                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', margin: '20px 0' }}>
-                                                    {(viewingApp.specializations || []).map(s => <span key={s} style={{ fontSize: '12px', background: C.sage100, padding: '8px 20px', borderRadius: '20px', color: C.primary, fontWeight: 600, border: `1px solid ${C.primary}22` }}>{s}</span>)}
-                                                </div>
-                                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginTop: '24px' }}>
-                                                    <div style={{ padding: '20px', background: '#f8faf9', borderRadius: '16px', border: '1px solid #eee' }}>
-                                                        <p style={sLabel}>License Number</p>
-                                                        <p style={{ margin: '8px 0 0 0', fontWeight: 700, fontSize: '18px', color: C.charcoal }}>{viewingApp.licenseNumber}</p>
+                                                <section>
+                                                    <h5 style={sLabel}>Qualifications & Expertise</h5>
+                                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', margin: '20px 0' }}>
+                                                        {(viewingApp.specializations || []).map(s => <span key={s} style={{ fontSize: '12px', background: C.sage100, padding: '8px 20px', borderRadius: '20px', color: C.primary, fontWeight: 600, border: `1px solid ${C.primary}22` }}>{s}</span>)}
                                                     </div>
-                                                    <div style={{ padding: '20px', background: '#f8faf9', borderRadius: '16px', border: '1px solid #eee' }}>
-                                                        <p style={sLabel}>Clinical Experience</p>
-                                                        <p style={{ margin: '8px 0 0 0', fontWeight: 700, fontSize: '18px', color: C.charcoal }}>{viewingApp.experience} Years</p>
+                                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginTop: '24px' }}>
+                                                        <div style={{ padding: '20px', background: '#f8faf9', borderRadius: '16px', border: '1px solid #eee' }}>
+                                                            <p style={sLabel}>License Number</p>
+                                                            <p style={{ margin: '8px 0 0 0', fontWeight: 700, fontSize: '18px', color: C.charcoal }}>{viewingApp.licenseNumber}</p>
+                                                        </div>
+                                                        <div style={{ padding: '20px', background: '#f8faf9', borderRadius: '16px', border: '1px solid #eee' }}>
+                                                            <p style={sLabel}>Clinical Experience</p>
+                                                            <p style={{ margin: '8px 0 0 0', fontWeight: 700, fontSize: '18px', color: C.charcoal }}>{viewingApp.experience} Years</p>
+                                                        </div>
                                                     </div>
-                                                </div>
-                                            </section>
-                                        </div>
-
-                                        {/* Right Side: Certificate & Actions */}
-                                        <div style={{ padding: '40px', background: '#FAFAFA', display: 'flex', flexDirection: 'column', overflowY: 'auto' }} className="custom-scrollbar">
-                                            <h5 style={sLabel}>Professional Credential</h5>
-                                            <div style={{ flex: 1, marginTop: '20px', minHeight: '300px', background: 'white', borderRadius: '24px', overflow: 'hidden', border: `1px solid ${C.creamDarker}`, position: 'relative', boxShadow: 'inset 0 2px 10px rgba(0,0,0,0.05)' }}>
-                                                <img src={viewingApp.certificateUrl} style={{ width: '100%', height: '100%', objectFit: 'contain', padding: '10px' }} alt="Certificate" />
-                                                <a href={viewingApp.certificateUrl} target="_blank" rel="noreferrer" style={{ position: 'absolute', bottom: '20px', right: '20px', padding: '10px 20px', background: 'white', borderRadius: '14px', boxShadow: '0 8px 16px rgba(0,0,0,0.1)', textDecoration: 'none', color: C.primary, fontSize: '12px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px', transition: 'all 0.2s' }}>
-                                                    <ExternalLink size={16} /> Full View
-                                                </a>
+                                                </section>
                                             </div>
 
-                                            {viewingApp.status === 'pending' && (
-                                                <div style={{ marginTop: '40px', display: 'flex', gap: '16px' }}>
-                                                    <button
-                                                        onClick={() => handleAction(viewingApp, 'rejected')}
-                                                        disabled={processing === viewingApp.id}
-                                                        style={{ flex: 1, padding: '18px', background: 'white', color: C.error, border: `1px solid ${C.error}44`, borderRadius: '18px', fontWeight: 600, fontSize: '14px', cursor: 'pointer', transition: 'all 0.2s' }}
-                                                        onMouseEnter={e => { e.currentTarget.style.background = '#fff5f5'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
-                                                        onMouseLeave={e => { e.currentTarget.style.background = 'white'; e.currentTarget.style.transform = 'translateY(0)'; }}
-                                                    >
-                                                        Reject
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleAction(viewingApp, 'approved')}
-                                                        disabled={processing === viewingApp.id}
-                                                        style={{ flex: 2, padding: '18px', background: C.primary, color: 'white', border: 'none', borderRadius: '18px', fontWeight: 700, fontSize: '14px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', transition: 'all 0.2s', boxShadow: '0 8px 20px rgba(124,156,132,0.3)' }}
-                                                        onMouseEnter={e => { e.currentTarget.style.background = C.primaryDark; e.currentTarget.style.transform = 'translateY(-2px)'; }}
-                                                        onMouseLeave={e => { e.currentTarget.style.background = C.primary; e.currentTarget.style.transform = 'translateY(0)'; }}
-                                                    >
-                                                        {processing === viewingApp.id ? <Loader2 size={20} className="animate-spin" /> : <CheckCircle size={20} />} Approve
-                                                    </button>
+                                            {/* Right Side: Certificate & Actions */}
+                                            <div style={{ padding: '40px', background: '#FAFAFA', display: 'flex', flexDirection: 'column', overflowY: 'auto' }} className="custom-scrollbar">
+                                                <h5 style={sLabel}>Professional Credential</h5>
+                                                <div style={{ flex: 1, marginTop: '20px', minHeight: '300px', background: 'white', borderRadius: '24px', overflow: 'hidden', border: `1px solid ${C.creamDarker}`, position: 'relative', boxShadow: 'inset 0 2px 10px rgba(0,0,0,0.05)' }}>
+                                                    <img src={viewingApp.certificateUrl} style={{ width: '100%', height: '100%', objectFit: 'contain', padding: '10px' }} alt="Certificate" />
+                                                    <a href={viewingApp.certificateUrl} target="_blank" rel="noreferrer" style={{ position: 'absolute', bottom: '20px', right: '20px', padding: '10px 20px', background: 'white', borderRadius: '14px', boxShadow: '0 8px 16px rgba(0,0,0,0.1)', textDecoration: 'none', color: C.primary, fontSize: '12px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px', transition: 'all 0.2s' }}>
+                                                        <ExternalLink size={16} /> Full View
+                                                    </a>
                                                 </div>
-                                            )}
+
+                                                {viewingApp.status === 'pending' && (
+                                                    <div style={{ marginTop: '40px', display: 'flex', gap: '16px' }}>
+                                                        <button
+                                                            onClick={() => handleAction(viewingApp, 'rejected')}
+                                                            disabled={processing === viewingApp.id}
+                                                            style={{ flex: 1, padding: '18px', background: 'white', color: C.error, border: `1px solid ${C.error}44`, borderRadius: '18px', fontWeight: 600, fontSize: '14px', cursor: 'pointer', transition: 'all 0.2s' }}
+                                                            onMouseEnter={e => { e.currentTarget.style.background = '#fff5f5'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
+                                                            onMouseLeave={e => { e.currentTarget.style.background = 'white'; e.currentTarget.style.transform = 'translateY(0)'; }}
+                                                        >
+                                                            Reject
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleAction(viewingApp, 'approved')}
+                                                            disabled={processing === viewingApp.id}
+                                                            style={{ flex: 2, padding: '18px', background: C.primary, color: 'white', border: 'none', borderRadius: '18px', fontWeight: 700, fontSize: '14px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', transition: 'all 0.2s', boxShadow: '0 8px 20px rgba(124,156,132,0.3)' }}
+                                                            onMouseEnter={e => { e.currentTarget.style.background = C.primaryDark; e.currentTarget.style.transform = 'translateY(-2px)'; }}
+                                                            onMouseLeave={e => { e.currentTarget.style.background = C.primary; e.currentTarget.style.transform = 'translateY(0)'; }}
+                                                        >
+                                                            {processing === viewingApp.id ? <Loader2 size={20} className="animate-spin" /> : <CheckCircle size={20} />} Approve
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
                             </div>
-                        </div>
-                    )}
+                        )}
 
-                    {/* History Section */}
-                    <div className="card">
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
-                            <ShieldCheck size={18} color={C.primary} />
-                            <h3 className="font-display text-lg font-semibold">Recent History ({history.length})</h3>
-                        </div>
+                        {/* History Section */}
+                        <div className="card">
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
+                                <ShieldCheck size={18} color={C.primary} />
+                                <h3 className="font-display text-lg font-semibold">Recent History ({history.length})</h3>
+                            </div>
 
-                        <div className="overflow-x-auto">
-                            <table className="w-full font-body text-sm">
-                                <thead>
-                                    <tr style={{ borderBottom: `1px solid ${C.creamDarker}`, textAlign: 'left' }}>
-                                        {['Applicant', 'Status', 'License', 'Specialization', 'Reviewed On'].map(h => (
-                                            <th key={h} className="pb-2 font-semibold section-label text-[10px]">{h}</th>
+                            <div className="overflow-x-auto">
+                                <table className="w-full font-body text-sm">
+                                    <thead>
+                                        <tr style={{ borderBottom: `1px solid ${C.creamDarker}`, textAlign: 'left' }}>
+                                            {['Applicant', 'Status', 'License', 'Specialization', 'Reviewed On'].map(h => (
+                                                <th key={h} className="pb-2 font-semibold section-label text-[10px]">{h}</th>
+                                            ))}
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {paginatedHistory.map(app => (
+                                            <tr
+                                                key={app.id}
+                                                style={{ borderBottom: `1px solid ${C.creamDarker}`, cursor: 'pointer' }}
+                                                className="hover:bg-cream transition group"
+                                                onClick={() => viewDetailsWithPreload(app)}
+                                            >
+                                                <td className="py-3 pr-4">
+                                                    <div style={{ fontWeight: 600 }} className="text-charcoal group-hover:text-primary transition-colors">{app.name}</div>
+                                                    <div style={{ fontSize: '11px', color: C.muted }}>{app.email}</div>
+                                                </td>
+                                                <td className="py-3 pr-4">
+                                                    <span style={badge(app.status)}>{app.status}</span>
+                                                </td>
+                                                <td className="py-3 pr-4 text-charcoal-muted font-mono text-xs">{app.licenseNumber}</td>
+                                                <td className="py-3 pr-4 text-charcoal-muted">
+                                                    <div className="flex flex-wrap gap-1">
+                                                        {(Array.isArray(app.specializations) ? app.specializations : []).slice(0, 1).map(s => (
+                                                            <span key={s}>{s}</span>
+                                                        )) || 'General'}
+                                                    </div>
+                                                </td>
+                                                <td className="py-3 pr-4 text-muted">
+                                                    {app.reviewedAt?.toDate ? app.reviewedAt.toDate().toLocaleDateString() : 'N/A'}
+                                                </td>
+                                            </tr>
                                         ))}
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {paginatedHistory.map(app => (
-                                        <tr
-                                            key={app.id}
-                                            style={{ borderBottom: `1px solid ${C.creamDarker}`, cursor: 'pointer' }}
-                                            className="hover:bg-cream transition group"
-                                            onClick={() => viewDetailsWithPreload(app)}
-                                        >
-                                            <td className="py-3 pr-4">
-                                                <div style={{ fontWeight: 600 }} className="text-charcoal group-hover:text-primary transition-colors">{app.name}</div>
-                                                <div style={{ fontSize: '11px', color: C.muted }}>{app.email}</div>
-                                            </td>
-                                            <td className="py-3 pr-4">
-                                                <span style={badge(app.status)}>{app.status}</span>
-                                            </td>
-                                            <td className="py-3 pr-4 text-charcoal-muted font-mono text-xs">{app.licenseNumber}</td>
-                                            <td className="py-3 pr-4 text-charcoal-muted">
-                                                <div className="flex flex-wrap gap-1">
-                                                    {(Array.isArray(app.specializations) ? app.specializations : []).slice(0, 1).map(s => (
-                                                        <span key={s}>{s}</span>
-                                                    )) || 'General'}
-                                                </div>
-                                            </td>
-                                            <td className="py-3 pr-4 text-muted">
-                                                {app.reviewedAt?.toDate ? app.reviewedAt.toDate().toLocaleDateString() : 'N/A'}
-                                            </td>
-                                        </tr>
-                                    ))}
-                                    {history.length === 0 && (
-                                        <tr>
-                                            <td colSpan="5" className="py-8 text-center text-charcoal-muted opacity-60">No application history found.</td>
-                                        </tr>
-                                    )}
-                                </tbody>
-                            </table>
+                                        {history.length === 0 && (
+                                            <tr>
+                                                <td colSpan="5" className="py-8 text-center text-charcoal-muted opacity-60">No application history found.</td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
 
-                            {/* Pagination for History */}
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '20px' }}>
-                                <p style={{ ...sLabel, textTransform: 'none', color: C.muted }}>Showing {paginatedHistory.length} of {history.length} reviews</p>
-                                <div style={{ display: 'flex', gap: '6px' }}>
-                                    <button disabled={historyPage === 1} onClick={() => setHistoryPage(p => p - 1)} className="px-3 py-1 bg-white border border-creamDarker rounded-lg text-xs font-semibold disabled:opacity-30 transition">Prev</button>
-                                    <button disabled={historyPage >= totalHistoryPages} onClick={() => setHistoryPage(p => p + 1)} className="px-3 py-1 bg-white border border-creamDarker rounded-lg text-xs font-semibold disabled:opacity-30 transition">Next</button>
+                                {/* Pagination for History */}
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '20px' }}>
+                                    <p style={{ ...sLabel, textTransform: 'none', color: C.muted }}>Showing {paginatedHistory.length} of {history.length} reviews</p>
+                                    <div style={{ display: 'flex', gap: '6px' }}>
+                                        <button disabled={historyPage === 1} onClick={() => setHistoryPage(p => p - 1)} className="px-3 py-1 bg-white border border-creamDarker rounded-lg text-xs font-semibold disabled:opacity-30 transition">Prev</button>
+                                        <button disabled={historyPage >= totalHistoryPages} onClick={() => setHistoryPage(p => p + 1)} className="px-3 py-1 bg-white border border-creamDarker rounded-lg text-xs font-semibold disabled:opacity-30 transition">Next</button>
+                                    </div>
                                 </div>
+                            </div>
+                        </div>
+                    </>
+                )}
+            </div>
+            {/* --- HIDDEN FORMAL PAPER REPORT (PRINT-ONLY CAPTURE) --- */}
+            <div style={{ position: 'absolute', left: '-9999px', top: '-9999px', width: '794px' }}>
+                <div ref={paperRef} style={{ padding: '60px', background: 'white', fontFamily: 'Outfit, sans-serif', color: '#1a1a1a' }}>
+                    {/* Paper Header */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '2px solid #7C9C84', paddingBottom: '30px', marginBottom: '40px' }}>
+                        <div>
+                            <h1 style={{ margin: 0, color: '#7C9C84', fontSize: '32px', fontWeight: 800 }}>Eunoia</h1>
+                            <p style={{ margin: '4px 0 0 0', textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: '10px', color: '#666', fontWeight: 700 }}>Personnel Recruitment & Credential Verification Audit</p>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                            <p style={{ margin: 0, fontSize: '12px', fontWeight: 700 }}>REF: ES-AUDIT-RECR-{new Date().getFullYear()}</p>
+                            <p style={{ margin: '4px 0 0 0', fontSize: '10px', color: '#888' }}>Audit Date: {new Date().toLocaleString()}</p>
+                        </div>
+                    </div>
+
+                    <h2 style={{ fontSize: '20px', marginBottom: '24px', fontWeight: 700 }}>Hiring Pipeline Activity Analysis</h2>
+                    <div style={{ marginBottom: '40px', background: '#FAFAF9', padding: '30px', borderRadius: '24px', border: '1px solid #E5E4E0' }}>
+                        <p style={{ fontSize: '10px', fontWeight: 800, color: '#7C9C84', textTransform: 'uppercase', marginBottom: '20px', letterSpacing: '0.05em' }}>Application Status Variance (Total Verification Cycles)</p>
+                        <div style={{ height: '200px', width: '100%' }}>
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={chartData} barSize={60}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" vertical={false} />
+                                    <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#888' }} axisLine={false} tickLine={false} />
+                                    <YAxis tick={{ fontSize: 10, fill: '#888' }} axisLine={false} tickLine={false} />
+                                    <Bar dataKey="count" radius={[12, 12, 0, 0]} />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </div>
+                    </div>
+
+                    <h2 style={{ fontSize: '20px', marginBottom: '24px', fontWeight: 700 }}>Verification Metrics</h2>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '30px', marginBottom: '50px' }}>
+                        <div style={{ border: '1px solid #7C9C8422', padding: '20px', borderRadius: '12px' }}>
+                            <p style={{ fontSize: '10px', textTransform: 'uppercase', color: '#888', margin: '0 0 8px 0', fontWeight: 700 }}>Applicant Pipeline</p>
+                            <p style={{ fontSize: '24px', fontWeight: 800, margin: 0, color: '#333' }}>{filteredApps.length}</p>
+                        </div>
+                        <div style={{ border: '1px solid #7C9C8422', padding: '20px', borderRadius: '12px' }}>
+                            <p style={{ fontSize: '10px', textTransform: 'uppercase', color: '#888', margin: '0 0 8px 0', fontWeight: 700 }}>Awaiting Evaluation</p>
+                            <p style={{ fontSize: '24px', fontWeight: 800, margin: 0, color: '#d97706' }}>{pending.length}</p>
+                        </div>
+                        <div style={{ border: '1px solid #7C9C8422', padding: '20px', borderRadius: '12px' }}>
+                            <p style={{ fontSize: '10px', textTransform: 'uppercase', color: '#888', margin: '0 0 8px 0', fontWeight: 700 }}>Completed Reviews</p>
+                            <p style={{ fontSize: '24px', fontWeight: 800, margin: 0, color: '#7C9C84' }}>{history.length}</p>
+                        </div>
+                    </div>
+
+                    <h2 style={{ fontSize: '24px', marginBottom: '24px', fontWeight: 700 }}>Recruitment Audit Log</h2>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '60px' }}>
+                        <thead>
+                            <tr style={{ background: '#f9fafb' }}>
+                                <th style={{ textAlign: 'left', padding: '12px', fontSize: '11px', borderBottom: '1px solid #eee' }}>APPLICANT IDENTITY</th>
+                                <th style={{ textAlign: 'left', padding: '12px', fontSize: '11px', borderBottom: '1px solid #eee' }}>LICENSE NO.</th>
+                                <th style={{ textAlign: 'left', padding: '12px', fontSize: '11px', borderBottom: '1px solid #eee' }}>SPECIALIZATION</th>
+                                <th style={{ textAlign: 'right', padding: '12px', fontSize: '11px', borderBottom: '1px solid #eee' }}>STATUS</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {filteredApps.slice(0, 50).map((app, idx) => (
+                                <tr key={idx}>
+                                    <td style={{ padding: '12px', fontSize: '11px', borderBottom: '1px solid #f2f2f2', fontWeight: 700 }}>{app.name || 'Anonymous'}</td>
+                                    <td style={{ padding: '12px', fontSize: '11px', borderBottom: '1px solid #f2f2f2', fontFamily: 'monospace', color: '#666' }}>{app.licenseNumber}</td>
+                                    <td style={{ padding: '12px', fontSize: '10px', borderBottom: '1px solid #f2f2f2' }}>{(app.specializations || [])[0] || 'General'}</td>
+                                    <td style={{ padding: '12px', fontSize: '11px', borderBottom: '1px solid #f2f2f2', textAlign: 'right', fontWeight: 800, color: app.status === 'approved' ? '#10b981' : app.status === 'rejected' ? '#f87171' : '#d97706', textTransform: 'uppercase' }}>
+                                        {app.status || 'pending'}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+
+                    <div style={{ borderTop: '1px solid #eee', paddingTop: '40px', marginTop: 'auto' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div>
+                                <p style={{ fontSize: '11px', color: '#333', margin: 0, fontWeight: 800 }}>Institutional Workforce Governance</p>
+                                <p style={{ fontSize: '9px', color: '#aaa', margin: '4px 0 0 0' }}>CONFIDENTIAL: Applicant data restricted to clinical directors only.</p>
+                            </div>
+                            <div style={{ borderTop: '1px solid #333', width: '200px', textAlign: 'center', paddingTop: '8px' }}>
+                                <p style={{ margin: 0, fontSize: '10px', fontWeight: 800, textTransform: 'uppercase' }}>Chief clinical Officer</p>
                             </div>
                         </div>
                     </div>
-                </>
-            )}
+                </div>
+            </div>
         </div>
     );
 }
+

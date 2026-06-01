@@ -183,3 +183,52 @@ input::placeholder, textarea::placeholder {
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #BBCBC2; border-radius: 10px; }
+
+/* Utilities */
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-hide {
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none; /* Firefox */
+}
+
+/* Print Styles */
+@media print {
+  /* Hide everything by default */
+  body * {
+    visibility: hidden;
+  }
+
+  /* Show only the report content */
+  .print-container, .print-container * {
+    visibility: visible;
+  }
+
+  .print-container {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    background: white !important;
+  }
+
+  /* Reset page margins */
+  @page {
+    margin: 0;
+    size: auto;
+  }
+
+  /* Remove backgrounds/shadows for better printing */
+  .print-container {
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  /* Hide the modal overlay/header/footer during print */
+  .no-print {
+    display: none !important;
+  }
+}

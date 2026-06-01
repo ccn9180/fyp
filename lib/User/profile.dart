@@ -9,6 +9,12 @@ import '../UserAccount/splash_screen.dart';
 import 'edit_profile.dart';
 import 'settings.dart';
 import 'apply_counsellor.dart';
+import 'session_history.dart';
+import 'detailed_history_screen.dart';
+import 'user_analytics.dart';
+import 'xp_journey.dart';
+import 'reward_store.dart';
+import '../services/gamification_service.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -273,200 +279,101 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
             const SizedBox(height: 30),
 
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(24),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.02),
-                    blurRadius: 15,
-                    offset: const Offset(0, 5),
-                  ),
-                ],
-              ),
-              child: Column(
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.spa, color: Color(0xFF7C9C84), size: 20),
-                          const SizedBox(width: 8),
-                          Text(
-                            'ZEN PROGRESS',
-                            style: GoogleFonts.outfit(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 1.0,
-                              color: const Color(0xFF1E2742),
-                            ),
-                          ),
-                        ],
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF0F0F0),
-                          borderRadius: BorderRadius.circular(8),
+            // Unified "My Journey" Dashboard Card
+            StreamBuilder<Map<String, dynamic>>(
+              stream: GamificationService.userGamificationStream(currentUser?.uid ?? ''),
+              builder: (context, gSnap) {
+                final int xp = gSnap.data?['xp'] ?? 0;
+                final int level = gSnap.data?['level'] ?? 1;
+                final int streak = gSnap.data?['streak_days'] ?? 0;
+                final int xpRequired = GamificationService.xpRequiredForLevel(level);
+                final String levelName = GamificationService.getLevelName(level);
+                final double progress = (xp / xpRequired).clamp(0.0, 1.0);
+
+                return GestureDetector(
+                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const XPJourneyScreen())),
+                  child: Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(32),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.03),
+                          blurRadius: 20,
+                          offset: const Offset(0, 10),
                         ),
-                        child: Text(
-                          'Level 12',
-                          style: GoogleFonts.outfit(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            color: const Color(0xFF555555),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Peaceful Seeker',
-                        style: GoogleFonts.outfit(
-                          fontSize: 14,
-                          color: Colors.grey[600],
-                        ),
-                      ),
-                      Text.rich(
-                        TextSpan(
+                      ],
+                    ),
+                    child: Column(
+                      children: [
+                        Row(
                           children: [
-                            TextSpan(
-                              text: '850',
-                              style: GoogleFonts.outfit(
-                                fontWeight: FontWeight.bold,
-                                color: const Color(0xFF333333),
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(color: const Color(0xFF7C9C84).withOpacity(0.1), borderRadius: BorderRadius.circular(16)),
+                              child: const Icon(Icons.auto_graph_rounded, color: Color(0xFF7C9C84), size: 24),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('My Journey', style: GoogleFonts.playfairDisplay(fontSize: 20, fontWeight: FontWeight.bold, color: const Color(0xFF1E2742))),
+                                  Text('Level $level • $levelName', style: GoogleFonts.outfit(fontSize: 12, color: Colors.grey[500])),
+                                ],
                               ),
                             ),
-                            TextSpan(
-                              text: ' / 1000 XP',
-                              style: GoogleFonts.outfit(
-                                color: Colors.grey[500],
+                            const Icon(Icons.arrow_forward_ios_rounded, color: Colors.grey, size: 14),
+                          ],
+                        ),
+                        const SizedBox(height: 24),
+                        const Divider(height: 1),
+                        const SizedBox(height: 24),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('ZEN XP', style: GoogleFonts.outfit(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 1.2)),
+                                  const SizedBox(height: 8),
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(10),
+                                    child: LinearProgressIndicator(
+                                      value: progress,
+                                      minHeight: 6,
+                                      backgroundColor: const Color(0xFFF0F0F0),
+                                      valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF7C9C84)),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 32),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('STREAK', style: GoogleFonts.outfit(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 1.2)),
+                                  const SizedBox(height: 8),
+                                  Row(
+                                    children: [
+                                      const Icon(Icons.local_fire_department_rounded, color: Colors.orangeAccent, size: 20),
+                                      const SizedBox(width: 8),
+                                      Text('$streak Days', style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold, color: const Color(0xFF333333))),
+                                    ],
+                                  ),
+                                ],
                               ),
                             ),
                           ],
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
-                    child: const LinearProgressIndicator(
-                      value: 0.85,
-                      minHeight: 8,
-                      backgroundColor: Color(0xFFF0F0F0),
-                      valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF7C9C84)),
+                      ],
                     ),
                   ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 20),
-
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(24),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.02),
-                    blurRadius: 15,
-                    offset: const Offset(0, 5),
-                  ),
-                ],
-              ),
-              child: Column(
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.bar_chart_rounded, color: Colors.grey, size: 20),
-                          const SizedBox(width: 8),
-                          Text(
-                            'MOOD STATS',
-                            style: GoogleFonts.outfit(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 1.0,
-                              color: const Color(0xFF1E2742),
-                            ),
-                          ),
-                        ],
-                      ),
-                      Text(
-                        '7 DAY AVG',
-                        style: GoogleFonts.outfit(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1.0,
-                          color: Colors.grey[400],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      _buildBar(30, false),
-                      _buildBar(45, false),
-                      _buildBar(35, false),
-                      _buildBar(65, true),
-                      _buildBar(50, false),
-                      _buildBar(55, false),
-                      _buildBar(45, false),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 30),
-
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'ACHIEVEMENTS',
-                  style: GoogleFonts.outfit(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.0,
-                    color: const Color(0xFFB0B0B0),
-                  ),
-                ),
-                Text(
-                  'SEE ALL',
-                  style: GoogleFonts.outfit(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.0,
-                    color: const Color(0xFF7C9C84),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                _buildAchievement(Icons.local_fire_department_rounded, true),
-                _buildAchievement(Icons.self_improvement, false),
-                _buildAchievement(Icons.groups_rounded, false),
-                _buildAchievement(Icons.eco_rounded, false),
-              ],
+                );
+              }
             ),
 
             const SizedBox(height: 30),
@@ -474,7 +381,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             Align(
               alignment: Alignment.centerLeft,
               child: Text(
-                'ACCOUNT & SAFETY',
+                'ACTIVE JOURNEY',
                 style: GoogleFonts.outfit(
                   fontSize: 12,
                   fontWeight: FontWeight.bold,
@@ -491,14 +398,54 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               child: Column(
                 children: [
-                  _buildListTile(Icons.admin_panel_settings_outlined, 'Account Management', 'Identity & Security', false),
+                   _buildListTile(Icons.calendar_month_outlined, 'Session History', 'View your past sessions', false, () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const SessionHistoryScreen()),
+                    );
+                  }),
                   const Divider(height: 1, indent: 60),
-                  _buildListTile(Icons.calendar_month_outlined, 'Session History', null, false),
-                  const Divider(height: 1, indent: 60),
-                  _buildListTile(Icons.account_balance_wallet_outlined, 'Voucher Wallet', null, true),
+                  _buildListTile(Icons.history_rounded, 'Detailed Journey Timeline', 'Track all your activities', false, () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const DetailedHistoryScreen()),
+                    );
+                  }),
                 ],
               ),
             ),
+
+
+
+            const SizedBox(height: 30),
+
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'REWARDS & VOUCHERS',
+                style: GoogleFonts.outfit(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.0,
+                  color: const Color(0xFFB0B0B0),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: Column(
+                children: [
+                   _buildListTile(Icons.confirmation_num_outlined, 'My Vouchers', 'View and redeem your vouchers', false, () {
+                    _showVouchersBottomSheet(context);
+                  }),
+                ],
+              ),
+            ),
+
 
             const SizedBox(height: 30),
 
@@ -623,7 +570,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildListTile(IconData icon, String title, String? subtitle, bool hasBadge) {
+  Widget _buildListTile(IconData icon, String title, String? subtitle, bool hasBadge, [VoidCallback? onTap]) {
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
       leading: Container(
@@ -672,7 +619,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const Icon(Icons.chevron_right_rounded, color: Colors.grey, size: 20),
         ],
       ),
-      onTap: () {},
+      onTap: onTap ?? () {},
     );
   }
 
@@ -686,6 +633,85 @@ class _ProfileScreenState extends State<ProfileScreen> {
         title: title,
         targetUserId: currentUser!.uid,
         currentUserId: currentUser!.uid,
+      ),
+    );
+  }
+
+  void _showVouchersBottomSheet(BuildContext context) {
+    final List<Map<String, dynamic>> vouchers = [
+      {'title': '10% Off Therapy', 'desc': 'Valid for any counseling session', 'expiry': 'Ends 12 May 2024', 'icon': Icons.local_offer_rounded, 'color': const Color(0xFF7C9C84)},
+      {'title': '1 Month Premium', 'desc': 'Unlock all meditation paths', 'expiry': 'Ends 20 Jun 2024', 'icon': Icons.star_rounded, 'color': const Color(0xFFFFA000)},
+      {'title': 'Free Intro Session', 'desc': 'Complimentary 15-min chat', 'expiry': 'Ends 30 Apr 2024', 'icon': Icons.hearing_rounded, 'color': const Color(0xFF9C4DCC)},
+    ];
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.7,
+        padding: const EdgeInsets.all(32),
+        decoration: const BoxDecoration(
+          color: Color(0xFFF2F1EC),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(40)),
+        ),
+        child: Column(
+          children: [
+            Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2))),
+            const SizedBox(height: 32),
+            Text('MY VOUCHERS', style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 2, color: Colors.grey)),
+            const SizedBox(height: 24),
+            Expanded(
+              child: ListView.builder(
+                itemCount: vouchers.length,
+                itemBuilder: (context, index) {
+                  final v = vouchers[index];
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 20),
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(color: (v['color'] as Color).withOpacity(0.1), borderRadius: BorderRadius.circular(16)),
+                          child: Icon(v['icon'] as IconData, color: v['color'] as Color, size: 28),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(v['title'], style: GoogleFonts.playfairDisplay(fontSize: 18, fontWeight: FontWeight.bold)),
+                              Text(v['desc'], style: GoogleFonts.outfit(fontSize: 12, color: Colors.grey)),
+                              const SizedBox(height: 8),
+                              Text(v['expiry'], style: GoogleFonts.outfit(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey[400])),
+                            ],
+                          ),
+                        ),
+                        ElevatedButton(
+                          onPressed: () {},
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: v['color'] as Color,
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            minimumSize: Size.zero,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          child: Text('USE', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 12)),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

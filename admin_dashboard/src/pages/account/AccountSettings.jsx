@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { User, Lock, Loader2, Mail, Info, Activity, ShieldCheck, Key, HelpCircle, Eye, EyeOff } from 'lucide-react';
 import { auth, db } from '../../firebase';
 import { doc, getDoc, collection, query, where, getDocs, limit } from 'firebase/firestore';
+import { EmailAuthProvider, reauthenticateWithCredential, updatePassword } from 'firebase/auth';
 
 export default function AccountSettings() {
    const [activeTab, setActiveTab] = useState('profile'); // 'profile' or 'password'
@@ -12,6 +13,15 @@ export default function AccountSettings() {
    const [showOld, setShowOld] = useState(false);
    const [showNew, setShowNew] = useState(false);
    const [showConfirm, setShowConfirm] = useState(false);
+   
+   // Password values
+   const [oldPassword, setOldPassword] = useState('');
+   const [newPassword, setNewPassword] = useState('');
+   const [confirmPassword, setConfirmPassword] = useState('');
+   
+   // Password update status
+   const [updateStatus, setUpdateStatus] = useState({ type: '', message: '' });
+   const [isUpdating, setIsUpdating] = useState(false);
 
    useEffect(() => {
       const fetchAdminData = async () => {
@@ -28,6 +38,14 @@ export default function AccountSettings() {
                const q = query(collection(db, 'users'), where('uid', '==', u.uid), limit(1));
                const querySnap = await getDocs(q);
                if (!querySnap.empty) userData = querySnap.docs[0].data();
+            }
+
+            if (!userData && u.email) {
+               const qEmail = query(collection(db, 'users'), where('email', '==', u.email), limit(1));
+               const querySnapEmail = await getDocs(qEmail);
+               if (!querySnapEmail.empty) {
+                 userData = querySnapEmail.docs[0].data();
+               }
             }
 
             if (userData) {
@@ -47,8 +65,45 @@ export default function AccountSettings() {
       fetchAdminData();
    }, []);
 
-   const handleUpdatePassword = () => {
-      alert("Password rotation requires a re-authentication step.");
+   const handleUpdatePassword = async () => {
+      setUpdateStatus({ type: '', message: '' });
+      if (!oldPassword || !newPassword || !confirmPassword) {
+         setUpdateStatus({ type: 'error', message: 'Please fill in all fields.' });
+         return;
+      }
+      if (newPassword !== confirmPassword) {
+         setUpdateStatus({ type: 'error', message: 'New passwords do not match.' });
+         return;
+      }
+      
+      const u = auth.currentUser;
+      if (!u || !u.email) {
+         setUpdateStatus({ type: 'error', message: 'No active user found.' });
+         return;
+      }
+
+      setIsUpdating(true);
+      try {
+         const credential = EmailAuthProvider.credential(u.email, oldPassword);
+         await reauthenticateWithCredential(u, credential);
+         await updatePassword(u, newPassword);
+         
+         setUpdateStatus({ type: 'success', message: 'Password updated successfully!' });
+         setOldPassword('');
+         setNewPassword('');
+         setConfirmPassword('');
+      } catch (err) {
+         console.error('Password update error:', err);
+         if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+            setUpdateStatus({ type: 'error', message: 'Incorrect old password.' });
+         } else if (err.code === 'auth/weak-password') {
+            setUpdateStatus({ type: 'error', message: 'New password is too weak.' });
+         } else {
+            setUpdateStatus({ type: 'error', message: 'Failed to update password. Please try again.' });
+         }
+      } finally {
+         setIsUpdating(false);
+      }
    };
 
    return (
@@ -110,17 +165,6 @@ export default function AccountSettings() {
                            </div>
                         </div>
 
-                        {/* Summary Footer */}
-                        <div className="w-full space-y-4 pt-10 border-t border-cream-darker/30 mt-auto">
-                           <div className="flex justify-between items-center text-[10px]">
-                              <p className="font-black text-muted uppercase tracking-widest opacity-40">System Access Node</p>
-                              <p className="font-bold text-charcoal tracking-tight">GLOBAL-A1</p>
-                           </div>
-                           <div className="flex justify-between items-center text-[10px]">
-                              <p className="font-black text-muted uppercase tracking-widest opacity-40">Account Pulse</p>
-                              <p className="font-bold text-[#7C9C84] tracking-tight uppercase">VERIFIED STATUS</p>
-                           </div>
-                        </div>
                      </div>
 
                      {/* COLUMN 2 (RIGHT): PERSONAL PROFILE BOX */}
@@ -184,9 +228,9 @@ export default function AccountSettings() {
 
                         <div className="space-y-6 max-w-xl">
                            {[
-                              { label: 'Old Password', visible: showOld, setter: setShowOld },
-                              { label: 'New Password', visible: showNew, setter: setShowNew },
-                              { label: 'Confirm Password', visible: showConfirm, setter: setShowConfirm }
+                              { label: 'Old Password', visible: showOld, setter: setShowOld, value: oldPassword, setVal: setOldPassword },
+                              { label: 'New Password', visible: showNew, setter: setShowNew, value: newPassword, setVal: setNewPassword },
+                              { label: 'Confirm Password', visible: showConfirm, setter: setShowConfirm, value: confirmPassword, setVal: setConfirmPassword }
                            ].map((f, i) => (
                               <div key={i} className="space-y-2 group">
                                  <label className="text-[9px] font-black text-[#7C9C84] uppercase tracking-widest ml-1">{f.label}</label>
@@ -194,6 +238,8 @@ export default function AccountSettings() {
                                     <input 
                                        type={f.visible ? "text" : "password"}
                                        placeholder="••••••••••••"
+                                       value={f.value}
+                                       onChange={(e) => f.setVal(e.target.value)}
                                        className="w-full bg-transparent font-body text-xl tracking-[0.45em] outline-none placeholder:text-cream-darker placeholder:tracking-normal h-6 pr-10"
                                     />
                                     <button 
@@ -206,14 +252,22 @@ export default function AccountSettings() {
                                  </div>
                               </div>
                            ))}
+                           
+                           {updateStatus.message && (
+                              <div className={`p-4 rounded-xl text-sm font-bold ${updateStatus.type === 'error' ? 'bg-red-50 text-red-500 border border-red-100' : 'bg-sage-100 text-primary border border-sage-100'}`}>
+                                 {updateStatus.message}
+                              </div>
+                           )}
 
                            <div className="pt-8">
                               <button 
                                  onClick={handleUpdatePassword}
-                                 className="px-10 py-4.5 bg-[#7C9C84] text-white rounded-[18px] font-body text-sm font-bold uppercase tracking-widest shadow-lg shadow-[#7C9C84]/20 hover:scale-[1.02] active:scale-95 transition-all w-full lg:w-auto"
+                                 disabled={isUpdating}
+                                 className="px-10 py-4.5 bg-[#7C9C84] text-white rounded-[18px] font-body text-sm font-bold uppercase tracking-widest shadow-lg shadow-[#7C9C84]/20 hover:scale-[1.02] active:scale-95 transition-all w-full lg:w-auto disabled:opacity-50 flex items-center justify-center gap-2"
                                  style={{ padding: '16px 40px' }} // Explicitly matching the high-action size
                               >
-                                 Update Password
+                                 {isUpdating && <Loader2 size={16} className="animate-spin" />}
+                                 {isUpdating ? 'Updating...' : 'Update Password'}
                               </button>
                            </div>
                         </div>

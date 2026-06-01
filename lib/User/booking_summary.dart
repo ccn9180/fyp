@@ -31,28 +31,108 @@ class _BookingSummaryScreenState extends State<BookingSummaryScreen> {
   
   bool _isProcessing = false;
 
+  double get sessionPrice {
+    final rawPrice = widget.counselor['price']?.toString() ?? 'Free';
+    final cleaned = rawPrice.replaceAll(RegExp(r'[^\d.]'), '');
+    if (cleaned.isEmpty || rawPrice.toLowerCase() == 'free') {
+      return 0.0;
+    }
+    return double.tryParse(cleaned) ?? 0.0;
+  }
+
+  double get serviceFee {
+    return sessionPrice == 0.0 ? 0.0 : 4.50;
+  }
+
+  double get totalAmount {
+    return sessionPrice + serviceFee;
+  }
+
   Future<void> _handleConfirmBooking() async {
     setState(() => _isProcessing = true);
-    await Future.delayed(const Duration(seconds: 2));
 
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) return;
 
-      await FirebaseFirestore.instance.collection('appointments').add({
-        'userId': user.uid,
+      final String dateStr = DateFormat('dd MMM yyyy').format(widget.selectedDate);
+
+      // Check if slot has been booked in the meantime
+      final existingQuery = await FirebaseFirestore.instance
+          .collection('counsellor_bookings')
+          .where('counsellorId', isEqualTo: widget.counselor['id'])
+          .where('date', isEqualTo: dateStr)
+          .where('timeRange', isEqualTo: widget.selectedTime)
+          .get();
+
+      bool isDoubleBooked = false;
+      for (var doc in existingQuery.docs) {
+        final status = (doc['status'] ?? '').toString().toLowerCase();
+        if (status != 'cancelled' && status != 'rejected') {
+          isDoubleBooked = true;
+          break;
+        }
+      }
+
+      if (isDoubleBooked) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('This session slot is no longer available. Please select another time.', 
+                style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+              backgroundColor: Colors.red[400],
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+          );
+        }
+        return;
+      }
+
+      // Fetch user's full name
+      final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+      final String patientName = userDoc.data()?['fullName'] ?? 'Patient';
+
+      // Parse and combine date and time
+      final format = DateFormat.jm();
+      final parsedTime = format.parse(widget.selectedTime);
+      final startDateTime = DateTime(
+        widget.selectedDate.year,
+        widget.selectedDate.month,
+        widget.selectedDate.day,
+        parsedTime.hour,
+        parsedTime.minute,
+      );
+
+      await FirebaseFirestore.instance.collection('counsellor_bookings').add({
+        'patientId': user.uid,
+        'patientName': patientName,
         'counsellorId': widget.counselor['id'],
         'counsellorName': widget.counselor['name'],
-        'date': widget.selectedDate,
-        'time': widget.selectedTime,
+        'counsellorSpecialty': widget.counselor['specialty'],
+        'counsellorImageUrl': widget.counselor['image'],
+        'date': dateStr,
+        'timeRange': widget.selectedTime,
+        'startTime': Timestamp.fromDate(startDateTime),
         'status': 'upcoming',
         'createdAt': FieldValue.serverTimestamp(),
-        'amount': 124.50,
+        'amount': totalAmount,
+        'type': 'Video Call',
       });
 
       if (mounted) _showSuccessDialog();
     } catch (e) {
       debugPrint("Error: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to confirm booking: $e', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+            backgroundColor: Colors.red[400],
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+      }
     } finally {
       if (mounted) setState(() => _isProcessing = false);
     }
@@ -234,9 +314,9 @@ class _BookingSummaryScreenState extends State<BookingSummaryScreen> {
                       style: GoogleFonts.playfairDisplay(fontSize: 24, fontWeight: FontWeight.bold, color: textColorMain),
                     ),
                     const SizedBox(height: 24),
-                    _buildSummaryRow('Individual Session (60m)', 'RM120.00'),
+                    _buildSummaryRow('Individual Session (60m)', sessionPrice == 0.0 ? 'Free' : 'RM${sessionPrice.toStringAsFixed(2)}'),
                     const SizedBox(height: 12),
-                    _buildSummaryRow('Service Fee', 'RM4.50'),
+                    _buildSummaryRow('Service Fee', serviceFee == 0.0 ? 'Free' : 'RM${serviceFee.toStringAsFixed(2)}'),
                     const SizedBox(height: 24),
                     
                     Text(
@@ -277,7 +357,7 @@ class _BookingSummaryScreenState extends State<BookingSummaryScreen> {
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
                             Text(
-                              'RM124.50',
+                              totalAmount == 0.0 ? 'Free' : 'RM${totalAmount.toStringAsFixed(2)}',
                               style: GoogleFonts.playfairDisplay(fontSize: 36, fontWeight: FontWeight.w900, color: const Color(0xFF5D6D66)),
                             ),
                             Text('TAX INCLUDED WHERE APPLICABLE', style: GoogleFonts.outfit(fontSize: 8, color: Colors.grey.shade400, fontWeight: FontWeight.bold)),

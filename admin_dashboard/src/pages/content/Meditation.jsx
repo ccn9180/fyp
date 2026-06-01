@@ -3,7 +3,9 @@ import { doc, deleteDoc, addDoc, updateDoc, collection, serverTimestamp } from '
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../../firebase';
 import { useMeditationGuides } from '../../hooks/useFirestore';
-import { Plus, Search, Pencil, Trash2, Music, X, Save, Send, Image as ImageIcon, Clock, PlayCircle, Upload, Loader2, Tag, FileText } from 'lucide-react';
+import { Plus, Search, Pencil, Trash2, Music, X, Archive, Save, Send, Image as ImageIcon, Clock, PlayCircle, Upload, Loader2, Tag, FileText } from 'lucide-react';
+import { customAlert, customConfirm } from '../../utils/dialogUtils';
+import Skeleton from '../../components/Skeleton.jsx';
 
 const C = {
   primary: '#7C9C84',
@@ -20,7 +22,7 @@ const C = {
 
 const card = { background: 'white', borderRadius: '20px', boxShadow: '0 2px 16px rgba(0,0,0,0.06)', padding: '20px' };
 const sLabel = { fontFamily: 'Outfit', fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: C.muted };
-const badge = (type) => ({ display: 'inline-flex', padding: '3px 10px', borderRadius: '999px', fontSize: '11px', fontWeight: 700, fontFamily: 'Outfit', background: type === 'green' ? C.sage100 : '#fffbeb', color: type === 'green' ? C.primary : '#d97706' });
+const badge = (type) => ({ display: 'inline-flex', padding: '3px 10px', borderRadius: '999px', fontSize: '11px', fontWeight: 700, fontFamily: 'Outfit', background: type === 'green' ? C.sage100 : type === 'gray' ? C.creamDarker : '#fffbeb', color: type === 'green' ? C.primary : type === 'gray' ? C.muted : '#d97706' });
 
 export default function Meditation() {
   const { data: guides, loading } = useMeditationGuides();
@@ -69,7 +71,7 @@ export default function Meditation() {
       (err) => {
         console.error("Upload error:", err);
         setIsUploading(prev => ({ ...prev, [targetField]: false }));
-        alert("Upload failed. Verify that you have enabled Firebase Storage and rules.");
+        customAlert("Upload failed. Verify that you have enabled Firebase Storage and rules.", "Upload Error");
       }, 
       () => {
         getDownloadURL(uploadTask.snapshot.ref).then((downloadURL) => {
@@ -150,6 +152,13 @@ export default function Meditation() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // Form Validation
+    if (!formData.title.trim() || !formData.category.trim() || !formData.imageUrl.trim() || !formData.audioUrl.trim() || !formData.duration.trim()) {
+      await customAlert("Please fill in all required fields (Title, Category, Duration, Cover Image, and Audio Track).", "Missing Details");
+      return;
+    }
+
     try {
       if (editingGuide) {
         // Update existing guide
@@ -172,12 +181,13 @@ export default function Meditation() {
       handleCloseEditor();
     } catch (error) {
       console.error("Error saving meditation guide: ", error);
-      alert("Failed to save guide. View console for details.");
+      await customAlert("Failed to save guide. View console for details.", "Error");
     }
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Delete this meditation guide?')) return;
+    const confirmed = await customConfirm('Delete this meditation guide?', 'Confirm Delete');
+    if (!confirmed) return;
     setDeleting(id);
     try {
       await deleteDoc(doc(db, 'meditation_guides', id));
@@ -185,6 +195,27 @@ export default function Meditation() {
       console.error("Error deleting meditation guide: ", error);
     }
     setDeleting(null);
+  };
+
+  const handleArchive = async (id, currentStatus) => {
+    const isArchiving = currentStatus !== 'archived';
+    const confirmed = await customConfirm(
+      `Are you sure you want to ${isArchiving ? 'archive' : 'unarchive'} this guide?`, 
+      isArchiving ? 'Confirm Archive' : 'Confirm Unarchive'
+    );
+    if (!confirmed) return;
+
+    const newStatus = isArchiving ? 'archived' : 'draft';
+    try {
+      await updateDoc(doc(db, 'meditation_guides', id), {
+        status: newStatus,
+        updatedAt: serverTimestamp()
+      });
+      await customAlert(`Guide successfully ${isArchiving ? 'archived' : 'unarchived'}.`, 'Success');
+    } catch (error) {
+      console.error("Error archiving meditation guide: ", error);
+      await customAlert(`Failed to update status: ${error.message || error}`, "Error");
+    }
   };
 
   return (
@@ -216,7 +247,24 @@ export default function Meditation() {
         </div>
 
         {loading ? (
-          <p style={{ fontFamily: 'Outfit', fontSize: '13px', color: C.muted }}>Loading meditation guides…</p>
+          <div className="flex flex-col gap-3 mt-4">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="flex items-center gap-4 py-3 border-b border-cream-darker last:border-none">
+                <Skeleton type="rectangle" className="w-9 h-9 shrink-0" />
+                <div className="flex flex-col gap-2 flex-1">
+                  <Skeleton type="title" className="w-1/3 h-5" />
+                </div>
+                <Skeleton type="text" className="w-16 h-5" />
+                <Skeleton type="text" className="w-16 h-5" />
+                <Skeleton type="text" className="w-16 h-5" />
+                <Skeleton type="text" className="w-24 h-5" />
+                <div className="flex gap-2">
+                  <Skeleton type="rectangle" className="w-7 h-7" />
+                  <Skeleton type="rectangle" className="w-7 h-7" />
+                </div>
+              </div>
+            ))}
+          </div>
         ) : filtered.length === 0 ? (
           <p style={{ fontFamily: 'Outfit', fontSize: '13px', color: C.muted }}>No guides found.</p>
         ) : (
@@ -270,7 +318,7 @@ export default function Meditation() {
                     </td>
                     <td style={{ padding: '12px 0', color: C.charcoalMuted, fontWeight: 500 }}>{m.duration}</td>
                     <td style={{ padding: '12px 0' }}>
-                      <span style={badge((m.status || '').toLowerCase() === 'published' ? 'green' : 'amber')}>
+                      <span style={badge((m.status || '').toLowerCase() === 'published' ? 'green' : (m.status || '').toLowerCase() === 'archived' ? 'gray' : 'amber')}>
                         {m.status ? m.status.charAt(0).toUpperCase() + m.status.slice(1) : 'Draft'}
                       </span>
                     </td>
@@ -288,6 +336,13 @@ export default function Meditation() {
                           style={{ padding: '6px', border: 'none', background: C.cream, borderRadius: '8px', cursor: 'pointer', color: C.muted }}
                         >
                           <Pencil size={14} />
+                        </button>
+                        <button 
+                          onClick={() => handleArchive(m.id, m.status)}
+                          style={{ padding: '6px', border: 'none', background: C.cream, borderRadius: '8px', cursor: 'pointer', color: m.status === 'archived' ? C.primary : C.muted }}
+                          title={m.status === 'archived' ? "Unarchive" : "Archive"}
+                        >
+                          <Archive size={14} />
                         </button>
                         <button
                           onClick={() => handleDelete(m.id)}
@@ -504,32 +559,63 @@ export default function Meditation() {
               </div>
 
               <div className="form-group">
-                <label className="form-label"><ImageIcon size={12} /> Cover Image</label>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <input
-                    className="form-input"
-                    value={formData.imageUrl}
-                    onChange={e => setFormData({ ...formData, imageUrl: e.target.value })}
-                    placeholder="Enter URL or upload..."
-                    style={{ flex: 1 }}
-                  />
-                  <input 
-                    type="file" 
-                    hidden 
-                    ref={fileInputRef} 
-                    accept="image/*"
-                    onChange={(e) => handleFileUpload(e, 'imageUrl')} 
-                  />
-                  <button 
-                    type="button"
-                    onClick={() => fileInputRef.current.click()}
-                    disabled={isUploading.imageUrl}
-                    style={{ padding: '0 15px', borderRadius: '12px', border: `1px solid ${C.creamDarker}`, background: '#f8faf9', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
-                  >
-                    {isUploading.imageUrl ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
-                  </button>
+                <label className="form-label"><ImageIcon size={12} /> Cover Image <span style={{color: 'red'}}>*</span></label>
+                <input 
+                  type="file" 
+                  hidden 
+                  ref={fileInputRef} 
+                  accept="image/*"
+                  onChange={(e) => handleFileUpload(e, 'imageUrl')} 
+                />
+                <div 
+                  onClick={() => !isUploading.imageUrl && fileInputRef.current.click()}
+                  style={{
+                    width: '100%',
+                    height: '200px',
+                    borderRadius: '16px',
+                    border: formData.imageUrl ? 'none' : `2px dashed ${C.primaryLight}`,
+                    background: formData.imageUrl ? 'transparent' : '#f8faf9',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: isUploading.imageUrl ? 'not-allowed' : 'pointer',
+                    transition: 'all 0.2s ease',
+                    position: 'relative',
+                    overflow: 'hidden',
+                    boxShadow: formData.imageUrl ? '0 4px 12px rgba(0,0,0,0.05)' : 'none'
+                  }}
+                >
+                  {isUploading.imageUrl ? (
+                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+                       <Loader2 size={24} className="animate-spin" style={{ color: C.primary }} />
+                       <span style={{ fontSize: '12px', fontFamily: 'Outfit', color: C.primary, fontWeight: 600 }}>Uploading... {Math.round(uploadProgress.imageUrl || 0)}%</span>
+                     </div>
+                  ) : formData.imageUrl ? (
+                     <>
+                       <img src={formData.imageUrl} alt="Cover" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                       <div 
+                         style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0, transition: 'opacity 0.2s' }} 
+                         onMouseOver={e => e.currentTarget.style.opacity = 1} 
+                         onMouseOut={e => e.currentTarget.style.opacity = 0}
+                       >
+                         <div style={{ background: 'white', padding: '8px 16px', borderRadius: '20px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 600, color: C.charcoal }}>
+                           <Upload size={14} /> Change Image
+                         </div>
+                       </div>
+                     </>
+                  ) : (
+                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', color: C.muted }}>
+                       <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: C.sage100, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.primary }}>
+                         <Upload size={20} />
+                       </div>
+                       <div style={{ textAlign: 'center' }}>
+                         <p style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: C.charcoal }}>Click to upload cover image</p>
+                         <p style={{ margin: '4px 0 0 0', fontSize: '12px' }}>PNG, JPG or GIF (max. 5MB)</p>
+                       </div>
+                     </div>
+                  )}
                 </div>
-                {uploadProgress.imageUrl > 0 && <div style={{ height: '4px', background: C.sage100, borderRadius: '2px', marginTop: '4px' }}><div style={{ height: '100%', width: `${uploadProgress.imageUrl}%`, background: C.primary, borderRadius: '2px', transition: 'width 0.3s' }}></div></div>}
               </div>
 
               <div className="form-group">
@@ -570,6 +656,7 @@ export default function Meditation() {
                 >
                   <option value="draft">Draft (Hidden from App)</option>
                   <option value="published">Published (Live in App)</option>
+                  <option value="archived">Archived (Hidden from App)</option>
                 </select>
               </div>
             </form>

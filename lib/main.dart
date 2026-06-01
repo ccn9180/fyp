@@ -8,7 +8,6 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'app_localizations.dart';
 import 'UserAccount/login.dart';
 import 'UserAccount/welcome_screen.dart';
-import 'UserAccount/splash_screen.dart';
 import 'User/main_screen.dart';
 import 'Counsellor/counsellor_main.dart';
 
@@ -118,7 +117,7 @@ class AuthGate extends StatelessWidget {
                 return const LoginPage();
               }
             },
-          );
+          );  
         }
         return const WelcomeScreen();
       },

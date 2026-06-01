@@ -12,6 +12,7 @@ import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import 'dart:convert';
 import 'post_feeds.dart';
+import 'post_detail.dart';
 
 class CommunityScreen extends StatefulWidget {
   const CommunityScreen({super.key});
@@ -607,7 +608,8 @@ class _CommunityScreenState extends State<CommunityScreen> with AutomaticKeepAli
     return StreamBuilder<DocumentSnapshot>(
       stream: FirebaseFirestore.instance.collection('users').doc(currentUser!.uid).snapshots(),
       builder: (context, userSnapshot) {
-        final List<String> following = List<String>.from(userSnapshot.data?['following'] ?? []);
+        final userData = userSnapshot.data?.data() as Map<String, dynamic>?;
+        final List<String> following = List<String>.from(userData?['following'] ?? []);
 
         return StreamBuilder<QuerySnapshot>(
           stream: FirebaseFirestore.instance
@@ -1058,291 +1060,306 @@ class _CommunityScreenState extends State<CommunityScreen> with AutomaticKeepAli
     String displayAuthor = isOwner ? 'You' : (post.isAnonymous ? 'Anonymous' : post.authorName);
     String timeAgo = timeago.format(post.timestamp);
 
-    return Container(
-      margin: const EdgeInsets.only(left: 24, right: 24, bottom: 16),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: post.isArchived ? const Color(0xFFF1F1F1) : Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        border: post.isArchived ? Border.all(color: Colors.grey.withOpacity(0.1)) : null,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.02),
-            blurRadius: 15,
-            offset: const Offset(0, 5),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header: Avatar, Name, Topics, Options
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              GestureDetector(
-                onTap: isOwner || post.isAnonymous
-                    ? null
-                    : () => _showUserProfile(
-                  post.authorId,
-                  name: post.authorName,
-                  imageUrl: post.authorProfileImage,
-                  isFollowing: isFollowing,
-                  isRequested: isRequested,
-                ),
-                child: Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 20,
-                      backgroundColor: const Color(0xFFEAF0ED),
-                      backgroundImage: ( (isOwner || !post.isAnonymous) && post.authorProfileImage != null)
-                          ? (post.authorProfileImage!.startsWith('data:image')
-                          ? MemoryImage(base64Decode(post.authorProfileImage!.split(',').last))
-                          : NetworkImage(post.authorProfileImage!) as ImageProvider)
-                          : null,
-                      child: ( (!isOwner && post.isAnonymous) || post.authorProfileImage == null)
-                          ? Icon(Icons.person, color: primaryGreen, size: 22)
-                          : null,
-                    ),
-                    const SizedBox(width: 12),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Text(
-                              displayAuthor,
-                              style: GoogleFonts.outfit(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w600,
-                                color: textColorMain,
-                              ),
-                            ),
-                            if (isOwner && post.isAnonymous) ...[
-                              const SizedBox(width: 8),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: Colors.amber.withOpacity(0.15),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Text(
-                                  'ANONYMOUS',
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 8,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.amber[800],
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          '${post.topic.toUpperCase()} • ${timeAgo.toUpperCase()}',
-                          style: GoogleFonts.outfit(
-                            fontSize: 9,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 0.8,
-                            color: textColorSub,
-                          ),
-                        ),
-                        if (post.isArchived)
-                          Container(
-                            margin: const EdgeInsets.only(top: 4),
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: Colors.blueGrey.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              'ARCHIVED',
-                              style: GoogleFonts.outfit(
-                                fontSize: 8,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.blueGrey,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              const Spacer(),
-              if (_activeFilter == 'MyPosts')
-                PopupMenuButton<String>(
-                  position: PopupMenuPosition.under,
-                  elevation: 4,
-                  shadowColor: Colors.black.withOpacity(0.2),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                  color: Colors.white,
-                  padding: EdgeInsets.zero,
-                  onSelected: (value) {
-                    if (value == 'edit') _editPost(post);
-                    if (value == 'archive') _toggleArchive(post.id, post.isArchived);
-                    if (value == 'delete') _deletePost(post.id);
-                  },
-                  itemBuilder: (context) => [
-                    if (!post.isArchived)
-                      PopupMenuItem(
-                        value: 'edit',
-                        child: Row(
-                          children: [
-                            Icon(Icons.edit_outlined, color: primaryGreen, size: 18),
-                            const SizedBox(width: 12),
-                            Text('Edit Reflection', style: GoogleFonts.outfit(fontSize: 14)),
-                          ],
-                        ),
-                      ),
-                    PopupMenuItem(
-                      value: 'archive',
-                      child: Row(
-                        children: [
-                          Icon(
-                            post.isArchived ? Icons.unarchive_outlined : Icons.archive_outlined,
-                            color: Colors.blueGrey,
-                            size: 18,
-                          ),
-                          const SizedBox(width: 12),
-                          Text(
-                            post.isArchived ? 'Unarchive Post' : 'Archive Post',
-                            style: GoogleFonts.outfit(fontSize: 14),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const PopupMenuDivider(height: 1),
-                    PopupMenuItem(
-                      value: 'delete',
-                      child: Row(
-                        children: [
-                          const Icon(Icons.delete_outline, color: Colors.redAccent, size: 18),
-                          const SizedBox(width: 12),
-                          Text('Delete Forever', style: GoogleFonts.outfit(fontSize: 14, color: Colors.redAccent)),
-                        ],
-                      ),
-                    ),
-                  ],
-                  child: Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[50],
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(Icons.more_horiz, color: Color(0xFFB3B3B3), size: 20),
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 12),
-
-          // Mood Badge
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: Color(post.moodColorValue).withOpacity(0.15),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(_getMoodIcon(post.moodText), color: Color(post.moodColorValue), size: 12),
-                const SizedBox(width: 4),
-                Text(
-                  post.moodText.toUpperCase(),
-                  style: GoogleFonts.outfit(
-                    color: Color(post.moodColorValue),
-                    fontSize: 9,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-              ],
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => PostDetailScreen(
+              post: post,
+              isFollowing: isFollowing,
+              isRequested: isRequested,
             ),
           ),
-          const SizedBox(height: 12),
-
-          // Content Text
-          Text(
-            post.content,
-            style: GoogleFonts.outfit(
-              fontSize: 14,
-              color: const Color(0xFF4A4A4A),
-              height: 1.5,
-            ),
-          ),
-
-          // Optional Image
-          if (post.imageUrl != null) ...[
-            const SizedBox(height: 16),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(16),
-            child: post.imageUrl!.startsWith('data:')
-                ? Image.memory(
-                    base64Decode(post.imageUrl!.split(',').last),
-                    height: 180,
-                    width: double.infinity,
-                    fit: BoxFit.cover,
-                  )
-                : Image.network(
-                    post.imageUrl!,
-                    height: 180,
-                    width: double.infinity,
-                    fit: BoxFit.cover,
-                  ),
+        );
+      },
+      child: Container(
+        margin: const EdgeInsets.only(left: 24, right: 24, bottom: 16),
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: post.isArchived ? const Color(0xFFF1F1F1) : Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          border: post.isArchived ? Border.all(color: Colors.grey.withOpacity(0.1)) : null,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.02),
+              blurRadius: 15,
+              offset: const Offset(0, 5),
             ),
           ],
-
-          const SizedBox(height: 20),
-
-          // Footer: Actions (Like, Comment, Bookmark)
-          Row(
-            children: [
-              GestureDetector(
-                onTap: () => _toggleLike(post.id, post.likes),
-                child: Row(
-                  children: [
-                    Icon(
-                      isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded, // Changed from diff
-                      color: isLiked ? Colors.red : const Color(0xFF9CA3AF),
-                      size: 20,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header: Avatar, Name, Topics, Options
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                GestureDetector(
+                  onTap: isOwner || post.isAnonymous
+                      ? null
+                      : () => _showUserProfile(
+                    post.authorId,
+                    name: post.authorName,
+                    imageUrl: post.authorProfileImage,
+                    isFollowing: isFollowing,
+                    isRequested: isRequested,
+                  ),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 20,
+                        backgroundColor: const Color(0xFFEAF0ED),
+                        backgroundImage: ( (isOwner || !post.isAnonymous) && post.authorProfileImage != null)
+                            ? (post.authorProfileImage!.startsWith('data:image')
+                            ? MemoryImage(base64Decode(post.authorProfileImage!.split(',').last))
+                            : NetworkImage(post.authorProfileImage!) as ImageProvider)
+                            : null,
+                        child: ( (!isOwner && post.isAnonymous) || post.authorProfileImage == null)
+                            ? Icon(Icons.person, color: primaryGreen, size: 22)
+                            : null,
+                      ),
+                      const SizedBox(width: 12),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Text(
+                                displayAuthor,
+                                style: GoogleFonts.outfit(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                  color: textColorMain,
+                                ),
+                              ),
+                              if (isOwner && post.isAnonymous) ...[
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.amber.withOpacity(0.15),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    'ANONYMOUS',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 8,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.amber[800],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '${post.topic.toUpperCase()} • ${timeAgo.toUpperCase()}',
+                            style: GoogleFonts.outfit(
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.8,
+                              color: textColorSub,
+                            ),
+                          ),
+                          if (post.isArchived)
+                            Container(
+                              margin: const EdgeInsets.only(top: 4),
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.blueGrey.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                'ARCHIVED',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 8,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.blueGrey,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const Spacer(),
+                if (_activeFilter == 'MyPosts')
+                  PopupMenuButton<String>(
+                    position: PopupMenuPosition.under,
+                    elevation: 4,
+                    shadowColor: Colors.black.withOpacity(0.2),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                    color: Colors.white,
+                    padding: EdgeInsets.zero,
+                    onSelected: (value) {
+                      if (value == 'edit') _editPost(post);
+                      if (value == 'archive') _toggleArchive(post.id, post.isArchived);
+                      if (value == 'delete') _deletePost(post.id);
+                    },
+                    itemBuilder: (context) => [
+                      if (!post.isArchived)
+                        PopupMenuItem(
+                          value: 'edit',
+                          child: Row(
+                            children: [
+                              Icon(Icons.edit_outlined, color: primaryGreen, size: 18),
+                              const SizedBox(width: 12),
+                              Text('Edit Reflection', style: GoogleFonts.outfit(fontSize: 14)),
+                            ],
+                          ),
+                        ),
+                      PopupMenuItem(
+                        value: 'archive',
+                        child: Row(
+                          children: [
+                            Icon(
+                              post.isArchived ? Icons.unarchive_outlined : Icons.archive_outlined,
+                              color: Colors.blueGrey,
+                              size: 18,
+                            ),
+                            const SizedBox(width: 12),
+                            Text(
+                              post.isArchived ? 'Unarchive Post' : 'Archive Post',
+                              style: GoogleFonts.outfit(fontSize: 14),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const PopupMenuDivider(height: 1),
+                      PopupMenuItem(
+                        value: 'delete',
+                        child: Row(
+                          children: [
+                            const Icon(Icons.delete_outline, color: Colors.redAccent, size: 18),
+                            const SizedBox(width: 12),
+                            Text('Delete Forever', style: GoogleFonts.outfit(fontSize: 14, color: Colors.redAccent)),
+                          ],
+                        ),
+                      ),
+                    ],
+                    child: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[50],
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.more_horiz, color: Color(0xFFB3B3B3), size: 20),
                     ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            // Mood Badge
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: Color(post.moodColorValue).withOpacity(0.15),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(_getMoodIcon(post.moodText), color: Color(post.moodColorValue), size: 12),
+                  const SizedBox(width: 4),
+                  Text(
+                    post.moodText.toUpperCase(),
+                    style: GoogleFonts.outfit(
+                      color: Color(post.moodColorValue),
+                      fontSize: 9,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            // Content Text
+            Text(
+              post.content,
+              style: GoogleFonts.outfit(
+                fontSize: 14,
+                color: const Color(0xFF4A4A4A),
+                height: 1.5,
+              ),
+            ),
+
+            // Optional Image
+            if (post.imageUrl != null) ...[
+              const SizedBox(height: 16),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+              child: post.imageUrl!.startsWith('data:')
+                  ? Image.memory(
+                      base64Decode(post.imageUrl!.split(',').last),
+                      height: 180,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                    )
+                  : Image.network(
+                      post.imageUrl!,
+                      height: 180,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                    ),
+              ),
+            ],
+
+            const SizedBox(height: 20),
+
+            // Footer: Actions (Like, Comment, Bookmark)
+            Row(
+              children: [
+                GestureDetector(
+                  onTap: () => _toggleLike(post.id, post.likes),
+                  child: Row(
+                    children: [
+                      Icon(
+                        isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded, // Changed from diff
+                        color: isLiked ? Colors.red : const Color(0xFF9CA3AF),
+                        size: 20,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        post.likes.length.toString(),
+                        style: GoogleFonts.outfit(
+                          color: isLiked ? Colors.red : const Color(0xFF9CA3AF),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 20),
+                Row(
+                  children: [
+                    const Icon(Icons.chat_bubble_outline_rounded, color: Color(0xFF9CA3AF), size: 18),
                     const SizedBox(width: 6),
                     Text(
-                      post.likes.length.toString(),
+                      post.commentCount.toString(),
                       style: GoogleFonts.outfit(
-                        color: isLiked ? Colors.red : const Color(0xFF9CA3AF),
+                        color: const Color(0xFF9CA3AF),
                         fontSize: 13,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
                   ],
                 ),
-              ),
-              const SizedBox(width: 20),
-              Row(
-                children: [
-                  const Icon(Icons.chat_bubble_outline_rounded, color: Color(0xFF9CA3AF), size: 18),
-                  const SizedBox(width: 6),
-                  Text(
-                    post.commentCount.toString(),
-                    style: GoogleFonts.outfit(
-                      color: const Color(0xFF9CA3AF),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-              const Spacer(),
-              const Icon(Icons.bookmark_border, color: Color(0xFF9CA3AF), size: 20),
-            ],
-          ),
-        ],
+                const Spacer(),
+                const Icon(Icons.bookmark_border, color: Color(0xFF9CA3AF), size: 20),
+              ],
+            ),
+          ],
+        ),
       ),
     );
+
   }
 
   void _showUserProfile(String authorId, {String? name, String? imageUrl, bool? isFollowing, bool? isRequested}) {

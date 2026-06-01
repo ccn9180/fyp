@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'verification_page.dart';
+import 'user_details_page.dart';
 
 class EmailVerificationPage extends StatefulWidget {
   final String email;
@@ -97,7 +97,7 @@ class _EmailVerificationPageState extends State<EmailVerificationPage> {
   void _proceedToFaceScan() {
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
-        builder: (context) => VerificationPage(
+        builder: (context) => UserDetailsPage(
           email: widget.email,
           password: widget.password,
           isGoogle: false,

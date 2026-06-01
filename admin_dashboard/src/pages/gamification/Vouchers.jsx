@@ -3,6 +3,7 @@ import { doc, deleteDoc, addDoc, collection, serverTimestamp } from 'firebase/fi
 import { db } from '../../firebase';
 import { useVouchers } from '../../hooks/useFirestore';
 import { Plus, Trash2, Copy, X, Send, Ticket } from 'lucide-react';
+import { customAlert, customConfirm } from '../../utils/dialogUtils';
 
 export default function Vouchers() {
   const { data: vouchers, loading } = useVouchers();
@@ -44,12 +45,13 @@ export default function Vouchers() {
       handleCloseEditor();
     } catch (error) {
       console.error("Error creating voucher: ", error);
-      alert("Failed to create voucher.");
+      await customAlert("Failed to create voucher.", "Error");
     }
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Delete this voucher code?')) return;
+    const confirmed = await customConfirm('Delete this voucher code?', 'Confirm Delete');
+    if (!confirmed) return;
     setDeleting(id);
     try {
       await deleteDoc(doc(db, 'vouchers', id));
@@ -59,9 +61,9 @@ export default function Vouchers() {
     setDeleting(null);
   };
 
-  const copyToClipboard = (text) => {
+  const copyToClipboard = async (text) => {
     navigator.clipboard.writeText(text);
-    alert('Code copied to clipboard!');
+    await customAlert('Code copied to clipboard!', 'Success');
   };
 
   return (

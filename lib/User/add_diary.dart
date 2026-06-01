@@ -7,6 +7,8 @@ import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import 'package:fyp/app_localizations.dart';
 import 'entry_summary.dart';
+import '../services/gamification_service.dart';
+import '../widgets/level_up_dialog.dart';
 
 
 class AddDiaryScreen extends StatefulWidget {
@@ -217,15 +219,7 @@ class _AddDiaryScreenState extends State<AddDiaryScreen> {
                   )
                 else
                   GestureDetector(
-                    onTap: () async {
-                      final picker = ImagePicker();
-                      final pickedFile = await picker.pickImage(source: ImageSource.gallery);
-                      if (pickedFile != null) {
-                        setState(() {
-                          _selectedImage = File(pickedFile.path);
-                        });
-                      }
-                    },
+                    onTap: _showImageSourceActionSheet,
                     child: Container(
                       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
                       decoration: BoxDecoration(
@@ -260,10 +254,9 @@ class _AddDiaryScreenState extends State<AddDiaryScreen> {
 
                 const SizedBox(height: 32),
 
-                // Quick Emotions Header
                 Center(
                   child: Text(
-                    'QUICK EMOTIONS',
+                    'JOURNAL ENTRY',
                     style: GoogleFonts.outfit(
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
@@ -274,49 +267,7 @@ class _AddDiaryScreenState extends State<AddDiaryScreen> {
                 ),
                 const SizedBox(height: 16),
 
-                // Quick Emotions Row
-                Container(
-                  padding: const EdgeInsets.symmetric(vertical: 24),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.02),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: List.generate(emotions.length, (index) {
-                      final isSelected = _selectedEmotion == emotions[index];
-                      return GestureDetector(
-                        onTap: () {
-                          setState(() {
-                            _selectedEmotion = emotions[index];
-                          });
-                        },
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: isSelected ? primaryGreen.withOpacity(0.15) : Colors.transparent,
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            emotionIcons[index],
-                            size: 36,
-                            color: isSelected ? primaryGreen : const Color(0xFFB0B0B0),
-                          ),
-                        ),
-                      );
-                    }),
-                  ),
-                ),
 
-                const SizedBox(height: 48),
 
                 // Save Button (Replaces Share config)
                 SizedBox(
@@ -330,25 +281,14 @@ class _AddDiaryScreenState extends State<AddDiaryScreen> {
                         );
                         return;
                       }
-                      if (_selectedEmotion == null) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Please select an emotion.', style: TextStyle(color: Colors.white)), backgroundColor: Colors.redAccent),
-                        );
-                        return;
-                      }
-
                       // Navigate to Full Screen AI Analysis instead of Modal
                       Navigator.push(
                         context,
                         MaterialPageRoute(
                           builder: (context) => EntrySummaryScreen(
                             content: _contentController.text.trim(),
-                            onConfirm: (moodTitle, category, summary, isCrisis, sharingTeams) async {
-                              // Pop the summary screen
-                              Navigator.pop(context);
-
-                              // Proceed with saving using AI insights
-                              await _saveToFirebase(moodTitle, category, summary, isCrisis, sharingTeams);
+                            onConfirm: (moodTitle, category, summary, isCrisis, sharingTeams, secondaryCategory) async {
+                              await _saveToFirebase(moodTitle, category, summary, isCrisis, sharingTeams, secondaryCategory);
                             },
                           ),
                         ),
@@ -387,7 +327,7 @@ class _AddDiaryScreenState extends State<AddDiaryScreen> {
 
   Future<bool> _handleExit() async {
     final String content = _contentController.text.trim();
-    if (content.isEmpty && _selectedEmotion == null) {
+    if (content.isEmpty) {
       return true;
     }
 
@@ -640,7 +580,7 @@ class _AddDiaryScreenState extends State<AddDiaryScreen> {
 
   Future<void> _saveDraft() async {
     final String content = _contentController.text.trim();
-    if (content.isEmpty && _selectedEmotion == null) return;
+    if (content.isEmpty) return;
 
     setState(() => _isSavingDraft = true);
 
@@ -686,7 +626,7 @@ class _AddDiaryScreenState extends State<AddDiaryScreen> {
     }
   }
 
-  Future<void> _saveToFirebase(String aiMoodTitle, String aiCategory, String summary, bool isCrisis, Map<String, bool> sharingTeams) async {
+  Future<void> _saveToFirebase(String aiMoodTitle, String aiCategory, String summary, bool isCrisis, Map<String, bool> sharingTeams, [String? secondaryCategory]) async {
     setState(() {
       _isUploading = true;
     });
@@ -716,11 +656,12 @@ class _AddDiaryScreenState extends State<AddDiaryScreen> {
           'title': title,
           'content': contentText,
           'mood': aiCategory,
+          'secondaryMood': secondaryCategory,
           'aiMoodTitle': aiMoodTitle,
           'summary': summary,
           'isCrisis': isCrisis,
           'sharingAccess': sharingTeams,
-          'userMood': _selectedEmotion,
+          'userMood': null,
           'imageUrl': imageUrl ?? widget.initialData?['imageUrl'],
           'timestamp': (widget.entryId != null && !widget.isDraft)
               ? (widget.initialData?['timestamp'] ?? FieldValue.serverTimestamp())
@@ -753,6 +694,30 @@ class _AddDiaryScreenState extends State<AddDiaryScreen> {
               .delete();
         }
 
+        // Auto-complete journal tasks if it's a new entry
+        bool showLevelUp = false;
+        int totalXp = 0;
+        int totalCoins = 0;
+        bool hasSuccessfulCompletion = false;
+
+        if (widget.entryId == null || widget.isDraft) {
+          try {
+            final results = await GamificationService.completeTasksByType(user.uid, 'journal');
+            for (final res in results) {
+              if (res['success'] == true) {
+                hasSuccessfulCompletion = true;
+                totalXp += (res['xp'] ?? 0) as int;
+                totalCoins += (res['coins'] ?? 0) as int;
+                if (res['levelled_up'] == true) {
+                  showLevelUp = true;
+                }
+              }
+            }
+          } catch (e) {
+            debugPrint("Error completing journal tasks: $e");
+          }
+        }
+
         setState(() {
           _isUploading = false;
         });
@@ -761,7 +726,38 @@ class _AddDiaryScreenState extends State<AddDiaryScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Diary entry saved successfully.'), backgroundColor: Color(0xFF7C9C84)),
           );
-          Navigator.pop(context);
+
+          if (hasSuccessfulCompletion) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Row(
+                  children: [
+                    const Icon(Icons.stars_rounded, color: Colors.amber),
+                    const SizedBox(width: 8),
+                    Text('Quest Completed: +$totalXp XP & +$totalCoins Coins!'),
+                  ],
+                ),
+                backgroundColor: const Color(0xFF7C9C84),
+                duration: const Duration(seconds: 4),
+              ),
+            );
+          }
+
+          if (showLevelUp) {
+            showDialog(
+              context: context,
+              barrierDismissible: false,
+              builder: (context) => const LevelUpDialog(),
+            ).then((_) {
+              if (mounted) {
+                Navigator.pop(context); // Pop EntrySummaryScreen
+                Navigator.pop(context); // Pop AddDiaryScreen
+              }
+            });
+          } else {
+            Navigator.pop(context); // Pop EntrySummaryScreen
+            Navigator.pop(context); // Pop AddDiaryScreen
+          }
         }
       }
     } catch (e) {
@@ -774,5 +770,110 @@ class _AddDiaryScreenState extends State<AddDiaryScreen> {
         );
       }
     }
+  }
+
+  Future<void> _showImageSourceActionSheet() async {
+    final picker = ImagePicker();
+    
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (BuildContext context) {
+        return Container(
+          padding: const EdgeInsets.all(24),
+          decoration: const BoxDecoration(
+            color: Color(0xFFF2F1EC),
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(28),
+              topRight: Radius.circular(28),
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 24),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFD9D9D9),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Text(
+                'Add Photo',
+                style: GoogleFonts.playfairDisplay(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: const Color(0xFF333333),
+                ),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  _buildSourceOption(
+                    context,
+                    icon: Icons.photo_library_rounded,
+                    label: 'Gallery',
+                    onTap: () => Navigator.pop(context, ImageSource.gallery),
+                  ),
+                  _buildSourceOption(
+                    context,
+                    icon: Icons.camera_alt_rounded,
+                    label: 'Camera',
+                    onTap: () => Navigator.pop(context, ImageSource.camera),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+            ],
+          ),
+        );
+      },
+    );
+
+    if (source != null) {
+      final pickedFile = await picker.pickImage(source: source);
+      if (pickedFile != null) {
+        setState(() {
+          _selectedImage = File(pickedFile.path);
+        });
+      }
+    }
+  }
+
+  Widget _buildSourceOption(BuildContext context, {required IconData icon, required String label, required VoidCallback onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Icon(icon, color: primaryGreen, size: 32),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            label,
+            style: GoogleFonts.outfit(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: const Color(0xFF333333),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

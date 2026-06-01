@@ -4,8 +4,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import '../User/main_screen.dart';
-import 'verification_page.dart';
 import 'user_details_page.dart';
 import 'email_verification_page.dart';
 
@@ -25,7 +23,6 @@ class _RegisterPageState extends State<RegisterPage> {
   final _confirmPasswordCtrl = TextEditingController();
 
   bool _isLoading = false;
-  String? _errorMessage;
   bool _passwordVisible = false;
 
   @override
@@ -139,11 +136,11 @@ class _RegisterPageState extends State<RegisterPage> {
           if (mounted) _showAccountExistsDialog();
           return;
         } else {
-          // New user, go to VerificationPage first to complete "scan"
+          // New user, go to UserDetailsPage first to complete "scan"
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(
-              builder: (context) => VerificationPage(
+              builder: (context) => UserDetailsPage(
                 email: googleUser.email,
                 password: "", // No password needed for Google users
                 isGoogle: true,
@@ -281,8 +278,6 @@ class _RegisterPageState extends State<RegisterPage> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         _buildProgressStep(true),
-                        const SizedBox(width: 8),
-                        _buildProgressStep(false),
                         const SizedBox(width: 8),
                         _buildProgressStep(false),
                         const SizedBox(width: 8),

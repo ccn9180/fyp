@@ -1,18 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import '../User/main_screen.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'login.dart';
+import 'verification_page.dart';
+import 'id_scanner_page.dart';
 
 class UserDetailsPage extends StatefulWidget {
   final String email;
   final String password;
+  final bool isGoogle;
 
   const UserDetailsPage({
     super.key,
     required this.email,
     required this.password,
+    this.isGoogle = false,
   });
 
   @override
@@ -24,16 +27,17 @@ class _UserDetailsPageState extends State<UserDetailsPage> {
   
   final _fullNameCtrl = TextEditingController();
   final _dobCtrl = TextEditingController();
-  final _phoneCtrl = TextEditingController();
+  final _icNumberCtrl = TextEditingController();
   
   String _selectedGender = 'Female'; // Default selection
   bool _isLoading = false;
+  String? _capturedIcImagePath; // Captured IC image for face verification
 
   @override
   void dispose() {
     _fullNameCtrl.dispose();
     _dobCtrl.dispose();
-    _phoneCtrl.dispose();
+    _icNumberCtrl.dispose();
     super.dispose();
   }
 
@@ -60,74 +64,51 @@ class _UserDetailsPageState extends State<UserDetailsPage> {
     }
   }
 
-  Future<void> _completeRegistration() async {
+  Future<void> _scanIDWithAI() async {
+    final ScannedIdResult? result = await Navigator.push<ScannedIdResult>(
+      context,
+      MaterialPageRoute(builder: (context) => const IDScannerPage()),
+    );
+
+    if (result == null) return;
+
+    setState(() {
+      if (result.fullName != null) _fullNameCtrl.text = result.fullName!;
+      if (result.dob != null) _dobCtrl.text = result.dob!;
+      if (result.gender != null) _selectedGender = result.gender!;
+      if (result.icNumber != null) _icNumberCtrl.text = result.icNumber!;
+      if (result.capturedImagePath != null) _capturedIcImagePath = result.capturedImagePath;
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text("ID scanned and details filled successfully!"),
+        backgroundColor: Color(0xFF7B9E89),
+      ),
+    );
+  }
+
+  void _goToVerification() {
     if (!_formKey.currentState!.validate()) return;
     if (_dobCtrl.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please select your Date of Birth')));
       return;
     }
 
-    setState(() => _isLoading = true);
-
-    try {
-      // 1. Get current user (already created in VerificationPage)
-      User? user = FirebaseAuth.instance.currentUser;
-      
-      if (user == null) throw Exception("User session lost. Please try again.");
-
-      // 2. Refresh user to check if they verified their email in the meantime
-      await user.reload();
-      user = FirebaseAuth.instance.currentUser;
-
-      // 3. Save ALL User Data to Firestore
-      await FirebaseFirestore.instance.collection('users').doc(user!.uid).set({
-        'uid': user.uid,
-        'email': widget.email,
-        'fullName': _fullNameCtrl.text.trim(),
-        'dateOfBirth': _dobCtrl.text.trim(),
-        'phoneNumber': _phoneCtrl.text.trim(),
-        'gender': _selectedGender,
-        'createdAt': FieldValue.serverTimestamp(),
-        'isVerified': user.emailVerified, 
-      });
-
-      // Update Display Name
-      await user.updateDisplayName(_fullNameCtrl.text.trim());
-
-      if (mounted) {
-        if (!user.emailVerified) {
-          // If not verified yet, remind them and go back to login instead of Home
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text("Details saved! Please check your email to verify before logging in."),
-              backgroundColor: Colors.orangeAccent,
-              duration: Duration(seconds: 5),
-            ),
-          );
-          Navigator.of(context).pushAndRemoveUntil(
-            MaterialPageRoute(builder: (context) => const LoginPage()),
-            (route) => false,
-          );
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text("Registration Complete! Welcome."),
-              backgroundColor: Color(0xFF7B9E89),
-            ),
-          );
-
-          // Navigate to Home
-          Navigator.of(context).pushAndRemoveUntil(
-            MaterialPageRoute(builder: (context) => const MainScreen()),
-            (route) => false,
-          );
-        }
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red));
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => VerificationPage(
+          email: widget.email,
+          password: widget.password,
+          isGoogle: widget.isGoogle,
+          fullName: _fullNameCtrl.text.trim(),
+          dob: _dobCtrl.text.trim(),
+          icNumber: _icNumberCtrl.text.trim(),
+          gender: _selectedGender,
+          icImagePath: _capturedIcImagePath,
+        ),
+      ),
+    );
   }
 
   @override
@@ -153,21 +134,24 @@ class _UserDetailsPageState extends State<UserDetailsPage> {
                                   icon: const Icon(Icons.arrow_back_ios_new, size: 20, color: Color(0xFF1E2742)),
                                   onPressed: () async {
                                     try {
-                                      // Cleanup: Delete the account if they cancel mid-flow
-                                      // This ensures no "ghost" auth records exist without Firestore profiles.
                                       await FirebaseAuth.instance.currentUser?.delete();
+                                      await GoogleSignIn().signOut();
                                     } catch (e) {
                                       await FirebaseAuth.instance.signOut();
+                                      await GoogleSignIn().signOut();
                                     }
-                                    if (mounted) Navigator.pop(context);
+                                    if (mounted) {
+                                      Navigator.of(context).pushAndRemoveUntil(
+                                        MaterialPageRoute(builder: (context) => const LoginPage()),
+                                        (route) => false,
+                                      );
+                                    }
                                   },
                                 ),
                               ),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        _buildProgressStep(true),
-                        const SizedBox(width: 8),
                         _buildProgressStep(true),
                         const SizedBox(width: 8),
                         _buildProgressStep(true), // Active
@@ -214,10 +198,7 @@ class _UserDetailsPageState extends State<UserDetailsPage> {
                   child: Material(
                     color: Colors.transparent,
                     child: InkWell(
-                      onTap: () {
-                        // AI Scan Mockup
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("AI Scan feature coming soon!")));
-                      },
+                      onTap: _isLoading ? null : _scanIDWithAI,
                       borderRadius: BorderRadius.circular(20),
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -308,13 +289,13 @@ class _UserDetailsPageState extends State<UserDetailsPage> {
                 ),
                 const SizedBox(height: 20),
 
-                // Phone Number
-                _buildLabel('PHONE NUMBER'),
+                // IC Number
+                _buildLabel('IC NUMBER'),
                 _buildTextField(
-                  controller: _phoneCtrl,
-                  hintText: '+1 (555) 000-0000',
-                  keyboardType: TextInputType.phone,
-                  validator: (val) => val!.isEmpty ? 'Phone is required' : null,
+                  controller: _icNumberCtrl,
+                  hintText: 'E.g. 990123-14-5555 or Passport No',
+                  keyboardType: TextInputType.text,
+                  validator: (val) => val!.isEmpty ? 'IC number is required' : null,
                 ),
                 const SizedBox(height: 20),
 
@@ -343,7 +324,7 @@ class _UserDetailsPageState extends State<UserDetailsPage> {
                   width: double.infinity,
                   height: 60,
                   child: ElevatedButton(
-                    onPressed: _isLoading ? null : _completeRegistration,
+                    onPressed: _isLoading ? null : _goToVerification,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF7B9E89), // Sage Green
                       shape: RoundedRectangleBorder(

@@ -315,6 +315,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
       final name = _nameController.text.trim();
       final docRef = FirebaseFirestore.instance.collection('users').doc(_currentUser!.uid);
+      final trustedContactUids = _trustedContacts
+          .map((c) => c['uid'])
+          .where((uid) => uid != null)
+          .cast<String>()
+          .toList();
 
       await docRef.update({
         'fullName': name,
@@ -322,6 +327,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         'bio': _bioController.text.trim(),
         'interests': _selectedInterests,
         'profileImageUrl': imageUrl,
+        'trustedContacts': _trustedContacts,
+        'trustedContactUids': trustedContactUids,
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
@@ -521,66 +528,54 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   ),
                 ),
                 const SizedBox(width: 16),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFE3E8E4),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.add, size: 16, color: Color(0xFF7C9C84)),
-                      const SizedBox(width: 4),
-                      Text(
-                        'Add',
-                        style: GoogleFonts.outfit(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: const Color(0xFF7C9C84),
+                GestureDetector(
+                  onTap: _showAddContactDialog,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE3E8E4),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.add, size: 16, color: Color(0xFF7C9C84)),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Add',
+                          style: GoogleFonts.outfit(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: const Color(0xFF7C9C84),
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 16),
-            if (_trustedContacts.isEmpty)
-              GestureDetector(
-                onTap: () {
-                  // Action for adding contact
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text("Add Contact feature coming soon!")),
-                  );
-                },
-                child: Container(
-                  width: 60,
-                  height: 60,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFE3E8E4),
-                    shape: BoxShape.circle,
-                    border: Border.all(color: const Color(0xFFBBCBC2), width: 1),
-                  ),
-                  child: const Center(
-                    child: Icon(
-                      Icons.add,
-                      size: 30,
-                      color: Color(0xFF7C9C84),
+            Wrap(
+              spacing: 16,
+              runSpacing: 16,
+              children: [
+                ...List.generate(_trustedContacts.length, (index) {
+                  final contact = _trustedContacts[index];
+                  return GestureDetector(
+                    onTap: () => _showRemoveContactDialog(index),
+                    child: _buildContactAvatar(
+                      contact['initials'] ?? '??',
+                      contact['name'] ?? contact['label'] ?? 'Unknown',
+                      profileImageUrl: contact['profileImageUrl'],
                     ),
-                  ),
-                ),
-              )
-            else
-              Wrap(
-                spacing: 16,
-                runSpacing: 16,
-                children: _trustedContacts.map((contact) {
-                  return _buildContactAvatar(
-                    contact['initials'] ?? '??',
-                    contact['label'] ?? 'Unknown',
                   );
-                }).toList(),
-              ),
+                }),
+                GestureDetector(
+                  onTap: _showAddContactDialog,
+                  child: _buildContactAvatar('+', 'Add Contact'),
+                ),
+              ],
+            ),
 
             const SizedBox(height: 32),
 
@@ -729,7 +724,16 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     );
   }
 
-  Widget _buildContactAvatar(String initials, String label) {
+  Widget _buildContactAvatar(String initials, String label, {String? profileImageUrl}) {
+    ImageProvider? imageProvider;
+    if (profileImageUrl != null && profileImageUrl.isNotEmpty) {
+      if (profileImageUrl.startsWith('data:image')) {
+        imageProvider = MemoryImage(base64Decode(profileImageUrl.split(',').last));
+      } else {
+        imageProvider = NetworkImage(profileImageUrl);
+      }
+    }
+
     return Column(
       children: [
         Container(
@@ -741,14 +745,30 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             border: Border.all(color: const Color(0xFFBBCBC2), width: 1),
           ),
           child: Center(
-            child: Text(
-              initials,
-              style: GoogleFonts.outfit(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: const Color(0xFF7C9C84),
-              ),
-            ),
+            child: imageProvider != null
+                ? ClipRRect(
+                    borderRadius: BorderRadius.circular(28),
+                    child: Image(
+                      image: imageProvider,
+                      width: 58,
+                      height: 58,
+                      fit: BoxFit.cover,
+                    ),
+                  )
+                : (initials == '+'
+                    ? const Icon(
+                        Icons.add,
+                        size: 30,
+                        color: Color(0xFF7C9C84),
+                      )
+                    : Text(
+                        initials,
+                        style: GoogleFonts.outfit(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF7C9C84),
+                        ),
+                      )),
           ),
         ),
         const SizedBox(height: 8),
@@ -761,6 +781,426 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> _fetchConnections(String currentUserUid) async {
+    try {
+      final userDoc = await FirebaseFirestore.instance.collection('users').doc(currentUserUid).get();
+      if (!userDoc.exists) return [];
+      
+      final data = userDoc.data() ?? {};
+      final following = List<String>.from(data['following'] ?? []);
+      final followers = List<String>.from(data['followers'] ?? []);
+      
+      final uniqueUids = <String>{...following, ...followers};
+      uniqueUids.remove(currentUserUid);
+      
+      if (uniqueUids.isEmpty) return [];
+      
+      final List<Map<String, dynamic>> profiles = [];
+      final fetchFutures = uniqueUids.map((uid) async {
+        try {
+          final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+          if (doc.exists) {
+            final profile = doc.data() ?? {};
+            return {
+              'uid': uid,
+              'name': profile['fullName'] ?? 'Unknown User',
+              'email': profile['email'] ?? '',
+              'phone': profile['phoneNumber'] ?? profile['phone'] ?? '',
+              'profileImageUrl': profile['profileImageUrl'],
+            };
+          }
+        } catch (e) {
+          debugPrint('Error fetching profile for $uid: $e');
+        }
+        return null;
+      });
+      
+      final results = await Future.wait(fetchFutures);
+      for (var res in results) {
+        if (res != null) {
+          profiles.add(res);
+        }
+      }
+      return profiles;
+    } catch (e) {
+      debugPrint('Error fetching connections: $e');
+      return [];
+    }
+  }
+
+  void _showAddContactDialog() {
+    final currentUserUid = FirebaseAuth.instance.currentUser?.uid;
+    if (currentUserUid == null) return;
+
+    List<Map<String, dynamic>> connections = [];
+    bool loading = true;
+    String searchQuery = '';
+    Map<String, dynamic>? selectedContact;
+    String selectedRelation = 'Friend';
+    final List<String> relations = ['Family', 'Counselor', 'Friend', 'Other'];
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          if (loading) {
+            _fetchConnections(currentUserUid).then((list) {
+              if (mounted) {
+                setDialogState(() {
+                  connections = list;
+                  loading = false;
+                });
+              }
+            });
+            return AlertDialog(
+              backgroundColor: const Color(0xFFF2F1EC),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+              content: const SizedBox(
+                height: 100,
+                child: Center(
+                  child: CircularProgressIndicator(color: Color(0xFF7C9C84)),
+                ),
+              ),
+            );
+          }
+
+          final filtered = connections.where((c) {
+            final name = c['name'].toString().toLowerCase();
+            final email = c['email'].toString().toLowerCase();
+            final matchesQuery = name.contains(searchQuery.toLowerCase()) || email.contains(searchQuery.toLowerCase());
+            
+            // Check if user is already in _trustedContacts
+            final isAlreadyAdded = _trustedContacts.any((tc) =>
+                (c['uid'] != null && tc['uid'] == c['uid']) ||
+                (c['email'].isNotEmpty && tc['email'] == c['email']));
+            
+            return matchesQuery && !isAlreadyAdded;
+          }).toList();
+
+          return AlertDialog(
+            backgroundColor: const Color(0xFFF2F1EC),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+            title: Text(
+              'Add Trusted Contact',
+              style: GoogleFonts.playfairDisplay(
+                fontWeight: FontWeight.bold,
+                fontSize: 22,
+                color: const Color(0xFF333333),
+              ),
+            ),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (connections.isEmpty) ...[
+                      Text(
+                        'You don\'t have any followers or following connections yet.',
+                        style: GoogleFonts.outfit(fontSize: 15, color: const Color(0xFF666666)),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Follow users in the community tab first to add them here.',
+                        style: GoogleFonts.outfit(fontSize: 13, color: Colors.grey[500], fontStyle: FontStyle.italic),
+                      ),
+                    ] else ...[
+                      _buildDialogLabel('SEARCH CONNECTION'),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: TextField(
+                          style: GoogleFonts.outfit(fontSize: 15),
+                          decoration: InputDecoration(
+                            hintText: 'Search by name or email...',
+                            hintStyle: GoogleFonts.outfit(color: Colors.grey[400], fontSize: 13),
+                            prefixIcon: const Icon(Icons.search, size: 20, color: Colors.grey),
+                            border: InputBorder.none,
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          ),
+                          onChanged: (val) {
+                            setDialogState(() {
+                              searchQuery = val;
+                            });
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      _buildDialogLabel('SELECT CONTACT'),
+                      Container(
+                        height: 200,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: filtered.isEmpty
+                            ? Center(
+                                child: Text(
+                                  'No matching connections found.',
+                                  style: GoogleFonts.outfit(color: Colors.grey, fontSize: 14),
+                                ),
+                              )
+                            : ListView.builder(
+                                shrinkWrap: true,
+                                itemCount: filtered.length,
+                                itemBuilder: (context, index) {
+                                  final contact = filtered[index];
+                                  final isSelected = selectedContact?['uid'] == contact['uid'];
+                                  
+                                  ImageProvider? imageProvider;
+                                  final profileImageUrl = contact['profileImageUrl'] as String?;
+                                  if (profileImageUrl != null) {
+                                    if (profileImageUrl.startsWith('data:image')) {
+                                      imageProvider = MemoryImage(base64Decode(profileImageUrl.split(',').last));
+                                    } else {
+                                      imageProvider = NetworkImage(profileImageUrl);
+                                    }
+                                  }
+
+                                  return ListTile(
+                                    leading: CircleAvatar(
+                                      radius: 18,
+                                      backgroundColor: const Color(0xFFE3E8E4),
+                                      backgroundImage: imageProvider,
+                                      child: imageProvider == null
+                                          ? Text(
+                                              _getInitials(contact['name']),
+                                              style: GoogleFonts.outfit(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.bold,
+                                                color: const Color(0xFF7C9C84),
+                                              ),
+                                            )
+                                          : null,
+                                    ),
+                                    title: Text(
+                                      contact['name'],
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 14,
+                                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                        color: const Color(0xFF333333),
+                                      ),
+                                    ),
+                                    subtitle: Text(
+                                      contact['email'],
+                                      style: GoogleFonts.outfit(fontSize: 11, color: Colors.grey[500]),
+                                    ),
+                                    trailing: isSelected
+                                        ? const Icon(Icons.check_circle_rounded, color: Color(0xFF7C9C84))
+                                        : null,
+                                    selected: isSelected,
+                                    selectedTileColor: const Color(0xFF7C9C84).withOpacity(0.08),
+                                    onTap: () {
+                                      setDialogState(() {
+                                        selectedContact = contact;
+                                      });
+                                    },
+                                  );
+                                },
+                              ),
+                      ),
+                      const SizedBox(height: 16),
+                      _buildDialogLabel('RELATIONSHIP'),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value: selectedRelation,
+                            isExpanded: true,
+                            style: GoogleFonts.outfit(
+                              fontSize: 16,
+                              color: const Color(0xFF333333),
+                            ),
+                            items: relations.map((rel) => DropdownMenuItem(
+                              value: rel,
+                              child: Text(rel),
+                            )).toList(),
+                            onChanged: (val) {
+                              if (val != null) {
+                                setDialogState(() => selectedRelation = val);
+                              }
+                            },
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text(
+                  connections.isEmpty ? 'Close' : 'Cancel',
+                  style: GoogleFonts.outfit(
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey[600],
+                  ),
+                ),
+              ),
+              if (connections.isNotEmpty)
+                ElevatedButton(
+                  onPressed: selectedContact == null
+                      ? null
+                      : () {
+                          final name = selectedContact!['name'];
+                          final email = selectedContact!['email'];
+                          final phone = selectedContact!['phone'];
+                          final foundUid = selectedContact!['uid'];
+
+                          // Prevent duplicates check
+                          final isDuplicate = _trustedContacts.any((c) =>
+                              (foundUid != null && c['uid'] == foundUid) ||
+                              (email.isNotEmpty && c['email'] == email));
+                          
+                          if (isDuplicate) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('This user is already added to your trusted contacts.'),
+                                backgroundColor: Colors.redAccent,
+                              ),
+                            );
+                            return;
+                          }
+
+                          final initials = _getInitials(name);
+                          setState(() {
+                            _trustedContacts.add({
+                              'name': name,
+                              'label': name,
+                              'initials': initials,
+                              'relationship': selectedRelation.toUpperCase(),
+                              'email': email,
+                              'phone': phone,
+                              'uid': foundUid,
+                              'profileImageUrl': selectedContact!['profileImageUrl'],
+                            });
+                          });
+
+                          Navigator.pop(context);
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF7C9C84),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: Text(
+                    'Add',
+                    style: GoogleFonts.outfit(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  void _showRemoveContactDialog(int index) {
+    final contact = _trustedContacts[index];
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFFF2F1EC),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+        title: Text(
+          'Remove Contact',
+          style: GoogleFonts.playfairDisplay(
+            fontWeight: FontWeight.bold,
+            fontSize: 22,
+            color: const Color(0xFF333333),
+          ),
+        ),
+        content: Text(
+          'Are you sure you want to remove ${contact['name'] ?? contact['label']} from your trusted contacts?',
+          style: GoogleFonts.outfit(fontSize: 15, color: const Color(0xFF666666)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              'Cancel',
+              style: GoogleFonts.outfit(fontWeight: FontWeight.w600, color: Colors.grey[600]),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              setState(() {
+                _trustedContacts.removeAt(index);
+              });
+              Navigator.pop(context);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFE57373),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: Text(
+              'Remove',
+              style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: Colors.white),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _getInitials(String name) {
+    List<String> names = name.split(" ");
+    String initials = "";
+    int numWords = names.length > 2 ? 2 : names.length;
+    for (var i = 0; i < numWords; i++) {
+      if (names[i].isNotEmpty) {
+        initials += names[i][0].toUpperCase();
+      }
+    }
+    return initials.isEmpty ? "?" : initials;
+  }
+
+  Widget _buildDialogLabel(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6, left: 4),
+      child: Text(
+        text,
+        style: GoogleFonts.outfit(
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+          letterSpacing: 1.0,
+          color: const Color(0xFFA3A3A3),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDialogTextField(TextEditingController controller, {String? hintText, TextInputType keyboardType = TextInputType.text}) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: TextField(
+        controller: controller,
+        keyboardType: keyboardType,
+        style: GoogleFonts.outfit(fontSize: 15),
+        decoration: InputDecoration(
+          hintText: hintText,
+          hintStyle: GoogleFonts.outfit(color: Colors.grey[400], fontSize: 13),
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        ),
+      ),
     );
   }
 }

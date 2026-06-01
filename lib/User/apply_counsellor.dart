@@ -19,11 +19,13 @@ class _ApplyCounsellorScreenState extends State<ApplyCounsellorScreen> {
   final Color textColorMain = const Color(0xFF333333);
 
   final _formKey = GlobalKey<FormState>();
+  int _activeStep = 0;
   bool _isSubmitting = false;
   bool _isLoadingStatus = true;
   String? _statusError;
 
   final List<String> _selectedSpecializations = [];
+  final List<String> _selectedLanguages = [];
   File? _certificateFile;
   final TextEditingController _experienceController = TextEditingController();
   final TextEditingController _licenseController = TextEditingController();
@@ -38,6 +40,15 @@ class _ApplyCounsellorScreenState extends State<ApplyCounsellorScreen> {
     'Life Coaching',
   ];
 
+  final List<String> _languages = [
+    'English',
+    'Malay',
+    'Mandarin',
+    'Tamil',
+    'Cantonese',
+    'Hokkien',
+  ];
+
   @override
   void initState() {
     super.initState();
@@ -47,41 +58,46 @@ class _ApplyCounsellorScreenState extends State<ApplyCounsellorScreen> {
   Future<void> _checkEligibility() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
-      setState(() {
-        _statusError = "Please log in to apply.";
-        _isLoadingStatus = false;
-      });
+      if (mounted) {
+        setState(() {
+          _statusError = "Please log in to apply.";
+          _isLoadingStatus = false;
+        });
+      }
       return;
     }
 
     try {
-      // 1. Check if already a counsellor
       final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
       if (userDoc.exists && (userDoc.data()?['role'] == 'counsellor')) {
-        setState(() {
-          _statusError = "You are already registered as an active counsellor.";
-          _isLoadingStatus = false;
-        });
+        if (mounted) {
+          setState(() {
+            _statusError = "You are already registered as an active counsellor.";
+            _isLoadingStatus = false;
+          });
+        }
         return;
       }
 
-      // 2. Check if has pending application
       final appDoc = await FirebaseFirestore.instance.collection('counsellor_applications').doc(user.uid).get();
       if (appDoc.exists) {
         final status = appDoc.data()?['status'];
         if (status == 'pending') {
-          setState(() {
-            _statusError = "You already have a pending application. Please wait for our review.";
-            _isLoadingStatus = false;
-          });
+          if (mounted) {
+            setState(() {
+              _statusError = "You already have a pending application. Please wait for our review.";
+              _isLoadingStatus = false;
+            });
+          }
           return;
         } else if (status == 'approved') {
-          // Synchronize role if app was approved but user role wasn't updated (fail-safe)
           await FirebaseFirestore.instance.collection('users').doc(user.uid).update({'role': 'counsellor'});
-          setState(() {
-            _statusError = "You are already registered as a counsellor.";
-            _isLoadingStatus = false;
-          });
+          if (mounted) {
+            setState(() {
+              _statusError = "You are already registered as a counsellor.";
+              _isLoadingStatus = false;
+            });
+          }
           return;
         }
       }
@@ -103,11 +119,97 @@ class _ApplyCounsellorScreenState extends State<ApplyCounsellorScreen> {
   Future<void> _pickCertificate() async {
     final ImagePicker picker = ImagePicker();
     final XFile? image = await picker.pickImage(source: ImageSource.gallery);
-
     if (image != null) {
-      setState(() {
-        _certificateFile = File(image.path);
+      setState(() => _certificateFile = File(image.path));
+    }
+  }
+
+  bool _validateStep() {
+    if (_activeStep == 0) {
+      if (_selectedSpecializations.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please select at least one specialization')),
+        );
+        return false;
+      }
+      if (_selectedLanguages.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please select at least one language preference')),
+        );
+        return false;
+      }
+      if (_experienceController.text.isEmpty || _licenseController.text.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please fill in all professional details')),
+        );
+        return false;
+      }
+    } else if (_activeStep == 1) {
+      if (_certificateFile == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please upload your professional certificate')),
+        );
+        return false;
+      }
+    }
+    return true;
+  }
+
+  Future<void> _submitFinalApplication() async {
+    if (!_formKey.currentState!.validate()) return;
+    
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    if (_motivationController.text.length < 50) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please provide a more detailed motivation (min 50 chars)')),
+      );
+      return;
+    }
+
+    setState(() => _isSubmitting = true);
+
+    try {
+      final storageRef = FirebaseStorage.instance
+          .ref()
+          .child('counsellor_applications/certificates/${user.uid}_${DateTime.now().millisecondsSinceEpoch}.jpg');
+
+      final uploadTask = await storageRef.putFile(_certificateFile!);
+      final certificateUrl = await uploadTask.ref.getDownloadURL();
+
+      await FirebaseFirestore.instance.collection('counsellor_applications').doc(user.uid).set({
+        'uid': user.uid,
+        'name': user.displayName ?? 'Anonymous User',
+        'email': user.email,
+        'specializations': _selectedSpecializations,
+        'languages': _selectedLanguages,
+        'experience': _experienceController.text.trim(),
+        'licenseNumber': _licenseController.text.trim(),
+        'certificateUrl': certificateUrl,
+        'motivation': _motivationController.text.trim(),
+        'status': 'pending',
+        'submittedAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
       });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Application submitted successfully!'),
+            backgroundColor: Color(0xFF7C9C84),
+          ),
+        );
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Submission failed: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
     }
   }
 
@@ -115,382 +217,366 @@ class _ApplyCounsellorScreenState extends State<ApplyCounsellorScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: backgroundColor,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        surfaceTintColor: Colors.transparent,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF333333)),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: Text(
-          'Become a Counselor',
-          style: GoogleFonts.playfairDisplay(
-            color: textColorMain,
-            fontSize: 22,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        centerTitle: true,
-      ),
       body: _isLoadingStatus
           ? Center(child: CircularProgressIndicator(color: primaryGreen))
           : _statusError != null
-          ? Center(
-        child: Padding(
-          padding: const EdgeInsets.all(40),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.info_outline_rounded, size: 64, color: primaryGreen.withOpacity(0.5)),
-              const SizedBox(height: 20),
-              Text(
-                _statusError!,
-                textAlign: TextAlign.center,
-                style: GoogleFonts.outfit(
-                  fontSize: 16,
-                  color: textColorMain,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const SizedBox(height: 32),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton(
-                  onPressed: () => Navigator.pop(context),
-                  style: OutlinedButton.styleFrom(
-                    side: BorderSide(color: primaryGreen),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    padding: const EdgeInsets.symmetric(vertical: 16),
+          ? _buildErrorPlaceholder()
+          : SafeArea(
+        child: Column(
+          children: [
+            _buildAppBar(),
+            _buildProgressIndicator(),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(24),
+                child: Form(
+                  key: _formKey,
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 300),
+                    child: _buildCurrentStepView(),
                   ),
-                  child: Text('Back Home', style: GoogleFonts.outfit(color: primaryGreen)),
                 ),
               ),
-            ],
-          ),
+            ),
+            _buildBottomNav(),
+          ],
         ),
-      )
-          : SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Join our community of professionals and help others find their peace.',
-                style: GoogleFonts.outfit(
-                  fontSize: 16,
-                  color: Colors.grey[600],
-                  height: 1.5,
+      ),
+    );
+  }
+
+  Widget _buildAppBar() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          IconButton(
+            onPressed: () => Navigator.pop(context),
+            icon: const Icon(Icons.close_rounded, color: Color(0xFF333333)),
+          ),
+          Text(
+            'Application Form',
+            style: GoogleFonts.outfit(
+              color: textColorMain,
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(width: 48),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProgressIndicator() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+      child: Row(
+        children: [
+          _buildStepDot(0, 'Credentials'),
+          _buildStepLine(0),
+          _buildStepDot(1, 'Verification'),
+          _buildStepLine(1),
+          _buildStepDot(2, 'Motivation'),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStepDot(int step, String label) {
+    bool isActive = _activeStep >= step;
+    return Expanded(
+      child: Column(
+        children: [
+          Container(
+            width: 24,
+            height: 24,
+            decoration: BoxDecoration(
+              color: isActive ? primaryGreen : Colors.grey[300],
+              shape: BoxShape.circle,
+              boxShadow: isActive
+                  ? [BoxShadow(color: primaryGreen.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 4))]
+                  : null,
+            ),
+            child: Icon(
+              isActive && _activeStep > step ? Icons.check : Icons.circle,
+              size: 12,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            label,
+            style: GoogleFonts.outfit(
+              fontSize: 10,
+              fontWeight: _activeStep == step ? FontWeight.bold : FontWeight.normal,
+              color: _activeStep == step ? primaryGreen : Colors.grey[400],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStepLine(int step) {
+    bool isActive = _activeStep > step;
+    return Container(
+      width: 30,
+      height: 2,
+      margin: const EdgeInsets.only(bottom: 18),
+      color: isActive ? primaryGreen : Colors.grey[300],
+    );
+  }
+
+  Widget _buildCurrentStepView() {
+    switch (_activeStep) {
+      case 0:
+        return _buildCredentialsStep();
+      case 1:
+        return _buildVerificationStep();
+      case 2:
+        return _buildMotivationStep();
+      default:
+        return const SizedBox();
+    }
+  }
+
+  Widget _buildCredentialsStep() {
+    return Column(
+      key: const ValueKey(0),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildStepHeader('Clinical Specializations', 'Select your main areas of expertise.'),
+        const SizedBox(height: 16),
+        _buildChipGroup(_specializations, _selectedSpecializations),
+        const SizedBox(height: 32),
+        _buildStepHeader('Language Preferences', 'What languages can you conduct sessions in?'),
+        const SizedBox(height: 16),
+        _buildChipGroup(_languages, _selectedLanguages),
+        const SizedBox(height: 32),
+        _buildStepHeader('Work Experience', 'Your professional background.'),
+        const SizedBox(height: 16),
+        _buildTextField('Years of Practice', Icons.history_edu, _experienceController, keyboardType: TextInputType.number),
+        const SizedBox(height: 16),
+        _buildTextField('Clinical License / ID', Icons.badge_outlined, _licenseController),
+      ],
+    );
+  }
+
+  Widget _buildChipGroup(List<String> options, List<String> selectedList) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 10,
+      children: options.map((item) {
+        final isSelected = selectedList.contains(item);
+        return FilterChip(
+          label: Text(item),
+          selected: isSelected,
+          onSelected: (selected) {
+            setState(() {
+              if (selected) selectedList.add(item);
+              else selectedList.remove(item);
+            });
+          },
+          backgroundColor: Colors.white,
+          selectedColor: primaryGreen.withOpacity(0.1),
+          checkmarkColor: primaryGreen,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          labelStyle: GoogleFonts.outfit(
+            fontSize: 13,
+            color: isSelected ? primaryGreen : textColorMain,
+            fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: isSelected ? primaryGreen : Colors.grey[200]!),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildVerificationStep() {
+    return Column(
+      key: const ValueKey(1),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildStepHeader('Document Verification', 'Upload proof of your clinical qualifications.'),
+        const SizedBox(height: 24),
+        GestureDetector(
+          onTap: _pickCertificate,
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: _certificateFile == null ? Colors.grey[200]! : primaryGreen.withOpacity(0.5), width: 2),
+            ),
+            child: Column(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(color: primaryGreen.withOpacity(0.1), shape: BoxShape.circle),
+                  child: Icon(_certificateFile == null ? Icons.cloud_upload_outlined : Icons.file_copy_rounded, color: primaryGreen, size: 32),
                 ),
-              ),
-              const SizedBox(height: 32),
-
-              _buildSectionTitle('Professional Details'),
-              const SizedBox(height: 16),
-
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: _specializations.map((spec) {
-                  final isSelected = _selectedSpecializations.contains(spec);
-                  return FilterChip(
-                    label: Text(spec),
-                    selected: isSelected,
-                    onSelected: (selected) {
-                      setState(() {
-                        if (selected) {
-                          _selectedSpecializations.add(spec);
-                        } else {
-                          _selectedSpecializations.remove(spec);
-                        }
-                      });
-                    },
-                    selectedColor: primaryGreen.withOpacity(0.2),
-                    checkmarkColor: primaryGreen,
-                    labelStyle: GoogleFonts.outfit(
-                      fontSize: 13,
-                      color: isSelected ? primaryGreen : textColorMain,
-                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                    ),
-                    backgroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      side: BorderSide(
-                        color: isSelected ? primaryGreen : Colors.transparent,
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
-              if (_selectedSpecializations.isEmpty && _isSubmitting)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8, left: 12),
-                  child: Text(
-                    'Please select at least one specialization',
-                    style: GoogleFonts.outfit(color: Colors.red[700], fontSize: 12),
-                  ),
+                const SizedBox(height: 16),
+                Text(
+                  _certificateFile == null ? 'Click to upload Certificate' : 'Certificate Selected',
+                  style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w600, color: textColorMain),
                 ),
-
-              const SizedBox(height: 16),
-              _buildTextField(
-                'Years of Experience',
-                Icons.history_edu_outlined,
-                _experienceController,
-                keyboardType: TextInputType.number,
-                validator: (value) {
-                  if (value == null || value.isEmpty) return 'Experience is required';
-                  final yrs = int.tryParse(value);
-                  if (yrs == null) return 'Enter a valid number';
-                  if (yrs < 1) return 'Min 1 year required';
-                  if (yrs > 50) return 'Please enter a realistic number';
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-              _buildTextField(
-                'License Number',
-                Icons.badge_outlined,
-                _licenseController,
-                validator: (value) {
-                  if (value == null || value.isEmpty) return 'License number is required';
-                  if (value.length < 5) return 'Should be at least 5 characters';
-                  return null;
-                },
-              ),
-
-              const SizedBox(height: 32),
-
-              _buildSectionTitle('Certification'),
-              const SizedBox(height: 16),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  GestureDetector(
-                    onTap: _pickCertificate,
-                    child: Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: (_certificateFile == null && _isSubmitting)
-                              ? Colors.red[300]!
-                              : (_certificateFile == null ? Colors.grey[300]! : primaryGreen),
-                          width: 1,
-                        ),
-                      ),
-                      child: Column(
-                        children: [
-                          Icon(
-                            _certificateFile == null ? Icons.upload_file_outlined : Icons.check_circle_outline_rounded,
-                            color: (_certificateFile == null && _isSubmitting)
-                                ? Colors.red[400]
-                                : (_certificateFile == null ? Colors.grey[400] : primaryGreen),
-                            size: 32,
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            _certificateFile == null
-                                ? 'Upload your professional certificate'
-                                : 'Certificate Uploaded: ${_certificateFile!.path.split('/').last}',
-                            textAlign: TextAlign.center,
-                            style: GoogleFonts.outfit(
-                              fontSize: 14,
-                              color: (_certificateFile == null && _isSubmitting)
-                                  ? Colors.red[400]
-                                  : (_certificateFile == null ? Colors.grey[500] : primaryGreen),
-                              fontWeight: _certificateFile == null ? FontWeight.normal : FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  if (_certificateFile == null && _isSubmitting)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8, left: 12),
-                      child: Text(
-                        'Certification is required',
-                        style: GoogleFonts.outfit(color: Colors.red[700], fontSize: 12),
-                      ),
-                    ),
+                if (_certificateFile != null) ...[
+                  const SizedBox(height: 8),
+                  Text(_certificateFile!.path.split('/').last, style: GoogleFonts.outfit(fontSize: 12, color: Colors.grey), textAlign: TextAlign.center),
                 ],
-              ),
-
-              const SizedBox(height: 32),
-
-              _buildSectionTitle('Why do you want to join us?'),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _motivationController,
-                maxLines: 4,
-                validator: (value) {
-                  if (value == null || value.isEmpty) return 'Please share your motivation';
-                  if (value.length < 50) return 'Please be more detailed (min 50 chars)';
-                  return null;
-                },
-                decoration: InputDecoration(
-                  hintText: 'Tell us about your approach and motivation...',
-                  hintStyle: GoogleFonts.outfit(color: Colors.grey[400], fontSize: 14),
-                  filled: true,
-                  fillColor: Colors.white,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    borderSide: BorderSide.none,
-                  ),
-                  errorBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    borderSide: const BorderSide(color: Colors.red, width: 1),
-                  ),
-                  focusedErrorBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    borderSide: const BorderSide(color: Colors.red, width: 1),
-                  ),
-                  contentPadding: const EdgeInsets.all(20),
-                ),
-              ),
-
-              const SizedBox(height: 40),
-
-              SizedBox(
-                width: double.infinity,
-                height: 56,
-                child: ElevatedButton(
-                  onPressed: _isSubmitting ? null : () async {
-                    if (_formKey.currentState!.validate() &&
-                        _selectedSpecializations.isNotEmpty &&
-                        _certificateFile != null) {
-
-                      final user = FirebaseAuth.instance.currentUser;
-                      if (user == null) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Please login to apply.')),
-                        );
-                        return;
-                      }
-
-                      setState(() => _isSubmitting = true);
-
-                      try {
-                        // 1. Upload Certificate to Storage
-                        final storageRef = FirebaseStorage.instance
-                            .ref()
-                            .child('counsellor_applications/certificates/${user.uid}_${DateTime.now().millisecondsSinceEpoch}.jpg');
-
-                        final uploadTask = await storageRef.putFile(_certificateFile!);
-                        final certificateUrl = await uploadTask.ref.getDownloadURL();
-
-                        // 2. Save Application to Firestore
-                        await FirebaseFirestore.instance.collection('counsellor_applications').doc(user.uid).set({
-                          'uid': user.uid,
-                          'name': user.displayName ?? 'Anonymous User',
-                          'email': user.email,
-                          'specializations': _selectedSpecializations,
-                          'experience': _experienceController.text.trim(),
-                          'licenseNumber': _licenseController.text.trim(),
-                          'certificateUrl': certificateUrl,
-                          'motivation': _motivationController.text.trim(),
-                          'status': 'pending',
-                          'submittedAt': FieldValue.serverTimestamp(),
-                          'updatedAt': FieldValue.serverTimestamp(),
-                        });
-
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Application submitted successfully! Our team will review it.'),
-                              backgroundColor: Color(0xFF7C9C84),
-                            ),
-                          );
-                          Navigator.pop(context);
-                        }
-                      } catch (e) {
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Submission failed: $e')),
-                          );
-                        }
-                      } finally {
-                        if (mounted) setState(() => _isSubmitting = false);
-                      }
-                    } else {
-                      // Trigger rebuild to show manual validation errors for Chips and File upload
-                      setState(() {});
-                    }
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: primaryGreen,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    elevation: 0,
-                  ),
-                  child: _isSubmitting
-                      ? const CircularProgressIndicator(color: Colors.white)
-                      : Text(
-                    'Submit Application',
-                    style: GoogleFonts.outfit(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 40),
-            ],
+              ],
+            ),
           ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMotivationStep() {
+    return Column(
+      key: const ValueKey(2),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildStepHeader('Personal Statement', 'Tell our medical board about your vision and clinical approach.'),
+        const SizedBox(height: 20),
+        TextFormField(
+          controller: _motivationController,
+          maxLines: 8,
+          style: GoogleFonts.outfit(fontSize: 14),
+          decoration: InputDecoration(
+            hintText: 'Share your journey as a therapist...',
+            filled: true,
+            fillColor: Colors.white,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none),
+            contentPadding: const EdgeInsets.all(24),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Icon(Icons.info_outline, size: 14, color: Colors.grey[400]),
+            const SizedBox(width: 8),
+            Text('Minimum 50 characters required for clinical review.', style: GoogleFonts.outfit(fontSize: 11, color: Colors.grey[500])),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStepHeader(String title, String subtitle) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: GoogleFonts.playfairDisplay(fontSize: 24, fontWeight: FontWeight.bold, color: textColorMain)),
+        const SizedBox(height: 4),
+        Text(subtitle, style: GoogleFonts.outfit(fontSize: 14, color: Colors.grey[600])),
+      ],
+    );
+  }
+
+  Widget _buildBottomNav() {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 20, offset: const Offset(0, -5))],
+      ),
+      child: Row(
+        children: [
+          if (_activeStep > 0) ...[
+            Expanded(
+              flex: 1,
+              child: OutlinedButton(
+                onPressed: () => setState(() => _activeStep--),
+                style: OutlinedButton.styleFrom(
+                  side: BorderSide(color: Colors.grey[300]!),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                ),
+                child: Text('Previous', style: GoogleFonts.outfit(color: textColorMain, fontWeight: FontWeight.bold)),
+              ),
+            ),
+            const SizedBox(width: 16),
+          ],
+          Expanded(
+            flex: 2,
+            child: ElevatedButton(
+              onPressed: _isSubmitting ? null : () {
+                if (_activeStep < 2) {
+                  if (_validateStep()) setState(() => _activeStep++);
+                } else {
+                  _submitFinalApplication();
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: primaryGreen,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                elevation: 0,
+              ),
+              child: _isSubmitting
+                  ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                  : Text(_activeStep == 2 ? 'Submit Application' : 'Continue', style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildErrorPlaceholder() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(40),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(color: Colors.white, shape: BoxShape.circle, border: Border.all(color: primaryGreen.withOpacity(0.1), width: 10)),
+              child: Icon(Icons.medical_services_outlined, size: 48, color: primaryGreen),
+            ),
+            const SizedBox(height: 32),
+            Text(_statusError!, textAlign: TextAlign.center, style: GoogleFonts.playfairDisplay(fontSize: 20, color: textColorMain, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 48),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: () => Navigator.pop(context),
+                style: OutlinedButton.styleFrom(
+                  side: BorderSide(color: primaryGreen),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                ),
+                child: Text('Back to Home', style: GoogleFonts.outfit(color: primaryGreen, fontWeight: FontWeight.bold)),
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildSectionTitle(String title) {
-    return Text(
-      title.toUpperCase(),
-      style: GoogleFonts.outfit(
-        fontSize: 12,
-        fontWeight: FontWeight.bold,
-        letterSpacing: 1.2,
-        color: primaryGreen,
-      ),
-    );
-  }
-
-  Widget _buildTextField(
-      String label,
-      IconData icon,
-      TextEditingController controller, {
-        TextInputType? keyboardType,
-        String? Function(String?)? validator,
-      }) {
+  Widget _buildTextField(String label, IconData icon, TextEditingController controller, {TextInputType? keyboardType}) {
     return TextFormField(
       controller: controller,
       keyboardType: keyboardType,
-      validator: validator,
+      style: GoogleFonts.outfit(fontSize: 14),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: GoogleFonts.outfit(color: Colors.grey[500], fontSize: 14),
-        prefixIcon: Icon(icon, color: primaryGreen, size: 20),
+        labelStyle: GoogleFonts.outfit(color: Colors.grey[500], fontSize: 13),
+        prefixIcon: Icon(icon, color: primaryGreen, size: 18),
         filled: true,
         fillColor: Colors.white,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide.none,
-        ),
-        errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: Colors.red, width: 1),
-        ),
-        focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: Colors.red, width: 1),
-        ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: Colors.grey[100]!)),
+        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: Colors.grey[100]!)),
+        contentPadding: const EdgeInsets.all(18),
       ),
     );
   }

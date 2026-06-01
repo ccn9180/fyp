@@ -127,3 +127,18 @@ export function useAllDiaries() {
 export function usePosts() {
   return useCollection('posts', [orderBy('timestamp', 'desc')]);
 }
+
+/**
+ * Hook: fetch all XP logs entries (cross-user) using collection group
+ */
+export function useAllXPEntries() {
+  return useCollectionGroup('entries');
+}
+
+/**
+ * Hook: fetch all rewards (collection: 'rewards')
+ */
+export function useRewards() {
+  return useCollection('rewards');
+}
+

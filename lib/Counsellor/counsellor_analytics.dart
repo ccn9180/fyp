@@ -1,6 +1,9 @@
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import '../User/report_generator_service.dart';
 
 class CounsellorAnalyticsScreen extends StatelessWidget {
   const CounsellorAnalyticsScreen({super.key});
@@ -24,6 +27,37 @@ class CounsellorAnalyticsScreen extends StatelessWidget {
           'Performance Analytics',
           style: GoogleFonts.playfairDisplay(color: textColorMain, fontWeight: FontWeight.bold),
         ),
+        actions: [
+          IconButton(
+            icon: Icon(Icons.picture_as_pdf_rounded, color: primaryGreen),
+            tooltip: 'Export Performance Report',
+            onPressed: () async {
+              final uid = FirebaseAuth.instance.currentUser?.uid;
+              String docName = 'Expert';
+              if (uid != null) {
+                final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+                if (doc.exists) {
+                   docName = doc.data()?['fullName']?.split(' ')[0] ?? 'Expert';
+                }
+              }
+              await ReportGeneratorService.generateCounsellorPerformanceReport(
+                counsellorName: docName,
+                totalSessions: '142',
+                avgRating: '4.92',
+                feedbackCount: '99',
+                clinicalHours: '113.6',
+                completionRate: '94%',
+                retentionRate: '82%',
+                rangeLabel: 'Overall',
+                dateRange: DateTimeRange(
+                  start: DateTime.now().subtract(const Duration(days: 30)),
+                  end: DateTime.now(),
+                ),
+              );
+            },
+          ),
+          const SizedBox(width: 8),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),

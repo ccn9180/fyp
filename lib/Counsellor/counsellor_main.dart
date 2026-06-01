@@ -5,7 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'counsellor_dashboard.dart';
 import 'counsellor_profile.dart';
 import 'counsellor_schedule.dart';
-import 'shared_chats.dart';
+import 'counsellor_performance.dart';
 
 class CounsellorMainScreen extends StatefulWidget {
   const CounsellorMainScreen({super.key});
@@ -15,7 +15,7 @@ class CounsellorMainScreen extends StatefulWidget {
 }
 
 class _CounsellorMainScreenState extends State<CounsellorMainScreen> {
-  int _selectedIndex = 3; // Start on Profile as requested
+  int _selectedIndex = 0; // Start on Dashboard for a fresh entry
 
   late List<Widget> _pages;
 
@@ -25,7 +25,7 @@ class _CounsellorMainScreenState extends State<CounsellorMainScreen> {
     _pages = [
       CounsellorDashboardScreen(onTabChange: _onItemTapped),
       const CounsellorScheduleScreen(),
-      const SharedChatsScreen(),
+      const CounsellorPerformanceScreen(),
       CounsellorProfileScreen(onTabChange: _onItemTapped),
     ];
     _saveCurrentSide();
@@ -68,9 +68,9 @@ class _CounsellorMainScreenState extends State<CounsellorMainScreen> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _buildNavItem(0, Icons.dashboard_rounded, Icons.dashboard_outlined, "Dashboard"),
-              _buildNavItem(1, Icons.calendar_today_rounded, Icons.calendar_today_outlined, "Schedule"),
-              _buildNavItem(2, Icons.insights_rounded, Icons.insights_outlined, "Insights"),
+              _buildNavItem(0, Icons.grid_view_rounded, Icons.grid_view_outlined, "Home"),
+              _buildNavItem(1, Icons.calendar_month_rounded, Icons.calendar_month_outlined, "Sessions"),
+              _buildNavItem(2, Icons.analytics_rounded, Icons.analytics_outlined, "Performance"),
               _buildNavItem(3, Icons.person_rounded, Icons.person_outline_rounded, "Profile"),
             ],
           ),
@@ -93,14 +93,14 @@ class _CounsellorMainScreenState extends State<CounsellorMainScreen> {
           Icon(
             isSelected ? activeIcon : inactiveIcon,
             color: isSelected ? const Color(0xFF7C9C84) : const Color(0xFFBDBDBD),
-            size: 26,
+            size: 24,
           ),
           const SizedBox(height: 4),
           Text(
             label,
             style: GoogleFonts.outfit(
-              fontSize: 10,
-              fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+              fontSize: 9,
+              fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
               color: isSelected ? const Color(0xFF7C9C84) : const Color(0xFFBDBDBD),
             ),
           ),
@@ -140,7 +140,6 @@ class _CounsellorMainScreenState extends State<CounsellorMainScreen> {
               ),
             ),
             const SizedBox(height: 24),
-
             _buildSwitchItem(
               title: "Counsellor Side (Current)",
               subtitle: "Manage your expert portal",
@@ -148,9 +147,7 @@ class _CounsellorMainScreenState extends State<CounsellorMainScreen> {
               isActive: true,
               onTap: () => Navigator.pop(context),
             ),
-
             const SizedBox(height: 12),
-
             _buildSwitchItem(
               title: "User Side",
               subtitle: "Back to peaceful community",
@@ -160,8 +157,8 @@ class _CounsellorMainScreenState extends State<CounsellorMainScreen> {
                 final prefs = await SharedPreferences.getInstance();
                 await prefs.setString('last_used_side', 'user');
                 if (mounted) {
-                  Navigator.pop(context); // Close bottom sheet
-                  Navigator.pop(context); // Switch back to MainScreen (user side)
+                  Navigator.pop(context); 
+                  Navigator.pop(context); 
                 }
               },
             ),

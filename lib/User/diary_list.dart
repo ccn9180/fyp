@@ -4,7 +4,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:fyp/app_localizations.dart';
 import 'add_diary.dart';
-import 'notifications.dart';
 import 'diary_drafts.dart';
 import 'diary_detail.dart';
 
@@ -26,7 +25,7 @@ class _DiaryListScreenState extends State<DiaryListScreen> {
   final Color textColorMain = const Color(0xFF333333);
   final Color textColorSub = const Color(0xFF888888);
 
-  final List<String> _filters = ['All', 'Happy', 'Calm', 'Neutral', 'Anxious', 'Angry'];
+  final List<String> _filters = ['All', 'Happy', 'Calm', 'Neutral', 'Anxious', 'Angry', 'Sad'];
 
   @override
   void dispose() {
@@ -206,6 +205,9 @@ class _DiaryListScreenState extends State<DiaryListScreen> {
                     ] else if (filter == 'Angry') ...[
                       Icon(Icons.storm_outlined, size: 16, color: isSelected ? Colors.white : primaryGreen),
                       const SizedBox(width: 8),
+                    ] else if (filter == 'Sad') ...[
+                      Icon(Icons.sentiment_very_dissatisfied_rounded, size: 16, color: isSelected ? Colors.white : primaryGreen),
+                      const SizedBox(width: 8),
                     ],
                     Text(
                       filter,
@@ -326,14 +328,19 @@ class _DiaryListScreenState extends State<DiaryListScreen> {
         }
 
         final documents = snapshot.data?.docs ?? [];
-
+        
         // Final Client-side Search Filtering
-        final entries = documents.where((doc) {
+        final List<Map<String, dynamic>> entries = [];
+
+        for (var doc in documents) {
           final data = doc.data() as Map<String, dynamic>;
           final title = (data['title'] ?? '').toString().toLowerCase();
-          final content = (data['content'] ?? '').toString().toLowerCase();
-          return title.contains(_searchQuery) || content.contains(_searchQuery);
-        }).toList();
+          final entriesContent = (data['content'] ?? '').toString().toLowerCase();
+          if (title.contains(_searchQuery) || entriesContent.contains(_searchQuery)) {
+            data['id'] = doc.id;
+            entries.add(data);
+          }
+        }
 
         if (entries.isEmpty) {
           return _buildEmptyState();
@@ -344,9 +351,8 @@ class _DiaryListScreenState extends State<DiaryListScreen> {
           itemCount: entries.length,
           separatorBuilder: (context, index) => const SizedBox(height: 16),
           itemBuilder: (context, index) {
-            final doc = entries[index];
-            final data = doc.data() as Map<String, dynamic>;
-            return _buildDiaryCard(doc.id, data);
+            final data = entries[index];
+            return _buildDiaryCard(data['id'], data);
           },
         );
       },
@@ -402,6 +408,11 @@ class _DiaryListScreenState extends State<DiaryListScreen> {
         moodBgColor = const Color(0xFFF5F5F5);
         moodEmoji = '😐';
         break;
+      case 'Sad':
+        moodColor = const Color(0xFF9C27B0);
+        moodBgColor = const Color(0xFFF3E5F5);
+        moodEmoji = '😢';
+        break;
       case 'Calm':
       default:
         moodColor = const Color(0xFF2196F3);
@@ -415,7 +426,10 @@ class _DiaryListScreenState extends State<DiaryListScreen> {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => DiaryDetailScreen(docId: docId),
+            builder: (context) => DiaryDetailScreen(
+              docId: docId,
+              mockData: docId.startsWith('hc_') ? data : null,
+            ),
           ),
         );
       },
@@ -447,7 +461,17 @@ class _DiaryListScreenState extends State<DiaryListScreen> {
                     color: const Color(0xFF888888),
                   ),
                 ),
-                const Icon(Icons.more_vert, color: Color(0xFF888888), size: 20),
+                GestureDetector(
+                  onTap: () => _showActionSheet(context, docId, data),
+                  child: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.03),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.more_vert_rounded, color: Color(0xFF888888), size: 20),
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 12),
@@ -476,10 +500,26 @@ class _DiaryListScreenState extends State<DiaryListScreen> {
                   ),
                 ),
                 const SizedBox(width: 8),
-                if (mood == 'Happy' || mood == 'Anxious')
-                  Icon(Icons.group_outlined, size: 16, color: const Color(0xFFB0B0B0))
+                if (data['sharingAccess'] != null && (data['sharingAccess'] as Map).values.any((v) => v == true))
+                   Container(
+                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                     decoration: BoxDecoration(
+                       color: const Color(0xFFFFEBEE),
+                       borderRadius: BorderRadius.circular(6),
+                     ),
+                     child: Row(
+                       children: [
+                         const Icon(Icons.share_outlined, size: 10, color: Color(0xFFE57373)),
+                         const SizedBox(width: 4),
+                         Text(
+                           'SHARED',
+                           style: GoogleFonts.outfit(fontSize: 8, fontWeight: FontWeight.bold, color: const Color(0xFFE57373)),
+                         ),
+                       ],
+                     ),
+                   )
                 else
-                  Icon(Icons.lock_outline, size: 16, color: const Color(0xFFB0B0B0)),
+                  const Icon(Icons.lock_outline_rounded, size: 16, color: Color(0xFFB0B0B0)),
               ],
             ),
             const SizedBox(height: 16),
@@ -551,6 +591,314 @@ class _DiaryListScreenState extends State<DiaryListScreen> {
           ),
           const SizedBox(height: 80), // offset for spacing
         ],
+      ),
+    );
+  }
+
+  void _showActionSheet(BuildContext context, String docId, Map<String, dynamic> data) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+        decoration: const BoxDecoration(
+          color: Color(0xFFF2F1EC),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black12,
+              blurRadius: 20,
+              offset: Offset(0, -5),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 42,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 32),
+            Text(
+              'Entry Options',
+              style: GoogleFonts.playfairDisplay(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: const Color(0xFF333333),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Manage your reflection',
+              style: GoogleFonts.outfit(
+                fontSize: 14,
+                color: const Color(0xFF888888),
+              ),
+            ),
+            const SizedBox(height: 32),
+            _buildActionItem(
+              title: "Edit Reflection",
+              subtitle: "Update your thoughts or emotions",
+              icon: Icons.edit_note_rounded,
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => AddDiaryScreen(
+                      entryId: docId,
+                      initialData: data,
+                      isDraft: false,
+                    ),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 12),
+            _buildActionItem(
+              title: "View Full Entry",
+              subtitle: "Read your complete reflection",
+              icon: Icons.chrome_reader_mode_outlined,
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => DiaryDetailScreen(docId: docId),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 12),
+            _buildActionItem(
+              title: "Delete Entry",
+              subtitle: "Permanently remove from diary",
+              icon: Icons.delete_outline_rounded,
+              isDestructive: true,
+              onTap: () {
+                Navigator.pop(context);
+                _showDeleteDialog(context, docId);
+              },
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: TextButton(
+                onPressed: () => Navigator.pop(context),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+                child: Text(
+                  'Cancel',
+                  style: GoogleFonts.outfit(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF888888),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActionItem({
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required VoidCallback onTap,
+    bool isDestructive = false,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(24),
+      child: Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.03),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: isDestructive ? const Color(0xFFFFEBEE) : const Color(0xFFF5F7F6),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                icon,
+                color: isDestructive ? const Color(0xFFE57373) : const Color(0xFF7C9C84),
+                size: 24,
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: GoogleFonts.outfit(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: isDestructive ? const Color(0xFFE57373) : const Color(0xFF333333),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: GoogleFonts.outfit(
+                      fontSize: 13,
+                      color: Colors.grey[500],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right_rounded, color: Colors.grey[300], size: 24),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showDeleteDialog(BuildContext context, String docId) {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+        elevation: 0,
+        backgroundColor: Colors.transparent,
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF2F1EC),
+            borderRadius: BorderRadius.circular(28),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.12),
+                blurRadius: 20,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: const BoxDecoration(
+                  color: Color(0xFFFFEBEE),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.delete_outline_rounded,
+                  color: Color(0xFFE57373),
+                  size: 32,
+                ),
+              ),
+              const SizedBox(height: 24),
+              Text(
+                'Delete Entry?',
+                style: GoogleFonts.playfairDisplay(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: const Color(0xFF333333),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'This diary entry will be permanently removed from your collection. Are you sure?',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.outfit(
+                  fontSize: 14,
+                  color: const Color(0xFF666666),
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 32),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                      child: Text(
+                        'Keep it',
+                        style: GoogleFonts.outfit(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF888888),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () async {
+                        final user = FirebaseAuth.instance.currentUser;
+                        if (user != null) {
+                          await FirebaseFirestore.instance
+                              .collection('users')
+                              .doc(user.uid)
+                              .collection('diary_entries')
+                              .doc(docId)
+                              .delete();
+                          if (ctx.mounted) {
+                            Navigator.pop(ctx);
+                          }
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFE57373),
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                      child: Text(
+                        'Delete',
+                        style: GoogleFonts.outfit(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
