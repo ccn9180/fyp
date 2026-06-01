@@ -3,9 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:intl/intl.dart';
 import 'edit_counsellor_profile.dart';
 import 'counsellor_availability_management.dart';
+import 'counsellor_history.dart';
+import 'counsellor_deactivation.dart';
 
 class CounsellorProfileScreen extends StatefulWidget {
   final Function(int)? onTabChange;
@@ -51,212 +52,120 @@ class _CounsellorProfileScreenState extends State<CounsellorProfileScreen> {
 
           final data = snapshot.data?.data() as Map<String, dynamic>? ?? {};
           final String name = data['fullName'] ?? user?.displayName ?? 'Expert Counselor';
-          final String bio = data['counsellorBio'] ?? 'Dedicated to helping individuals achieve mental well-being and emotional balance through professional guidance.';
           final List<dynamic> specs = data['specializations'] ?? ['Mental Health Specialist'];
           final String specialty = specs.isNotEmpty ? specs[0].toString() : 'Mental Health Specialist';
-          final String experience = data['experience'] ?? '0';
           final String? profileImageUrl = data['counsellorImageUrl'] ?? user?.photoURL;
-          final String languages = data['languages'] ?? 'English, Malay, Mandarin';
 
           return SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
             child: Column(
               children: [
-                // Expert Header
+                // Expert Header (Clean Centered Identity)
                 Column(
                   children: [
                     Stack(
                       alignment: Alignment.bottomRight,
                       children: [
                         Container(
-                          width: 120,
-                          height: 120,
+                          width: 100,
+                          height: 100,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             border: Border.all(color: Colors.white, width: 4),
                             boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.1),
-                                blurRadius: 15,
-                                offset: const Offset(0, 8),
-                              ),
+                              BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 15, offset: const Offset(0, 8)),
                             ],
                             image: profileImageUrl != null
                                 ? (profileImageUrl.startsWith('data:image')
-                                ? DecorationImage(
-                              image: MemoryImage(base64Decode(profileImageUrl.split(',').last)),
-                              fit: BoxFit.cover,
-                            )
-                                : DecorationImage(
-                              image: NetworkImage(profileImageUrl),
-                              fit: BoxFit.cover,
-                            ))
+                                ? DecorationImage(image: MemoryImage(base64Decode(profileImageUrl.split(',').last)), fit: BoxFit.cover)
+                                : DecorationImage(image: NetworkImage(profileImageUrl), fit: BoxFit.cover))
                                 : null,
                           ),
-                          child: profileImageUrl == null
-                              ? const Icon(Icons.person, size: 60, color: Color(0xFFBDBDBD))
-                              : null,
+                          child: profileImageUrl == null ? const Icon(Icons.person, size: 50, color: Color(0xFFBDBDBD)) : null,
                         ),
                         Container(
-                          padding: const EdgeInsets.all(6),
-                          decoration: const BoxDecoration(
-                            color: Color(0xFF7C9C84),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(Icons.verified_user_rounded, color: Colors.white, size: 20),
+                          padding: const EdgeInsets.all(4),
+                          decoration: const BoxDecoration(color: Color(0xFF7C9C84), shape: BoxShape.circle),
+                          child: const Icon(Icons.verified_user_rounded, color: Colors.white, size: 16),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 16),
                     Text(
                       name,
-                      style: GoogleFonts.playfairDisplay(
-                        fontSize: 26,
-                        fontWeight: FontWeight.bold,
-                        color: textColorMain,
-                      ),
+                      style: GoogleFonts.playfairDisplay(fontSize: 26, fontWeight: FontWeight.bold, color: textColorMain),
                     ),
                     Text(
                       specialty.toUpperCase(),
-                      style: GoogleFonts.outfit(
-                        fontSize: 14,
-                        color: primaryGreen,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 1.1,
-                      ),
+                      style: GoogleFonts.outfit(fontSize: 12, color: primaryGreen, fontWeight: FontWeight.w600, letterSpacing: 1.1),
                     ),
                     const SizedBox(height: 24),
-
-                    // Edit Profile Button
+                    // Large Centered "Edit Professional Profile" Button (Restored Design)
                     ElevatedButton(
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (context) => const EditCounsellorProfileScreen()),
-                        );
-                      },
+                      onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const EditCounsellorProfileScreen())),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFFE3E8E4),
                         elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(30),
-                        ),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
                         padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
                       ),
                       child: Text(
                         'Edit Professional Profile',
-                        style: GoogleFonts.outfit(
-                          color: const Color(0xFF7C9C84),
-                          fontWeight: FontWeight.w600,
-                          fontSize: 14,
-                        ),
+                        style: GoogleFonts.outfit(color: primaryGreen, fontWeight: FontWeight.w600, fontSize: 14),
                       ),
                     ),
-                    const SizedBox(height: 32),
-
-                    // Bio Section
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 10),
-                      child: Text(
-                        bio,
-                        textAlign: TextAlign.center,
-                        style: GoogleFonts.outfit(
-                          fontSize: 14,
-                          color: Colors.grey[600],
-                          height: 1.6,
-                        ),
-                      ),
-                    ),
+                    const SizedBox(height: 12),
                   ],
                 ),
-                const SizedBox(height: 40),
+                
+                const SizedBox(height: 48),
 
-                // Performance Bar
-                Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(28),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.02),
-                        blurRadius: 20,
-                        offset: const Offset(0, 10),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      _buildMetric('4.9', 'Rating'),
-                      _buildMetric('124', 'Sessions'),
-                      _buildMetric('98%', 'Approval'),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 32),
-
-                // Professional Details
-                _buildSectionHeader('PROFESSIONAL PROFILE'),
+                // MANAGEMENT TOOLS Group
+                _buildGroupHeader('PRACTICE TOOLS'),
                 const SizedBox(height: 16),
-                _buildInfoTile(Icons.history_edu_rounded, 'Experience', '$experience Years', () {}),
-                _buildInfoTile(Icons.language_rounded, 'Languages', languages, () {}),
-                _buildInfoTile(Icons.medical_services_outlined, 'Specialty', specs.join(', '), () {}),
+                _buildSectionContainer([
+                  _buildListTile(Icons.calendar_month_rounded, 'Schedule Management', 'Setup your booking slots', () {
+                    Navigator.push(context, MaterialPageRoute(builder: (context) => const CounsellorAvailabilityManagement()));
+                  }),
+                  const Divider(height: 1, indent: 60),
+                  _buildListTile(Icons.history_rounded, 'Clinical History', 'View completed consultations', () {
+                    Navigator.push(context, MaterialPageRoute(builder: (context) => const SessionHistoryScreen()));
+                  }),
+                ]),
 
-                // Grouped Availability Section
                 const SizedBox(height: 32),
-                _buildSectionHeader('AVAILABILITY'),
+                
+                // STATUS Group
+                _buildGroupHeader('ACCOUNT & STATUS'),
                 const SizedBox(height: 16),
-
-                StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance
-                      .collection('counsellor_availability')
-                      .where('counsellorId', isEqualTo: user?.uid)
-                      .snapshots(),
-                  builder: (context, snapshot) {
-                    String summary = 'No slots set';
-                    if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
-                      final docs = snapshot.data!.docs;
-                      final days = docs.map((d) => (d.data() as Map<String, dynamic>)['day']?.toString().substring(0, 3)).toSet().toList();
-                      summary = '${days.join(", ")} available';
-                    }
-                    return _buildInfoTile(
-                      Icons.calendar_month_rounded,
-                      'Schedule Management',
-                      summary,
-                          () => Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (context) => const CounsellorAvailabilityManagement())
-                      ),
-                    );
-                  },
-                ),
-
-                const SizedBox(height: 40),
-
-                // Switch Hint
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: primaryGreen.withOpacity(0.08),
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(color: primaryGreen.withOpacity(0.2)),
+                _buildSectionContainer([
+                  _buildListTile(
+                    Icons.no_accounts_outlined, 
+                    'Retire / Deactivate Profile', 
+                    'Send formal retirement request for review', 
+                    () => Navigator.push(context, MaterialPageRoute(builder: (context) => const CounsellorDeactivationScreen())),
+                    isWarning: true,
                   ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.info_outline_rounded, color: primaryGreen, size: 24),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Text(
-                          'Hold profile icon to switch back to User view',
-                          style: GoogleFonts.outfit(
-                            fontSize: 13,
-                            color: textColorMain,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                    ],
+                ]),
+
+                const SizedBox(height: 48),
+
+                // Logout Action
+                SizedBox(
+                  width: double.infinity,
+                  height: 56,
+                  child: OutlinedButton.icon(
+                    onPressed: () => _showLogoutDialog(context),
+                    icon: const Icon(Icons.logout_rounded, color: Color(0xFFFF8A8A)),
+                    label: Text(
+                      'Log Out',
+                      style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w600, color: const Color(0xFFFF8A8A)),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Color(0xFFFFCDCD)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                      backgroundColor: const Color(0xFFFFF5F5),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 100),
@@ -268,83 +177,58 @@ class _CounsellorProfileScreenState extends State<CounsellorProfileScreen> {
     );
   }
 
-  Widget _buildMetric(String value, String label) {
-    return Column(
-      children: [
-        Text(
-          value,
-          style: GoogleFonts.outfit(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: textColorMain,
-          ),
-        ),
-        Text(
-          label,
-          style: GoogleFonts.outfit(
-            fontSize: 12,
-            color: Colors.grey[500],
-          ),
-        ),
-      ],
+  void _showLogoutDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: Text('Log Out', style: GoogleFonts.playfairDisplay(fontWeight: FontWeight.bold)),
+        content: Text('Are you sure you want to log out from your expert session?', style: GoogleFonts.outfit()),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: Text('Cancel', style: GoogleFonts.outfit(color: Colors.grey))),
+          TextButton(onPressed: () => FirebaseAuth.instance.signOut(), child: Text('Log Out', style: GoogleFonts.outfit(color: Colors.red))),
+        ],
+      ),
     );
   }
 
-  Widget _buildSectionHeader(String title) {
+  Widget _buildGroupHeader(String title) {
     return Align(
       alignment: Alignment.centerLeft,
       child: Text(
         title,
-        style: GoogleFonts.outfit(
-          fontSize: 12,
-          fontWeight: FontWeight.bold,
-          letterSpacing: 1.2,
-          color: Colors.grey[400],
-        ),
+        style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.0, color: const Color(0xFFB0B0B0)),
       ),
     );
   }
 
-  Widget _buildInfoTile(IconData icon, String title, String value, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, color: primaryGreen, size: 22),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: GoogleFonts.outfit(
-                      fontSize: 12,
-                      color: Colors.grey[500],
-                    ),
-                  ),
-                  Text(
-                    value,
-                    style: GoogleFonts.outfit(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: textColorMain,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const Icon(Icons.chevron_right_rounded, color: Colors.grey, size: 20),
-          ],
-        ),
+  Widget _buildSectionContainer(List<Widget> children) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.01), blurRadius: 10, offset: const Offset(0, 4))],
       ),
+      child: Column(children: children),
+    );
+  }
+
+  Widget _buildListTile(IconData icon, String title, String subtitle, VoidCallback onTap, {bool isWarning = false}) {
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+      leading: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: isWarning ? const Color(0xFFFFF5F5) : const Color(0xFFF5F7F6),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Icon(icon, color: isWarning ? Colors.red[400] : primaryGreen, size: 22),
+      ),
+      title: Text(title, style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w600, color: isWarning ? Colors.red[400] : textColorMain)),
+      subtitle: Text(subtitle, style: GoogleFonts.outfit(fontSize: 12, color: Colors.grey[500])),
+      trailing: const Icon(Icons.chevron_right_rounded, color: Colors.grey, size: 20),
+      onTap: onTap,
     );
   }
 }

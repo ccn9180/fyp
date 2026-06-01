@@ -14,6 +14,7 @@ class CounsellorDetailScreen extends StatefulWidget {
   final String patients;
   final String imageUrl;
   final String about;
+  final String price;
 
   const CounsellorDetailScreen({
     super.key,
@@ -25,6 +26,7 @@ class CounsellorDetailScreen extends StatefulWidget {
     this.patients = '500+',
     this.imageUrl = 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&q=80&w=2000',
     this.about = 'Dr. Sarah specializes in mindful-based cognitive therapy and trauma recovery...',
+    this.price = 'Free',
   });
 
   @override
@@ -35,11 +37,74 @@ class _CounsellorDetailScreenState extends State<CounsellorDetailScreen> {
   final User? currentUser = FirebaseAuth.instance.currentUser;
   bool isFavorited = false;
   bool isLoading = true;
+  bool _isLoadingDetails = true;
+  Map<String, dynamic>? _counsellorData;
 
   @override
   void initState() {
     super.initState();
     _checkFavoriteStatus();
+    _fetchCounsellorDetails();
+  }
+
+  Future<void> _fetchCounsellorDetails() async {
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(widget.counsellorId)
+          .get();
+      if (doc.exists && mounted) {
+        setState(() {
+          _counsellorData = doc.data();
+          _isLoadingDetails = false;
+        });
+      } else if (mounted) {
+        setState(() => _isLoadingDetails = false);
+      }
+    } catch (e) {
+      print("Error fetching counsellor details: $e");
+      if (mounted) setState(() => _isLoadingDetails = false);
+    }
+  }
+
+  List<String> _getCounsellorSpecializations() {
+    if (_counsellorData != null) {
+      final List<dynamic>? specs = _counsellorData!['specializations'];
+      if (specs != null && specs.isNotEmpty) {
+        return List<String>.from(specs);
+      }
+    }
+    return [widget.specialty];
+  }
+
+  List<String> _getCounsellorLanguages() {
+    if (_counsellorData != null) {
+      final dynamic langData = _counsellorData!['languages'];
+      if (langData is List && langData.isNotEmpty) {
+        return List<String>.from(langData);
+      } else if (langData is String && langData.isNotEmpty) {
+        return langData.split(', ').toList();
+      }
+    }
+    return ['English'];
+  }
+
+  Widget _buildLanguageChip(String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEEF3F0),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        label,
+        style: GoogleFonts.outfit(
+          fontSize: 14,
+          color: const Color(0xFF4C5E51),
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
   }
 
   Future<void> _checkFavoriteStatus() async {
@@ -203,10 +268,29 @@ class _CounsellorDetailScreenState extends State<CounsellorDetailScreen> {
                         const Icon(Icons.school_outlined, size: 16, color: Color(0xFF888888)),
                         const SizedBox(width: 6),
                         Text(
-                          'PhD, PsyD • ${widget.experience} experience',
+                          'License: ${_counsellorData?['licenseNumber'] ?? 'Verifying...'} • ${widget.experience} exp',
                           style: GoogleFonts.outfit(
                             fontSize: 13,
                             color: textColorSub,
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.monetization_on_outlined, size: 16, color: Color(0xFF888888)),
+                        const SizedBox(width: 6),
+                        Text(
+                          (widget.price.toLowerCase() == 'free' || widget.price == '0' || widget.price.trim().isEmpty)
+                              ? 'Free Session'
+                              : (widget.price.startsWith('RM') ? widget.price : 'RM${widget.price}/hr'),
+                          style: GoogleFonts.outfit(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: primaryGreen,
                           ),
                         ),
                       ],
@@ -243,7 +327,7 @@ class _CounsellorDetailScreenState extends State<CounsellorDetailScreen> {
                         ),
                         const SizedBox(height: 12),
                         Text(
-                          widget.about,
+                          _counsellorData?['bio'] ?? widget.about,
                           style: GoogleFonts.outfit(
                             fontSize: 15,
                             color: const Color(0xFF7A8981),
@@ -271,12 +355,30 @@ class _CounsellorDetailScreenState extends State<CounsellorDetailScreen> {
                         Wrap(
                           spacing: 12,
                           runSpacing: 12,
-                          children: [
-                            _buildSpecialtyChip('Anxiety Recovery'),
-                            _buildSpecialtyChip('Mindfulness'),
-                            _buildSpecialtyChip('LGTBQ+ Affirming'),
-                            _buildSpecialtyChip('PTSD'),
-                          ],
+                          children: _getCounsellorSpecializations().map((spec) => _buildSpecialtyChip(spec)).toList(),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 32),
+
+                    // Languages Spoken Section
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Languages Spoken',
+                          style: GoogleFonts.playfairDisplay(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w600,
+                            color: textColorMain,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Wrap(
+                          spacing: 12,
+                          runSpacing: 12,
+                          children: _getCounsellorLanguages().map((lang) => _buildLanguageChip(lang)).toList(),
                         ),
                       ],
                     ),
@@ -377,47 +479,72 @@ class _CounsellorDetailScreenState extends State<CounsellorDetailScreen> {
           ],
         ),
       ),
-      bottomSheet: Container(
-        color: backgroundColor,
-        padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-        child: SizedBox(
-          width: double.infinity,
-          height: 60,
-          child: ElevatedButton.icon(
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => BookSessionScreen(
-                    counsellorId: widget.counsellorId,
-                    name: widget.name,
-                    specialty: widget.specialty,
-                    rating: widget.rating,
-                    profileImage: widget.imageUrl,
-                    sessionsCount: 120,
+      bottomSheet: (currentUser?.uid == widget.counsellorId)
+          ? Container(
+              color: backgroundColor,
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+              child: Container(
+                width: double.infinity,
+                height: 60,
+                decoration: BoxDecoration(
+                  color: Colors.grey[200],
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.grey[300]!),
+                ),
+                child: Center(
+                  child: Text(
+                    'This is your professional profile',
+                    style: GoogleFonts.outfit(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey[600],
+                    ),
                   ),
                 ),
-              );
-            },
-            icon: const Icon(Icons.calendar_month_outlined, color: Colors.white),
-            label: Text(
-              'Book a Session',
-              style: GoogleFonts.playfairDisplay(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
+              ),
+            )
+          : Container(
+              color: backgroundColor,
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+              child: SizedBox(
+                width: double.infinity,
+                height: 60,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => BookSessionScreen(
+                          counsellorId: widget.counsellorId,
+                          name: widget.name,
+                          specialty: widget.specialty,
+                          rating: widget.rating,
+                          profileImage: widget.imageUrl,
+                          sessionsCount: 120,
+                          price: widget.price,
+                        ),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.calendar_month_outlined, color: Colors.white),
+                  label: Text(
+                    'Book a Session',
+                    style: GoogleFonts.playfairDisplay(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF86A590),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    elevation: 0,
+                  ),
+                ),
               ),
             ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF86A590),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-              ),
-              elevation: 0,
-            ),
-          ),
-        ),
-      ),
     );
   }
 

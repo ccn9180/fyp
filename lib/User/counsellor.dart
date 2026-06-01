@@ -3,6 +3,10 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'notifications.dart';
 import 'counsellor_detail.dart';
+import 'session_feedback.dart';
+import 'session_history.dart';
+import 'video_call.dart';
+import 'upcoming_session_detail.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:convert';
@@ -51,9 +55,6 @@ class _CounsellorScreenState extends State<CounsellorScreen> {
     _bookingsStream = FirebaseFirestore.instance
         .collection('counsellor_bookings')
         .where('patientId', isEqualTo: _currentUser?.uid)
-        .orderBy('startTime', descending: false)
-        .where('startTime', isGreaterThan: Timestamp.now())
-        .limit(1)
         .snapshots();
 
     _searchController.addListener(() {
@@ -62,6 +63,8 @@ class _CounsellorScreenState extends State<CounsellorScreen> {
       });
     });
   }
+
+
 
   void scrollToTop() {
     if (_scrollController.hasClients) {
@@ -154,56 +157,52 @@ class _CounsellorScreenState extends State<CounsellorScreen> {
                 return true;
               }).toList();
 
-              return CustomScrollView(
-                controller: _scrollController,
-                physics: const AlwaysScrollableScrollPhysics(),
+              return SafeArea(
+                child: CustomScrollView(
+                  controller: _scrollController,
+                  physics: const AlwaysScrollableScrollPhysics(),
                 slivers: [
-                  // 1. Title Header (Floating)
-                  SliverAppBar(
-                    floating: true,
-                    pinned: false,
-                    backgroundColor: backgroundColor,
-                    elevation: 0,
-                    scrolledUnderElevation: 0,
-                    surfaceTintColor: Colors.transparent,
-                    automaticallyImplyLeading: false,
-                    titleSpacing: 24,
-                    title: Text(
-                      'Counselors',
-                      style: GoogleFonts.playfairDisplay(
-                        color: textColorMain,
-                        fontSize: 28,
-                        fontWeight: FontWeight.w600,
+                  // 1. Title Header
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 20.0),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Counselors',
+                            style: GoogleFonts.playfairDisplay(
+                              fontSize: 28,
+                              fontWeight: FontWeight.w600,
+                              color: textColorMain,
+                            ),
+                          ),
+                          GestureDetector(
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (context) => const NotificationsScreen()),
+                              );
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.02),
+                                    blurRadius: 10,
+                                    offset: const Offset(0, 4),
+                                  ),
+                                ],
+                              ),
+                              child: Icon(Icons.notifications_none_outlined, color: primaryGreen, size: 24),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    actions: [
-                      Padding(
-                        padding: const EdgeInsets.only(right: 24.0),
-                        child: GestureDetector(
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (context) => const NotificationsScreen()),
-                            );
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              shape: BoxShape.circle,
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.02),
-                                  blurRadius: 10,
-                                  offset: const Offset(0, 4),
-                                ),
-                              ],
-                            ),
-                            child: Icon(Icons.notifications_none_outlined, color: primaryGreen, size: 24),
-                          ),
-                        ),
-                      ),
-                    ],
                   ),
 
                   // 2. Upcoming Sessions (Scrolls away)
@@ -213,53 +212,165 @@ class _CounsellorScreenState extends State<CounsellorScreen> {
                       child: StreamBuilder<QuerySnapshot>(
                         stream: _bookingsStream,
                         builder: (context, bookingSnapshot) {
+                          bool hasRealBooking = false;
+                          Map<String, dynamic>? upcomingBookingData;
+
                           if (bookingSnapshot.hasData && bookingSnapshot.data!.docs.isNotEmpty) {
-                            final bookingData = bookingSnapshot.data!.docs.first.data() as Map<String, dynamic>;
-                            return Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                _buildSectionHeader('UPCOMING SESSIONS', 'SEE ALL'),
-                                const SizedBox(height: 16),
-                                _buildMainUpcomingCard(context, bookingData: bookingData),
-                                const SizedBox(height: 32),
-                              ],
-                            );
+                            final now = DateTime.now();
+                            final upcomingDocs = bookingSnapshot.data!.docs.where((doc) {
+                              final data = doc.data() as Map<String, dynamic>;
+                              final rawStartTime = data['startTime'];
+                              final startTime = (rawStartTime is Timestamp) ? rawStartTime.toDate() : null;
+                              return startTime != null && startTime.isAfter(now);
+                            }).toList();
+
+                            if (upcomingDocs.isNotEmpty) {
+                              upcomingDocs.sort((a, b) {
+                                final aTime = ((a.data() as Map<String, dynamic>)['startTime'] as Timestamp).toDate();
+                                final bTime = ((b.data() as Map<String, dynamic>)['startTime'] as Timestamp).toDate();
+                                return aTime.compareTo(bTime);
+                              });
+                              
+                              upcomingBookingData = {
+                                ...(upcomingDocs.first.data() as Map<String, dynamic>),
+                                'id': upcomingDocs.first.id,
+                              };
+                              hasRealBooking = true;
+                            }
                           }
 
                           return Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              _buildSectionHeader('YOUR JOURNEY'),
+                              _buildSectionHeader('UPCOMING SESSIONS', 'SEE ALL'),
                               const SizedBox(height: 16),
-                              Container(
-                                padding: const EdgeInsets.all(24),
-                                decoration: BoxDecoration(
-                                  gradient: const LinearGradient(colors: [Color(0xFF86A590), Color(0xFF7C9C84)]),
-                                  borderRadius: BorderRadius.circular(24),
-                                ),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text('Ready to start healing?',
-                                        style: GoogleFonts.playfairDisplay(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
-                                    const SizedBox(height: 8),
-                                    Text('Book your first session with an authorized counselor today.',
-                                        style: GoogleFonts.outfit(color: Colors.white.withOpacity(0.9), fontSize: 13)),
-                                    const SizedBox(height: 20),
-                                    ElevatedButton(
-                                      onPressed: () {
-                                        _scrollController.animateTo(350, duration: const Duration(milliseconds: 600), curve: Curves.easeInOut);
-                                      },
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.white,
-                                        foregroundColor: primaryGreen,
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                        elevation: 0,
+                              hasRealBooking && upcomingBookingData != null
+                                  ? _buildMainUpcomingCard(context, bookingData: upcomingBookingData)
+                                  : Container(
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.all(32),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFF1F3EE),
+                                        borderRadius: BorderRadius.circular(32),
+                                        border: Border.all(color: Colors.white, width: 2),
                                       ),
-                                      child: Text('Find Support', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+                                      child: Column(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.all(16),
+                                            decoration: BoxDecoration(
+                                              color: Colors.white,
+                                              shape: BoxShape.circle,
+                                              boxShadow: [
+                                                BoxShadow(
+                                                  color: primaryGreen.withOpacity(0.1),
+                                                  blurRadius: 20,
+                                                  offset: const Offset(0, 10),
+                                                ),
+                                              ],
+                                            ),
+                                            child: Icon(Icons.spa_rounded, size: 32, color: primaryGreen),
+                                          ),
+                                          const SizedBox(height: 20),
+                                          Text(
+                                            'Ready to talk?',
+                                            style: GoogleFonts.playfairDisplay(
+                                              fontSize: 22,
+                                              fontWeight: FontWeight.bold,
+                                              color: textColorMain,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 8),
+                                          Text(
+                                            'Book a session with one of our certified professionals today.',
+                                            textAlign: TextAlign.center,
+                                            style: GoogleFonts.outfit(
+                                              fontSize: 14,
+                                              color: textColorSub,
+                                              height: 1.4,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 24),
+                                          ElevatedButton(
+                                            onPressed: _scrollToSearch,
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: primaryGreen,
+                                              foregroundColor: Colors.white,
+                                              elevation: 0,
+                                              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                                              shape: RoundedRectangleBorder(
+                                                borderRadius: BorderRadius.circular(16),
+                                              ),
+                                            ),
+                                            child: Text(
+                                              'FIND A COUNSELLOR',
+                                              style: GoogleFonts.outfit(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.bold,
+                                                letterSpacing: 1.0,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                                     ),
-                                  ],
-                                ),
+                              const SizedBox(height: 32),
+                              
+                              // Completed Sessions Section
+                              _buildSectionHeader('PAST SESSIONS', 'SEE ALL', () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(builder: (context) => const SessionHistoryScreen()),
+                                );
+                              }),
+                              const SizedBox(height: 16),
+                              StreamBuilder<QuerySnapshot>(
+                                stream: FirebaseFirestore.instance
+                                    .collection('counsellor_bookings')
+                                    .where('patientId', isEqualTo: _currentUser?.uid)
+                                    .snapshots(),
+                                builder: (context, pastSnapshot) {
+                                  if (pastSnapshot.hasError) {
+                                    return Text('Something went wrong.', style: GoogleFonts.outfit(color: textColorSub));
+                                  }
+                                  if (!pastSnapshot.hasData || pastSnapshot.data!.docs.isEmpty) {
+                                    return Text('No past sessions.', style: GoogleFonts.outfit(color: textColorSub));
+                                  }
+                                  
+                                  Map<String, dynamic>? firstCompleted;
+                                  
+                                  // Sort locally to get the most recent past session
+                                  final docs = pastSnapshot.data!.docs.toList();
+                                  docs.sort((a, b) {
+                                    final aTime = ((a.data() as Map<String, dynamic>)['startTime'] as Timestamp?)?.toDate() ?? DateTime.fromMillisecondsSinceEpoch(0);
+                                    final bTime = ((b.data() as Map<String, dynamic>)['startTime'] as Timestamp?)?.toDate() ?? DateTime.fromMillisecondsSinceEpoch(0);
+                                    return bTime.compareTo(aTime); // descending
+                                  });
+                                  
+                                  for (var doc in docs) {
+                                    final data = doc.data() as Map<String, dynamic>;
+                                    final startTime = (data['startTime'] as Timestamp?)?.toDate();
+                                    final status = (data['status'] ?? '').toString().toUpperCase();
+                                    
+                                    if (status == 'COMPLETED' || (startTime != null && startTime.isBefore(DateTime.now()))) {
+                                      firstCompleted = {
+                                        ...data,
+                                        'id': doc.id, 
+                                        'summary': data['summary'] ?? data['notes'] ?? 'General counseling session to check in and monitor wellness goals.',
+                                        'sessionDuration': data['sessionDuration'] ?? '60 mins',
+                                        'type': data['type'] ?? 'Video Call'
+                                      };
+                                      break;
+                                    }
+                                  }
+
+                                  if (firstCompleted == null) {
+                                     return Text('No past sessions.', style: GoogleFonts.outfit(color: textColorSub));
+                                  }
+
+                                  return _buildCompletedSessionCard(context, firstCompleted);
+                                }
                               ),
                               const SizedBox(height: 32),
                             ],
@@ -334,7 +445,7 @@ class _CounsellorScreenState extends State<CounsellorScreen> {
                                 final imageUrl = data['counsellorImageUrl'] ?? data['profileImageUrl'];
                                 final isOnline = data['isOnline'] ?? true;
 
-                                return Padding(
+                                 return Padding(
                                   padding: const EdgeInsets.only(bottom: 16),
                                   child: _buildRecommendedCard(
                                     context,
@@ -342,7 +453,7 @@ class _CounsellorScreenState extends State<CounsellorScreen> {
                                     specialty: specialty,
                                     rating: rating,
                                     reviews: reviews,
-                                    price: price.startsWith('\$') ? price : '\$${price}/hr',
+                                    price: (price.toLowerCase() == 'free' || price == '0' || price.trim().isEmpty) ? 'Free' : (price.startsWith('RM') ? price : 'RM$price/hr'),
                                     imageUrl: imageUrl ?? 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&q=80&w=2000',
                                     isOnline: isOnline,
                                     isFavorite: _userFavorites.contains(doc.id),
@@ -357,7 +468,7 @@ class _CounsellorScreenState extends State<CounsellorScreen> {
                   ),
                   const SliverToBoxAdapter(child: SizedBox(height: 100)),
                 ],
-              );
+              ));
             },
           );
         },
@@ -365,7 +476,7 @@ class _CounsellorScreenState extends State<CounsellorScreen> {
     );
   }
 
-  Widget _buildSectionHeader(String title, [String? actionLabel]) {
+  Widget _buildSectionHeader(String title, [String? actionLabel, VoidCallback? onTap]) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -379,13 +490,16 @@ class _CounsellorScreenState extends State<CounsellorScreen> {
           ),
         ),
         if (actionLabel != null)
-          Text(
-            actionLabel,
-            style: GoogleFonts.outfit(
-              fontSize: 11,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 1.0,
-              color: primaryGreen,
+          GestureDetector(
+            onTap: onTap,
+            child: Text(
+              actionLabel,
+              style: GoogleFonts.outfit(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1.0,
+                color: primaryGreen,
+              ),
             ),
           ),
       ],
@@ -403,12 +517,7 @@ class _CounsellorScreenState extends State<CounsellorScreen> {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => CounsellorDetailScreen(
-              counsellorId: bookingData?['counsellorId'] ?? '',
-              name: name,
-              specialty: specialty,
-              imageUrl: imageUrl,
-            ),
+            builder: (context) => UpcomingSessionDetailScreen(sessionData: bookingData ?? {}),
           ),
         );
       },
@@ -479,51 +588,28 @@ class _CounsellorScreenState extends State<CounsellorScreen> {
                     ),
                   ),
                   const SizedBox(height: 4),
-                  Text(
-                    specialty,
-                    style: GoogleFonts.outfit(
-                      color: textColorSub,
-                      fontSize: 14,
-                    ),
-                  ),
-                  const SizedBox(height: 20),
                   Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: () {},
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: primaryGreen,
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                          ),
-                          child: Text(
-                            'Join Session',
-                            style: GoogleFonts.outfit(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
+                      Text(
+                        specialty,
+                        style: GoogleFonts.outfit(
+                          color: textColorSub,
+                          fontSize: 14,
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      Container(
-                        width: 50,
-                        height: 50,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFE8EFEA),
-                          borderRadius: BorderRadius.circular(16),
+                      Text(
+                        'VIEW DETAILS',
+                        style: GoogleFonts.outfit(
+                          color: primaryGreen,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.5,
                         ),
-                        child: Center(
-                          child: Icon(Icons.more_horiz, color: primaryGreen),
-                        ),
-                      )
+                      ),
                     ],
-                  )
+                  ),
+                  const SizedBox(height: 12),
                 ],
               ),
             ),
@@ -781,6 +867,7 @@ class _CounsellorScreenState extends State<CounsellorScreen> {
               imageUrl: imageUrl,
               experience: data?['experience'] ?? '5 yrs',
               about: data?['counsellorBio'] ?? 'Dedicated mental health professional.',
+              price: data?['price']?.toString() ?? 'Free',
             ),
           ),
         );
@@ -920,6 +1007,191 @@ class _CounsellorScreenState extends State<CounsellorScreen> {
         ),
       ),
     );
+  }
+
+  Widget _buildCompletedSessionCard(BuildContext context, Map<String, dynamic> session) {
+    final startTime = (session['startTime'] as Timestamp).toDate();
+    
+    final String imageUrl = session['counsellorImageUrl'] ?? '';
+
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => SessionFeedbackScreen(session: session),
+          ),
+        );
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.02),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+          Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  color: const Color(0xFFEEF3F0),
+                  image: imageUrl.isNotEmpty
+                      ? DecorationImage(
+                          image: imageUrl.startsWith('data:image')
+                              ? MemoryImage(base64Decode(imageUrl.split(',').last)) as ImageProvider
+                              : NetworkImage(imageUrl),
+                          fit: BoxFit.cover,
+                        )
+                      : null,
+                ),
+                child: imageUrl.isEmpty ? const Icon(Icons.person, color: Color(0xFF98B3A1)) : null,
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      session['counsellorName'],
+                      style: GoogleFonts.outfit(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: textColorMain,
+                      ),
+                    ),
+                    Text(
+                      'Completed on ${DateFormat('MMM dd, yyyy').format(startTime)}',
+                      style: GoogleFonts.outfit(
+                        fontSize: 12,
+                        color: textColorSub,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (session['rating'] != null && (session['rating'] is int ? session['rating'] : int.tryParse(session['rating'].toString()) ?? 0) > 0)
+                Row(
+                  children: [
+                    const Icon(Icons.star_rounded, color: Color(0xFFFFB74D), size: 16),
+                    const SizedBox(width: 4),
+                    Text(
+                      session['rating'].toString(),
+                      style: GoogleFonts.outfit(
+                        fontWeight: FontWeight.bold,
+                        color: textColorMain,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF1F3EE),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  'DONE',
+                  style: GoogleFonts.outfit(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: primaryGreen,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            session['summary'],
+            style: GoogleFonts.outfit(
+              fontSize: 14,
+              color: textColorMain.withOpacity(0.8),
+              height: 1.5,
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => SessionFeedbackScreen(session: session),
+                      ),
+                    );
+                  },
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    side: BorderSide(color: const Color(0xFF7C9C84).withOpacity(0.2)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: Text(
+                    'VIEW SUMMARY',
+                    style: GoogleFonts.outfit(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFF7C9C84),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => SessionFeedbackScreen(
+                          session: session,
+                          startWithFeedback: true,
+                        ),
+                      ),
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF7C9C84),
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: Text(
+                    'RATE SESSION',
+                    style: GoogleFonts.outfit(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    ));
   }
 }
 

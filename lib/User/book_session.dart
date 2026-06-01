@@ -4,6 +4,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import 'booking_summary.dart';
+import 'reschedule_summary.dart';
 
 class BookSessionScreen extends StatefulWidget {
   final String counsellorId;
@@ -12,6 +14,9 @@ class BookSessionScreen extends StatefulWidget {
   final String rating;
   final String profileImage;
   final int sessionsCount;
+  final bool isRescheduling;
+  final String? oldAppointmentId;
+  final String price;
 
   const BookSessionScreen({
     super.key,
@@ -21,6 +26,9 @@ class BookSessionScreen extends StatefulWidget {
     required this.rating,
     required this.profileImage,
     required this.sessionsCount,
+    this.isRescheduling = false,
+    this.oldAppointmentId,
+    this.price = 'Free',
   });
 
   @override
@@ -34,6 +42,7 @@ class _BookSessionScreenState extends State<BookSessionScreen> {
 
   // Real availability data from Firestore will go here
   List<Map<String, dynamic>> _allAvailability = [];
+  List<Map<String, dynamic>> _activeBookings = [];
   bool _isLoading = true;
 
   @override
@@ -44,13 +53,25 @@ class _BookSessionScreenState extends State<BookSessionScreen> {
 
   Future<void> _fetchAvailability() async {
     try {
-      final snapshot = await FirebaseFirestore.instance
+      final availabilitySnapshot = await FirebaseFirestore.instance
           .collection('counsellor_availability')
+          .where('counsellorId', isEqualTo: widget.counsellorId)
+          .get();
+
+      final bookingsSnapshot = await FirebaseFirestore.instance
+          .collection('counsellor_bookings')
           .where('counsellorId', isEqualTo: widget.counsellorId)
           .get();
       
       setState(() {
-        _allAvailability = snapshot.docs.map((d) => d.data()).toList();
+        _allAvailability = availabilitySnapshot.docs.map((d) => d.data()).toList();
+        _activeBookings = bookingsSnapshot.docs
+            .map((d) => d.data() as Map<String, dynamic>)
+            .where((booking) {
+              final status = (booking['status'] ?? '').toString().toLowerCase();
+              return status != 'cancelled' && status != 'rejected';
+            })
+            .toList();
         _isLoading = false;
       });
     } catch (e) {
@@ -154,7 +175,7 @@ class _BookSessionScreenState extends State<BookSessionScreen> {
                   ),
                   const Spacer(),
                   Text(
-                    'BOOK A SESSION',
+                    widget.isRescheduling ? 'RESCHEDULE SESSION' : 'BOOK A SESSION',
                     style: GoogleFonts.outfit(
                       fontSize: 14,
                       fontWeight: FontWeight.bold,
@@ -267,7 +288,38 @@ class _BookSessionScreenState extends State<BookSessionScreen> {
                       height: 60,
                       child: ElevatedButton(
                         onPressed: selectedTime != null ? () {
-                          // TODO: Implement booking confirmation
+                          final counselorData = {
+                            'id': widget.counsellorId,
+                            'name': widget.name,
+                            'specialty': widget.specialty,
+                            'image': widget.profileImage,
+                            'price': widget.price,
+                          };
+
+                          if (widget.isRescheduling) {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => RescheduleSummaryScreen(
+                                  counselor: counselorData,
+                                  selectedDate: _selectedDate,
+                                  selectedTime: selectedTime!,
+                                  oldAppointmentId: widget.oldAppointmentId ?? '',
+                                ),
+                              ),
+                            );
+                          } else {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => BookingSummaryScreen(
+                                  counselor: counselorData,
+                                  selectedDate: _selectedDate,
+                                  selectedTime: selectedTime!,
+                                ),
+                              ),
+                            );
+                          }
                         } : null, // Disable if no time selected
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF86A590),
@@ -278,7 +330,7 @@ class _BookSessionScreenState extends State<BookSessionScreen> {
                           elevation: 0,
                         ),
                         child: Text(
-                          'Book Appointment',
+                          widget.isRescheduling ? 'Update Appointment' : 'Book Appointment',
                           style: GoogleFonts.playfairDisplay(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
@@ -459,8 +511,12 @@ class _BookSessionScreenState extends State<BookSessionScreen> {
                                           _selectedDate.month == _currentMonthView.month && 
                                           _selectedDate.year == _currentMonthView.year;
               
+              final DateTime todayDateOnly = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
+              final DateTime cellDate = DateTime(_currentMonthView.year, _currentMonthView.month, d);
+              final bool isPastDate = cellDate.isBefore(todayDateOnly);
+              
               final isCurrent = isSelectedDateInView && !isPreviousMonth && !isNextMonth;
-              final isAvailable = availableDates.contains(d) && !isPreviousMonth && !isNextMonth;
+              final isAvailable = availableDates.contains(d) && !isPreviousMonth && !isNextMonth && !isPastDate;
               
               // Today's real date
               final DateTime now = DateTime.now();
@@ -555,8 +611,12 @@ class _BookSessionScreenState extends State<BookSessionScreen> {
         final time = entry.value;
         final isSelected = time == selectedTime;
         
+        final String dateStr = DateFormat('dd MMM yyyy').format(_selectedDate);
+        final bool isBooked = _activeBookings.any((booking) => 
+            booking['date'] == dateStr && booking['timeRange'] == time);
+
         return InkWell(
-          onTap: () {
+          onTap: isBooked ? null : () {
             setState(() {
               selectedTime = time;
             });
@@ -567,10 +627,12 @@ class _BookSessionScreenState extends State<BookSessionScreen> {
             width: (MediaQuery.of(context).size.width - 48 - 12) / 2,
             padding: const EdgeInsets.symmetric(vertical: 16),
             decoration: BoxDecoration(
-              color: isSelected ? primaryGreen : Colors.white,
+              color: isBooked 
+                  ? Colors.grey[200] 
+                  : (isSelected ? primaryGreen : Colors.white),
               borderRadius: BorderRadius.circular(20),
-              border: !isSelected ? Border.all(color: const Color(0xFFEEEEEE)) : null,
-              boxShadow: isSelected ? [
+              border: !isSelected && !isBooked ? Border.all(color: const Color(0xFFEEEEEE)) : null,
+              boxShadow: isSelected && !isBooked ? [
                 BoxShadow(
                   color: primaryGreen.withOpacity(0.2),
                   blurRadius: 10,
@@ -580,11 +642,13 @@ class _BookSessionScreenState extends State<BookSessionScreen> {
             ),
             child: Center(
               child: Text(
-                time,
+                time + (isBooked ? ' (Booked)' : ''),
                 style: GoogleFonts.outfit(
                   fontSize: 15,
-                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                  color: isSelected ? Colors.white : const Color(0xFF333333),
+                  fontWeight: isSelected && !isBooked ? FontWeight.bold : FontWeight.normal,
+                  color: isBooked 
+                      ? Colors.grey[400] 
+                      : (isSelected ? Colors.white : const Color(0xFF333333)),
                 ),
               ),
             ),

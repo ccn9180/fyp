@@ -1,5 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../services/gamification_service.dart';
+import '../widgets/level_up_dialog.dart';
+import 'package:fyp/services/backend_config.dart';
 
 class ActiveChatScreen extends StatefulWidget {
   const ActiveChatScreen({super.key});
@@ -10,6 +17,14 @@ class ActiveChatScreen extends StatefulWidget {
 
 class _ActiveChatScreenState extends State<ActiveChatScreen> {
   final TextEditingController _messageController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
+  final List<Map<String, dynamic>> _messages = [
+    {
+      "isAi": true,
+      "text": "Hello. I'm here to support your mindfulness journey today. How are you feeling in this moment?",
+    }
+  ];
+  bool _isLoading = false;
 
   final Color primaryGreen = const Color(0xFF86A590);
   final Color backgroundColor = const Color(0xFFFBFBF6);
@@ -17,6 +32,13 @@ class _ActiveChatScreenState extends State<ActiveChatScreen> {
   final Color userBubbleColor = const Color(0xFF86A590);
   final Color textColorMain = const Color(0xFF333333);
   final Color textColorSub = const Color(0xFF888888);
+
+  @override
+  void dispose() {
+    _messageController.dispose();
+    _scrollController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -68,9 +90,30 @@ class _ActiveChatScreenState extends State<ActiveChatScreen> {
         ),
         centerTitle: true,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.more_vert, color: Color(0xFF86A590)),
-            onPressed: () {},
+          Padding(
+            padding: const EdgeInsets.only(right: 16),
+            child: Center(
+              child: GestureDetector(
+                onTap: () => _showEndChatDialog(context),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFEBEE),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: const Color(0xFFFFCDD2)),
+                  ),
+                  child: Text(
+                    'END',
+                    style: GoogleFonts.outfit(
+                      color: const Color(0xFFE57373),
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.0,
+                    ),
+                  ),
+                ),
+              ),
+            ),
           ),
         ],
       ),
@@ -79,46 +122,150 @@ class _ActiveChatScreenState extends State<ActiveChatScreen> {
           const SizedBox(height: 16),
           _buildDateDivider('TODAY'),
           Expanded(
-            child: ListView(
+            child: ListView.separated(
+              controller: _scrollController,
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-              children: [
-                _buildAiMessage(
-                  'Hello. I\'m here to support your mindfulness journey today. How are you feeling in this moment?',
-                ),
-                const SizedBox(height: 24),
-                _buildUserMessage(
-                  'I\'ve been feeling a bit overwhelmed with work lately. I need a moment to breathe.',
-                ),
-                const SizedBox(height: 24),
-                _buildAiMessage(
-                  'I understand. Let\'s take a mindful pause together. Would you like to try one of these brief exercises?',
-                ),
-                const SizedBox(height: 16),
-                Padding(
-                  padding: const EdgeInsets.only(left: 48), // Align with AI bubbles
-                  child: Column(
-                    children: [
-                      _buildExerciseChip(
-                        icon: Icons.air_rounded,
-                        title: '4-7-8 Breathing',
-                        subtitle: '2 minutes • Calming',
+              itemCount: _messages.length + (_isLoading ? 1 : 0),
+              separatorBuilder: (context, index) => const SizedBox(height: 24),
+              itemBuilder: (context, index) {
+                if (index == _messages.length) {
+                  return const Align(
+                    alignment: Alignment.centerLeft,
+                    child: Padding(
+                      padding: EdgeInsets.only(left: 40),
+                      child: SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF86A590)),
                       ),
-                      const SizedBox(height: 12),
-                      _buildExerciseChip(
-                        icon: Icons.psychology_outlined,
-                        title: 'Body Scan',
-                        subtitle: '5 minutes • Grounding',
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+                    ),
+                  );
+                }
+                final msg = _messages[index];
+                if (msg['isAi'] == true) {
+                  return _buildAiMessage(msg['text'] ?? '');
+                } else {
+                  return _buildUserMessage(msg['text'] ?? '');
+                }
+              },
             ),
           ),
           _buildMessageInput(),
         ],
       ),
     );
+  }
+
+  Future<void> _sendMessage() async {
+    final text = _messageController.text.trim();
+    if (text.isEmpty) return;
+
+    setState(() {
+      _messages.add({"isAi": false, "text": text});
+      _isLoading = true;
+    });
+    _messageController.clear();
+    _scrollToBottom();
+
+    try {
+      final String baseUrl = await BackendConfig.getBaseUrl();
+      final response = await http.post(
+        Uri.parse('$baseUrl/chat'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'message': text}),
+      ).timeout(const Duration(seconds: 8));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final reply = data['response'] ?? '';
+        setState(() {
+          _messages.add({"isAi": true, "text": reply});
+        });
+        
+        // Scan for completion indicators
+        _checkChatbotCompletion(reply);
+      } else {
+        setState(() {
+          _messages.add({"isAi": true, "text": "Sorry, I received an error from the server."});
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _messages.add({"isAi": true, "text": "Error connecting to server. Make sure the python backend is running."});
+      });
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+      _scrollToBottom();
+    }
+  }
+
+  void _checkChatbotCompletion(String replyText) async {
+    final lower = replyText.toLowerCase();
+    
+    // Check for breathing exercise completion
+    bool isBreathing = lower.contains('breathing') && (lower.contains('complete') || lower.contains('finish') || lower.contains('done'));
+    // Check for grounding exercise completion
+    bool isGrounding = lower.contains('grounding') && (lower.contains('complete') || lower.contains('finish') || lower.contains('done'));
+    // Fallback general mental exercise completion
+    bool isGeneralChat = lower.contains('exercise') && (lower.contains('complete') || lower.contains('finish') || lower.contains('done'));
+
+    final String? currentUid = FirebaseAuth.instance.currentUser?.uid;
+    if (currentUid == null) return;
+
+    String? taskId;
+    if (isBreathing) {
+      taskId = 'breathing_exercise';
+    } else if (isGrounding) {
+      taskId = 'grounding_exercise';
+    } else if (isGeneralChat) {
+      taskId = 'chatbot_chat';
+    }
+
+    if (taskId != null) {
+      final res = await GamificationService.completeTask(currentUid, taskId);
+      if (res['success'] == true) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.stars_rounded, color: Colors.amber),
+                  const SizedBox(width: 8),
+                  Text('Quest Completed: +${res['xp']} XP & +${res['coins']} Coins!'),
+                ],
+              ),
+              backgroundColor: const Color(0xFF7C9C84),
+              duration: const Duration(seconds: 4),
+            ),
+          );
+          if (res['levelled_up'] == true) {
+            _showLevelUpDialog();
+          }
+        }
+      }
+    }
+  }
+
+  void _showLevelUpDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const LevelUpDialog(),
+    );
+  }
+
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
+    });
   }
 
   Widget _buildDateDivider(String label) {
@@ -326,15 +473,207 @@ class _ActiveChatScreenState extends State<ActiveChatScreen> {
             ),
           ),
           const SizedBox(width: 12),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: const BoxDecoration(
-              color: Color(0xFF86A590),
-              shape: BoxShape.circle,
+          GestureDetector(
+            onTap: _isLoading ? null : _sendMessage,
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: _isLoading ? const Color(0xFFB0BDB5) : const Color(0xFF86A590),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.send_rounded, color: Colors.white, size: 24),
             ),
-            child: const Icon(Icons.send_rounded, color: Colors.white, size: 24),
           ),
         ],
+      ),
+    );
+  }
+
+  Future<void> _saveChatSession() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    // Simple keyword detection for tag/subTag/title
+    String tag = 'FOCUSED';
+    String subTag = 'Mindfulness';
+    String title = 'Mindful Reflection Session';
+    
+    final fullText = _messages.map((m) => m['text']?.toString().toLowerCase() ?? '').join(' ');
+    if (fullText.contains('anxiety') || fullText.contains('stress') || fullText.contains('overwhelm') || fullText.contains('worry') || fullText.contains('calm')) {
+      tag = 'CALM';
+      subTag = 'Anxiety';
+      title = 'Managing Stress & Anxiety';
+    } else if (fullText.contains('grateful') || fullText.contains('thankful') || fullText.contains('gratitude') || fullText.contains('bless')) {
+      tag = 'GRATEFUL';
+      subTag = 'Gratitude';
+      title = 'Gratitude & Joy Journal';
+    } else if (fullText.contains('sleep') || fullText.contains('night') || fullText.contains('insomnia') || fullText.contains('tired') || fullText.contains('rest')) {
+      tag = 'SLEEPY';
+      subTag = 'Sleep';
+      title = 'Night Wind-down Guide';
+    }
+
+    // Generate preview: last user message or last message in general
+    String preview = 'Mindfulness chat session.';
+    if (_messages.isNotEmpty) {
+      preview = _messages.last['text'] ?? '';
+      if (preview.length > 100) {
+        preview = '${preview.substring(0, 97)}...';
+      }
+    }
+
+    // Get user name
+    String userName = 'User';
+    try {
+      final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+      userName = userDoc.data()?['fullName'] ?? user.displayName ?? 'User';
+    } catch (_) {}
+
+    final formattedMessages = _messages.map((m) => {
+      'role': m['isAi'] ? 'assistant' : 'user',
+      'text': m['text'],
+    }).toList();
+
+    try {
+      await FirebaseFirestore.instance.collection('chat_sessions').add({
+        'userId': user.uid,
+        'userName': userName,
+        'title': title,
+        'tag': tag,
+        'subTag': subTag,
+        'preview': preview,
+        'createdAt': FieldValue.serverTimestamp(),
+        'messages': formattedMessages,
+        'sharingAccess': {}, // initially not shared with anyone
+        'crisisDetected': false,
+        'crisisKeyword': '',
+        'status': 'Normal',
+      });
+    } catch (e) {
+      print('Error saving chat session: $e');
+    }
+  }
+
+  void _showEndChatDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(32)),
+        elevation: 0,
+        backgroundColor: Colors.transparent,
+        child: Container(
+          padding: const EdgeInsets.all(32),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(32),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.1),
+                blurRadius: 30,
+                offset: const Offset(0, 15),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: const BoxDecoration(
+                  color: Color(0xFFFFEBEE),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.close_rounded,
+                  color: Color(0xFFE57373),
+                  size: 40,
+                ),
+              ),
+              const SizedBox(height: 24),
+              Text(
+                'End Session?',
+                style: GoogleFonts.playfairDisplay(
+                  fontSize: 26,
+                  fontWeight: FontWeight.bold,
+                  color: textColorMain,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Are you ready to finalize this conversation? A summary will be saved to your journal.',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.outfit(
+                  fontSize: 15,
+                  color: textColorSub,
+                  height: 1.6,
+                ),
+              ),
+              const SizedBox(height: 32),
+              Column(
+                children: [
+                  SizedBox(
+                    width: double.infinity,
+                    height: 56,
+                    child: ElevatedButton(
+                      onPressed: () async {
+                        // Show loading indicator
+                        showDialog(
+                          context: context,
+                          barrierDismissible: false,
+                          builder: (context) => const Center(child: CircularProgressIndicator(color: Color(0xFF86A590))),
+                        );
+                        await _saveChatSession();
+                        if (context.mounted) {
+                          Navigator.pop(context); // Pop loading
+                          Navigator.pop(ctx); // Close dialog
+                          Navigator.pop(context); // Close chat
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFE57373),
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                      ),
+                      child: Text(
+                        'END CONVERSATION',
+                        style: GoogleFonts.outfit(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                          letterSpacing: 1.2,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 56,
+                    child: TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      style: TextButton.styleFrom(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                      ),
+                      child: Text(
+                        'CONTINUE CHATTING',
+                        style: GoogleFonts.outfit(
+                          color: textColorSub,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

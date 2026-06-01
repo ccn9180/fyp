@@ -1,968 +1,1379 @@
-import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:camera/camera.dart';
-import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
+import 'dart:async';
 import 'dart:io';
-import 'package:flutter/services.dart';
+import 'dart:math';
+
+import 'package:camera/camera.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:image_picker/image_picker.dart';
+
 import '../User/main_screen.dart';
-import 'user_details_page.dart';
+
+enum _VerificationPhase { uploadID, liveScan, result }
+enum _LivenessStep { scanning, done }
 
 class VerificationPage extends StatefulWidget {
   final String email;
   final String password;
   final bool isGoogle;
+  final String fullName;
+  final String dob;
+  final String icNumber;
+  final String gender;
+  /// Optional: path to the IC image captured by IDScannerPage.
+  /// When provided the user skips the manual upload step and goes
+  /// straight to the live face scan.
+  final String? icImagePath;
 
   const VerificationPage({
     super.key,
     required this.email,
     required this.password,
+    required this.fullName,
+    required this.dob,
+    required this.icNumber,
+    required this.gender,
     this.isGoogle = false,
+    this.icImagePath,
   });
 
   @override
   State<VerificationPage> createState() => _VerificationPageState();
 }
 
-class _VerificationPageState extends State<VerificationPage> with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  
+class _VerificationPageState extends State<VerificationPage>
+    with TickerProviderStateMixin {
+  // ── State Phases ───────────────────────────────────────────────────────────
+  _VerificationPhase _currentPhase = _VerificationPhase.uploadID;
+  _LivenessStep _currentLivenessStep = _LivenessStep.scanning;
+
+  // ── ID Face Extraction (Phase 1) ───────────────────────────────────────────
+  File? _idImageFile;
+  Face? _idFace;
+  Size? _idImageSize;
+  bool _isProcessingId = false;
+  bool _idFaceExtracted = false;
+  String? _idErrorMessage;
+
+  // ── Camera / ML Live Scan (Phase 2) ────────────────────────────────────────
   CameraController? _cameraController;
   CameraDescription? _cameraDescription;
   FaceDetector? _faceDetector;
+
   bool _isCameraInitialized = false;
-  bool _isProcessing = false;
-  
-  // Liveness Detection States
-  String _currentInstruction = 'Ready to begin?';
-  bool _scanningActive = false;
-  bool _blinkDetected = false;
-  bool _turnLeftDetected = false;
-  bool _turnRightDetected = false;
-  bool _isVerified = false;
-  double _currentEulerY = 0; // Track head rotation in real-time
-  double _currentEulerX = 0;
-  String _hintText = "Look at the camera";
-  Face? _detectedFace; // Store the face for overlay drawing
-  bool _showSkipButton = false; // Emergency bypass
-  
-  // Adaptive Rotation for Hardware Compatibility
-  final List<InputImageRotation> _rotations = [
-    InputImageRotation.rotation0deg,
-    InputImageRotation.rotation90deg,
-    InputImageRotation.rotation180deg,
-    InputImageRotation.rotation270deg,
-  ];
-  int _rotationIndex = 1; // Start with 90deg (most common for Android front)
-  bool _rotationLocked = false;
-  DateTime? _lastRotationTry;
+  bool _isProcessingFrame = false;
+  bool _streamStarted = false;
+
+  Face? _detectedFace;
+  CameraImage? _latestFrame;
+  Timer? _frameTimer;
+
+  // Scan frame counting
+  int _alignFrames = 0;
+  static const int _framesRequired = 6; // collect 6 good frames then finish
+
+  // Similarity tracking
+  final List<double> _similarities = [];
+  double _similarityScore = 0.0;
+  bool _verificationSuccess = false;
+
+  // ── UI / Animation ─────────────────────────────────────────────────────────
+  late AnimationController _pulseController;
+  late Animation<double> _pulseAnimation;
+  String _faceStatus = 'Align face in the center';
+
+  InputImageRotation get _imageRotation {
+    if (Platform.isIOS) return InputImageRotation.rotation0deg;
+    return InputImageRotation.rotation270deg;
+  }
+
+  // Scan instruction
+  String get _stepInstruction {
+    switch (_currentLivenessStep) {
+      case _LivenessStep.scanning:
+        return 'Keep still, scanning your face...';
+      case _LivenessStep.done:
+        return 'Processing results...';
+    }
+  }
+
+  String get _stepHint {
+    switch (_currentLivenessStep) {
+      case _LivenessStep.scanning:
+        return 'Look straight at the camera and hold steady';
+      case _LivenessStep.done:
+        return 'Comparing with your IC photo...';
+    }
+  }
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-        vsync: this,
-        duration: const Duration(seconds: 2)
+
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
     )..repeat(reverse: true);
-    
-    _initializeCamera();
+
+    _pulseAnimation = Tween<double>(begin: 1.0, end: 1.03).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
+
     _initializeFaceDetector();
+
+    // If an IC image was captured during scanning, auto-process it
+    if (widget.icImagePath != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _autoProcessIcImage(widget.icImagePath!);
+      });
+    }
   }
 
   void _initializeFaceDetector() {
     _faceDetector = FaceDetector(
       options: FaceDetectorOptions(
-        enableClassification: true, // For blinking
+        enableClassification: true,
         enableLandmarks: true,
         enableTracking: true,
+        performanceMode: FaceDetectorMode.accurate,
       ),
     );
   }
 
-  Future<void> _initializeCamera() async {
-    final cameras = await availableCameras();
-    final frontCamera = cameras.firstWhere(
-      (camera) => camera.lensDirection == CameraLensDirection.front,
-      orElse: () => cameras.first,
-    );
+  // ── Auto-process IC image from scanner (skips manual upload) ──────────────
 
-    _cameraDescription = frontCamera;
-    _cameraController = CameraController(
-      frontCamera,
-      ResolutionPreset.medium, // Better clarity for detection
-      enableAudio: false,
-      imageFormatGroup: Platform.isAndroid ? ImageFormatGroup.yuv420 : ImageFormatGroup.bgra8888,
-    );
+  Future<void> _autoProcessIcImage(String imagePath) async {
+    setState(() {
+      _idImageFile = File(imagePath);
+      _isProcessingId = true;
+      _idFaceExtracted = false;
+      _idErrorMessage = null;
+      // Stay on uploadID phase briefly to show the extracted image
+      _currentPhase = _VerificationPhase.uploadID;
+    });
 
     try {
-      await _cameraController!.initialize();
+      final inputImage = InputImage.fromFilePath(imagePath);
+      // Give the detector time to initialize
+      await Future.delayed(const Duration(milliseconds: 300));
+      final faces = await _faceDetector!.processImage(inputImage);
+
+      if (!mounted) return;
+
+      if (faces.isEmpty) {
+        // No face on IC — fall back to manual upload
+        setState(() {
+          _idErrorMessage = 'Could not detect a face on the scanned IC. Please upload manually.';
+          _isProcessingId = false;
+        });
+        return;
+      }
+
+      final imageSize = await _getImageSize(_idImageFile!);
+      if (!mounted) return;
+
+      setState(() {
+        _idFace = faces.first;
+        _idImageSize = imageSize;
+        _idFaceExtracted = true;
+        _isProcessingId = false;
+      });
+
+      // Small pause so the user sees the detected ID, then go to scan
+      await Future.delayed(const Duration(milliseconds: 800));
+      if (!mounted) return;
+      _startLiveScan();
+    } catch (e) {
       if (mounted) {
-        setState(() => _isCameraInitialized = true);
-        _cameraController!.startImageStream(_processCameraImage);
-        
-        // Show skip button after 5 seconds of failing to detect
-        Future.delayed(const Duration(seconds: 5), () {
-          if (mounted && !_isVerified) {
-            setState(() => _showSkipButton = true);
-          }
+        setState(() {
+          _idErrorMessage = 'Error processing IC image: $e';
+          _isProcessingId = false;
         });
       }
-    } catch (e) {
-      debugPrint("Camera init error: $e");
     }
+  }
+
+  // ── Phase 1: ID Image Upload & Face Extraction ─────────────────────────────
+
+  Future<void> _pickIdImage(ImageSource source) async {
+    final ImagePicker picker = ImagePicker();
+    final XFile? image = await picker.pickImage(source: source);
+    if (image == null) return;
+
+    setState(() {
+      _idImageFile = File(image.path);
+      _isProcessingId = true;
+      _idFaceExtracted = false;
+      _idErrorMessage = null;
+    });
+
+    try {
+      final inputImage = InputImage.fromFilePath(image.path);
+      final faces = await _faceDetector!.processImage(inputImage);
+
+      if (faces.isEmpty) {
+        setState(() {
+          _idErrorMessage = "No face detected on the ID. Please choose a clearer photo.";
+          _isProcessingId = false;
+        });
+        return;
+      }
+
+      final imageSize = await _getImageSize(_idImageFile!);
+      if (!mounted) return;
+
+      setState(() {
+        _idFace = faces.first;
+        _idImageSize = imageSize;
+        _idFaceExtracted = true;
+        _isProcessingId = false;
+      });
+
+      // Auto-transition to live scan page after a small pause so they see the success/face box
+      await Future.delayed(const Duration(milliseconds: 1000));
+      if (!mounted) return;
+      _startLiveScan();
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _idErrorMessage = "Error extracting face: $e";
+          _isProcessingId = false;
+        });
+      }
+    }
+  }
+
+  Future<Size> _getImageSize(File file) async {
+    final Completer<Size> completer = Completer();
+    final Image image = Image.file(file);
+    image.image.resolve(const ImageConfiguration()).addListener(
+      ImageStreamListener((ImageInfo info, bool _) {
+        completer.complete(Size(info.image.width.toDouble(), info.image.height.toDouble()));
+      }),
+    );
+    return completer.future;
+  }
+
+  // ── Phase 2: Live Scanning setup ───────────────────────────────────────────
+
+  Future<void> _startLiveScan() async {
+    if (!_idFaceExtracted || _idFace == null) return;
+
+    setState(() {
+      _currentPhase = _VerificationPhase.liveScan;
+      _currentLivenessStep = _LivenessStep.scanning;
+      _alignFrames = 0;
+      _similarities.clear();
+      _faceStatus = 'Align face in the center';
+    });
+
+    await _initializeCamera();
+  }
+
+  Future<void> _initializeCamera() async {
+    try {
+      final cameras = await availableCameras();
+      final frontCamera = cameras.firstWhere(
+        (c) => c.lensDirection == CameraLensDirection.front,
+        orElse: () => cameras.first,
+      );
+      _cameraDescription = frontCamera;
+
+      _cameraController = CameraController(
+        frontCamera,
+        ResolutionPreset.medium,
+        enableAudio: false,
+        imageFormatGroup: Platform.isAndroid
+            ? ImageFormatGroup.yuv420
+            : ImageFormatGroup.bgra8888,
+      );
+
+      await _cameraController!.initialize();
+
+      if (!mounted) return;
+
+      setState(() => _isCameraInitialized = true);
+
+      await Future.delayed(const Duration(milliseconds: 300));
+      if (!mounted) return;
+
+      _startFrameStream();
+    } catch (e) {
+      debugPrint('Camera init error: $e');
+      setState(() => _faceStatus = 'Camera error — check permissions');
+    }
+  }
+
+  void _startFrameStream() {
+    if (_streamStarted) return;
+    _streamStarted = true;
+
+    _cameraController?.startImageStream((CameraImage img) {
+      _latestFrame = img;
+    });
+
+    _frameTimer?.cancel();
+    _frameTimer = Timer.periodic(const Duration(milliseconds: 400), (_) {
+      _processLatestFrame();
+    });
+  }
+
+  void _stopFrameStream() {
+    _frameTimer?.cancel();
+    _frameTimer = null;
+    _latestFrame = null;
+    _streamStarted = false;
+    try {
+      if (_cameraController?.value.isStreamingImages == true) {
+        _cameraController!.stopImageStream();
+      }
+    } catch (e) {
+      debugPrint('Stop streaming error: $e');
+    }
+  }
+
+  // ── Frame Processing & Geometric Comparison ────────────────────────────────
+
+  Uint8List _convertYUV420toNV21(CameraImage image) {
+    final yPlane = image.planes[0];
+    final uPlane = image.planes[1];
+    final vPlane = image.planes[2];
+    final ySize = yPlane.bytes.length;
+    final uvLen = uPlane.bytes.length;
+    final nv21 = Uint8List(ySize + uvLen * 2);
+    nv21.setRange(0, ySize, yPlane.bytes);
+    int idx = ySize;
+    for (int i = 0; i < uvLen; i++) {
+      nv21[idx++] = vPlane.bytes[i];
+      nv21[idx++] = uPlane.bytes[i];
+    }
+    return nv21;
   }
 
   InputImage? _inputImageFromCameraImage(CameraImage image) {
     if (_cameraDescription == null) return null;
 
-    final format = InputImageFormatValue.fromRawValue(image.format.raw);
-    if (format == null) return null;
-    
-    // For Android, ML Kit expects YUV420. For iOS, BGRA8888.
-    if (Platform.isAndroid && format != InputImageFormat.yuv420) return null;
-    if (Platform.isIOS && format != InputImageFormat.bgra8888) return null;
-
-    final WriteBuffer allBytes = WriteBuffer();
-    for (final Plane plane in image.planes) {
-      allBytes.putUint8List(plane.bytes);
+    if (Platform.isIOS) {
+      final format = InputImageFormatValue.fromRawValue(image.format.raw);
+      if (format == null || format != InputImageFormat.bgra8888) return null;
+      final buf = WriteBuffer();
+      for (final p in image.planes) buf.putUint8List(p.bytes);
+      return InputImage.fromBytes(
+        bytes: buf.done().buffer.asUint8List(),
+        metadata: InputImageMetadata(
+          size: Size(image.width.toDouble(), image.height.toDouble()),
+          rotation: InputImageRotation.rotation0deg,
+          format: format,
+          bytesPerRow: image.planes.first.bytesPerRow,
+        ),
+      );
+    } else {
+      if (image.planes.length < 3) return null;
+      return InputImage.fromBytes(
+        bytes: _convertYUV420toNV21(image),
+        metadata: InputImageMetadata(
+          size: Size(image.width.toDouble(), image.height.toDouble()),
+          rotation: _imageRotation,
+          format: InputImageFormat.nv21,
+          bytesPerRow: image.planes.first.bytesPerRow,
+        ),
+      );
     }
-    final bytes = allBytes.done().buffer.asUint8List();
-
-    // Use adaptive rotation
-    final rotation = _rotations[_rotationIndex];
-
-    return InputImage.fromBytes(
-      bytes: bytes,
-      metadata: InputImageMetadata(
-        size: Size(image.width.toDouble(), image.height.toDouble()),
-        rotation: rotation,
-        format: format,
-        bytesPerRow: image.planes[0].bytesPerRow,
-      ),
-    );
   }
 
-  DateTime? _lastProcessed;
+  Future<void> _processLatestFrame() async {
+    if (_isProcessingFrame || !mounted) return;
+    if (_faceDetector == null || _latestFrame == null || _currentLivenessStep == _LivenessStep.done) return;
 
-  Future<void> _processCameraImage(CameraImage image) async {
-    if (_isProcessing || _isVerified || !_scanningActive || !mounted) return;
-    
-    // Throttling: Only process one frame every 500ms to avoid clogging the native bridge
-    final now = DateTime.now();
-    if (_lastProcessed != null && now.difference(_lastProcessed!).inMilliseconds < 500) {
-      return;
-    }
-    _lastProcessed = now;
-    
-    _isProcessing = true;
+    _isProcessingFrame = true;
+    final image = _latestFrame!;
 
     try {
       final inputImage = _inputImageFromCameraImage(image);
       if (inputImage == null) {
-        _isProcessing = false;
+        _isProcessingFrame = false;
         return;
       }
 
       final faces = await _faceDetector!.processImage(inputImage);
+      if (!mounted) return;
 
-      if (mounted) {
+      if (faces.isEmpty) {
         setState(() {
-          _detectedFace = faces.isNotEmpty ? faces.first : null;
+          _detectedFace = null;
+          _faceStatus = 'No face detected';
         });
+        _isProcessingFrame = false;
+        return;
       }
 
-      if (faces.isNotEmpty) {
-        _rotationLocked = true; // Found a face! Lock this rotation.
-        if (mounted) _analyzeFace(faces.first);
-      } else if (!_rotationLocked && _scanningActive) {
-        // Try next rotation if we haven't found a face after a few attempts
-        final now = DateTime.now();
-        if (_lastRotationTry == null || now.difference(_lastRotationTry!).inSeconds >= 2) {
-          _lastRotationTry = now;
-          setState(() {
-            _rotationIndex = (_rotationIndex + 1) % _rotations.length;
-            _hintText = "Calibrating sensor... (${_rotationIndex + 1}/4)";
-          });
+      final face = faces.first;
+      setState(() {
+        _detectedFace = face;
+      });
+
+      _updateFaceStatus(face, image.width.toDouble(), image.height.toDouble());
+      _advanceLiveness(face);
+    } catch (e) {
+      debugPrint('Live frame process error: $e');
+    } finally {
+      _isProcessingFrame = false;
+    }
+  }
+
+  void _updateFaceStatus(Face face, double imgW, double imgH) {
+    // On Android the camera stream is rotated 90°/270°, so width/height are swapped
+    final bool isRotated = _imageRotation == InputImageRotation.rotation90deg ||
+        _imageRotation == InputImageRotation.rotation270deg;
+    final double frameW = isRotated ? imgH : imgW;
+    final double frameH = isRotated ? imgW : imgH;
+
+    final box = face.boundingBox;
+    final double w = box.width, h = box.height;
+    final double cx = box.center.dx, cy = box.center.dy;
+
+    // Proportional thresholds — works on any camera resolution
+    final double minFaceRatio = 0.18; // face must be at least 18% of frame
+    final double maxFaceRatio = 0.65; // face must not exceed 65% of frame
+    final double centerMarginX = 0.20; // allow 20% margin from each side
+    final double centerMarginY = 0.20;
+
+    String s;
+    if (w / frameW < minFaceRatio || h / frameH < minFaceRatio) {
+      s = 'Too far — move closer';
+    } else if (w / frameW > maxFaceRatio || h / frameH > maxFaceRatio) {
+      s = 'Too close — move back';
+    } else if (cx / frameW < centerMarginX) {
+      s = 'Move right';
+    } else if (cx / frameW > 1.0 - centerMarginX) {
+      s = 'Move left';
+    } else if (cy / frameH < centerMarginY) {
+      s = 'Move down';
+    } else if (cy / frameH > 1.0 - centerMarginY) {
+      s = 'Move up';
+    } else {
+      s = 'Good position';
+    }
+    if (_faceStatus != s) setState(() => _faceStatus = s);
+  }
+
+  double _calculateSimilarity(Face idFace, Face liveFace) {
+    Point<int>? getPos(Face face, FaceLandmarkType type) {
+      return face.landmarks[type]?.position;
+    }
+
+    final idLeftEye = getPos(idFace, FaceLandmarkType.leftEye);
+    final idRightEye = getPos(idFace, FaceLandmarkType.rightEye);
+    final idNose = getPos(idFace, FaceLandmarkType.noseBase);
+    final idMouthLeft = getPos(idFace, FaceLandmarkType.leftMouth);
+    final idMouthRight = getPos(idFace, FaceLandmarkType.rightMouth);
+    final idLeftCheek = getPos(idFace, FaceLandmarkType.leftCheek);
+    final idRightCheek = getPos(idFace, FaceLandmarkType.rightCheek);
+
+    final liveLeftEye = getPos(liveFace, FaceLandmarkType.leftEye);
+    final liveRightEye = getPos(liveFace, FaceLandmarkType.rightEye);
+    final liveNose = getPos(liveFace, FaceLandmarkType.noseBase);
+    final liveMouthLeft = getPos(liveFace, FaceLandmarkType.leftMouth);
+    final liveMouthRight = getPos(liveFace, FaceLandmarkType.rightMouth);
+    final liveLeftCheek = getPos(liveFace, FaceLandmarkType.leftCheek);
+    final liveRightCheek = getPos(liveFace, FaceLandmarkType.rightCheek);
+
+    double dist(Point<int> p1, Point<int> p2) {
+      return sqrt(pow(p1.x - p2.x, 2) + pow(p1.y - p2.y, 2));
+    }
+
+    Map<String, double>? getRatios(
+      Point<int>? leftEye,
+      Point<int>? rightEye,
+      Point<int>? nose,
+      Point<int>? mouthLeft,
+      Point<int>? mouthRight,
+      Point<int>? leftCheek,
+      Point<int>? rightCheek,
+      Rect boundingBox,
+    ) {
+      if (leftEye == null || rightEye == null || nose == null || mouthLeft == null || mouthRight == null) {
+        return null;
+      }
+
+      final eyeDist = dist(leftEye, rightEye);
+      if (eyeDist <= 0) return null;
+
+      final noseToLeftEye = dist(nose, leftEye);
+      final noseToRightEye = dist(nose, rightEye);
+      final mouthWidth = dist(mouthLeft, mouthRight);
+      final mouthCenter = Point<int>(
+        ((mouthLeft.x + mouthRight.x) / 2).round(),
+        ((mouthLeft.y + mouthRight.y) / 2).round(),
+      );
+      final noseToMouth = dist(nose, mouthCenter);
+
+      final leftEyeToMouth = dist(leftEye, mouthLeft);
+      final rightEyeToMouth = dist(rightEye, mouthRight);
+
+      final double cheekDist = (leftCheek != null && rightCheek != null) ? dist(leftCheek, rightCheek) : 0.0;
+
+      final double boxWidth = boundingBox.width.toDouble();
+      final double boxHeight = boundingBox.height.toDouble();
+      final double aspect = boxWidth > 0 ? boxHeight / boxWidth : 1.3;
+
+      return {
+        'eyeToNose': (noseToLeftEye + noseToRightEye) / (2 * eyeDist),
+        'mouthWidth': mouthWidth / eyeDist,
+        'eyeToMouth': (leftEyeToMouth + rightEyeToMouth) / (2 * eyeDist),
+        'noseToMouth': noseToMouth / eyeDist,
+        if (cheekDist > 0) 'cheekToCheek': cheekDist / eyeDist,
+        'aspect': aspect,
+      };
+    }
+
+    final idRatios = getRatios(idLeftEye, idRightEye, idNose, idMouthLeft, idMouthRight, idLeftCheek, idRightCheek, idFace.boundingBox);
+    final liveRatios = getRatios(liveLeftEye, liveRightEye, liveNose, liveMouthLeft, liveMouthRight, liveLeftCheek, liveRightCheek, liveFace.boundingBox);
+
+    if (idRatios == null || liveRatios == null) return 0.0;
+
+    double totalError = 0.0;
+    int count = 0;
+
+    idRatios.forEach((key, idValue) {
+      final liveValue = liveRatios[key];
+      if (liveValue != null) {
+        totalError += (idValue - liveValue).abs();
+        count++;
+      }
+    });
+
+    if (count == 0) return 0.0;
+
+    final double averageError = totalError / count;
+
+    // Map averageError: 0.00 -> 1.0 (100%), averageError >= 0.15 -> 0.0 (0%)
+    return max(0.0, 1.0 - (averageError / 0.15));
+  }
+
+  void _advanceLiveness(Face face) {
+    final eulerY = face.headEulerAngleY ?? 0;
+    final eulerX = face.headEulerAngleX ?? 0;
+    final inPosition = _faceStatus == 'Good position';
+
+    if (_currentLivenessStep != _LivenessStep.scanning) return;
+
+    if (inPosition && eulerY.abs() < 12 && eulerX.abs() < 12) {
+      _alignFrames++;
+      // Collect similarity every frame when in position
+      if (_idFace != null) {
+        final score = _calculateSimilarity(_idFace!, face);
+        _similarities.add(score);
+      }
+      if (_alignFrames >= _framesRequired) {
+        _similarityScore = _similarities.isNotEmpty
+            ? _similarities.reduce((a, b) => a + b) / _similarities.length
+            : 0.0;
+        _advanceStep(_LivenessStep.done);
+      }
+    } else {
+      // Reset if face moves out of position but keep accumulated similarities
+      _alignFrames = 0;
+    }
+  }
+
+  void _advanceStep(_LivenessStep next) {
+    HapticFeedback.mediumImpact();
+    setState(() => _currentLivenessStep = next);
+
+    if (next == _LivenessStep.done) {
+      _stopFrameStream();
+      HapticFeedback.heavyImpact();
+      _finishFaceVerification();
+    }
+  }
+
+  // ── Verification Completion & Firestore Upload ──────────────────────────────
+
+  Future<void> _finishFaceVerification() async {
+    // 1. Enforce similarity threshold >= 70%
+    final bool matchSuccess = _similarityScore >= 0.70;  // 70% threshold - accounts for IC photo quality/angle
+    
+    setState(() {
+      _verificationSuccess = matchSuccess;
+      _currentPhase = _VerificationPhase.result;
+    });
+
+    if (!matchSuccess) return; // Stop if verification fails, user gets retry card
+
+    // Show loading modal on successful match
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(
+        child: CircularProgressIndicator(color: Colors.white),
+      ),
+    );
+
+    try {
+      XFile? faceImage;
+      try {
+        faceImage = await _cameraController?.takePicture();
+      } catch (e) {
+        debugPrint('Failed to snap matching face: $e');
+      }
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('liveness_verified', true);
+
+      User? user = FirebaseAuth.instance.currentUser;
+      if (user == null) throw Exception("Session lost. Please log in again.");
+
+      String? faceImageUrl;
+      if (faceImage != null) {
+        try {
+          final ref = FirebaseStorage.instance.ref().child('user_faces').child('${user.uid}.jpg');
+          await ref.putFile(File(faceImage.path));
+          faceImageUrl = await ref.getDownloadURL();
+        } catch (e) {
+          debugPrint('Upload matching face error: $e');
         }
       }
+
+      // Save complete registration payload
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+        'uid': user.uid,
+        'email': widget.email,
+        'fullName': widget.fullName,
+        'dateOfBirth': widget.dob,
+        'icNumber': widget.icNumber,
+        'gender': widget.gender,
+        'createdAt': FieldValue.serverTimestamp(),
+        'isVerified': user.emailVerified,
+        'faceImageUrl': faceImageUrl,
+        'matchConfidence': _similarityScore,
+      });
+
+      await user.updateDisplayName(widget.fullName);
+
+      if (!mounted) return;
+      Navigator.pop(context); // Close loading indicator
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Account verified and registered successfully!"),
+          backgroundColor: Color(0xFF7B9E89),
+        ),
+      );
+
+      // Auto-navigate directly to the Home Page
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (context) => const MainScreen()),
+        (route) => false,
+      );
     } catch (e) {
-      debugPrint("ML Processing Error: $e");
-      // Stop scanning if there's a serious native error to prevent battery drain
-      if (e.toString().contains('IllegalArgumentException')) {
-         _scanningActive = false;
-         _currentInstruction = "Scanning error. Let's try again.";
-      }
-    } finally {
       if (mounted) {
-        setState(() {
-          _isProcessing = false;
-        });
+        Navigator.pop(context); // Close loading indicator
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Verification registration failed: $e'), backgroundColor: Colors.red),
+        );
       }
     }
   }
 
-  void _analyzeFace(Face face) {
-    if (_isVerified) return;
 
+
+  // Retry live scanner only (keeps existing ID document)
+  Future<void> _retryLiveScan() async {
     setState(() {
-      _currentEulerY = face.headEulerAngleY ?? 0;
-      _currentEulerX = face.headEulerAngleX ?? 0;
+      _currentPhase = _VerificationPhase.liveScan;
+      _currentLivenessStep = _LivenessStep.scanning;
+      _alignFrames = 0;
+      _similarities.clear();
+      _faceStatus = 'Align face in the center';
     });
+    await _initializeCamera();
+  }
 
-    if (!_blinkDetected) {
-      if (face.leftEyeOpenProbability != null && face.rightEyeOpenProbability != null) {
-        if (face.leftEyeOpenProbability! < 0.2 && face.rightEyeOpenProbability! < 0.2) {
-          setState(() {
-            _blinkDetected = true;
-            _currentInstruction = 'Turn your head left';
-            _hintText = "Rotate until the bar is full";
-          });
-          HapticFeedback.mediumImpact();
-        } else {
-          setState(() => _hintText = "Blink your eyes now");
-        }
-      }
-    } else if (!_turnLeftDetected) {
-      final double progress = (_currentEulerY / 20).clamp(0.0, 1.0);
-      if (_currentEulerY > 20) {
-        setState(() {
-          _turnLeftDetected = true;
-          _currentInstruction = 'Turn your head right';
-          _hintText = "Now rotate to the other side";
-        });
-        HapticFeedback.mediumImpact();
-      } else if (_currentEulerY > 5) {
-        setState(() => _hintText = "Keep turning left...");
-      }
-    } else if (!_turnRightDetected) {
-      if (_currentEulerY < -20) {
-        setState(() {
-          _turnRightDetected = true;
-          _currentInstruction = 'Verification Successful!';
-          _isVerified = true;
-          _hintText = "You're all set!";
-        });
-        HapticFeedback.vibrate();
-        Future.delayed(const Duration(milliseconds: 1500), () => _startScan());
-      } else if (_currentEulerY < -5) {
-        setState(() => _hintText = "Great! Keep turning right...");
-      }
+  Future<void> _cancelAndGoBack() async {
+    _stopFrameStream();
+    if (mounted) {
+      Navigator.of(context).pop();
     }
   }
 
   @override
   void dispose() {
+    _frameTimer?.cancel();
+    _pulseController.dispose();
     _cameraController?.dispose();
     _faceDetector?.close();
-    _controller.dispose();
     super.dispose();
   }
 
-  void _startLivenessTest() {
-    setState(() {
-      _scanningActive = true;
-      _isVerified = false; // Reset
-      _blinkDetected = false;
-      _turnLeftDetected = false;
-      _turnRightDetected = false;
-      _rotationLocked = false;
-      _currentInstruction = 'Blink your eyes';
-      _hintText = "Hold phone at eye level";
-    });
-  }
-
-  Future<void> _startScan() async {
-    if (!_isVerified) {
-      _startLivenessTest();
-      return;
-    }
-
-    // 1. Show loading dialog
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => const Center(child: CircularProgressIndicator(color: Colors.white)),
-    );
-
-    try {
-      // For both Google and Manual users (who already verified email), 
-      // we now just simulate the premium "face scan" experience.
-      await Future.delayed(const Duration(seconds: 2));
-
-      if (mounted) {
-        Navigator.pop(context); // Pop loading dialog
-        
-        // Go straight to UserDetailsPage after the "scan"
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (context) => UserDetailsPage(
-              email: widget.email,
-              password: widget.password,
-            ),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        Navigator.pop(context); // Pop loading dialog
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Verification Error: $e'), backgroundColor: Colors.red),
-        );
-      }
-    }
-  }
+  // ── Build Layouts ──────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8FAF7), // Unified sage background
-      body: SafeArea(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            return SingleChildScrollView(
-              child: ConstrainedBox(
-                constraints: BoxConstraints(
-                  minHeight: constraints.maxHeight,
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        await _cancelAndGoBack();
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF8FAF7),
+        body: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                // 3-Step Onboarding Progress Bar
+                Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: IconButton(
+                        onPressed: _cancelAndGoBack,
+                        icon: const Icon(Icons.arrow_back_ios_new, size: 20, color: Color(0xFF1E2742)),
+                      ),
+                    ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        _buildProgressStep(true),
+                        const SizedBox(width: 8),
+                        _buildProgressStep(true),
+                        const SizedBox(width: 8),
+                        _buildProgressStep(true), // Verification step active
+                      ],
+                    ),
+                  ],
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 20.0),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Column(
-                        children: [
-                          const SizedBox(height: 4),
-                          // Consistent Progress Bar (Step 2 Active) with Back Button
-                          Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              Align(
-                                alignment: Alignment.centerLeft,
-                                child: IconButton(
-                                  icon: const Icon(Icons.arrow_back_ios_new, size: 20, color: Color(0xFF1E2742)),
-                                  onPressed: () async {
-                                    try {
-                                      // If they cancel mid-registration flow, delete the Auth entry 
-                                      // so it's not "saved" without a profile.
-                                      await FirebaseAuth.instance.currentUser?.delete();
-                                    } catch (e) {
-                                      // Fallback to sign out if delete fails (e.g. session timeout)
-                                      await FirebaseAuth.instance.signOut();
-                                    }
-                                    if (mounted) Navigator.pop(context);
-                                  },
-                                ),
-                              ),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  _buildProgressStep(true), // Step 1
-                                  const SizedBox(width: 8),
-                                  _buildProgressStep(true), // Step 2 (Current)
-                                  const SizedBox(width: 8),
-                                  _buildProgressStep(false), // Step 3
-                                  const SizedBox(width: 8),
-                                  _buildProgressStep(false), // Step 4
-                                ],
-                              ),
-                            ],
-                          ),
+                const SizedBox(height: 18),
 
-                          const SizedBox(height: 17),
-
-                          // Headlines
-                          Text(
-                            'Look into the light',
-                            textAlign: TextAlign.center,
-                            style: GoogleFonts.playfairDisplay(
-                              fontSize: 32,
-                              fontWeight: FontWeight.w600,
-                              color: const Color(0xFF324F43),
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            'Position your face within the circle to\nhelp us keep the community safe.',
-                            textAlign: TextAlign.center,
-                            style: GoogleFonts.outfit(
-                              fontSize: 15,
-                              height: 1.5,
-                              color: const Color(0xFF7A8C85),
-                            ),
-                          ),
-
-                          const SizedBox(height: 40),
-
-                          // Scanner Circle
-                          Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              // Outer Glow/Ring
-                              Container(
-                                width: 280,
-                                height: 280,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: _isVerified ? const Color(0xFF7B9E89) : Colors.white, 
-                                    width: 8
-                                  ),
-                                  gradient: LinearGradient(
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                    colors: [
-                                      (_turnLeftDetected ? const Color(0xFF7B9E89) : (_blinkDetected ? Colors.orangeAccent : const Color(0xFF7B9E89))).withOpacity(0.5),
-                                      Colors.white.withOpacity(0.2),
-                                    ],
-                                  ),
-                                  boxShadow: [
-                                     BoxShadow(
-                                      color: (_isVerified ? const Color(0xFF7B9E89) : Colors.black).withOpacity(0.1),
-                                      blurRadius: 30,
-                                      spreadRadius: 10,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              // Camera Preview
-                              Container(
-                                width: 240,
-                                height: 240,
-                                decoration: const BoxDecoration(
-                                  color: Color(0xFF233033),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: ClipOval(
-                                  child: _isCameraInitialized
-                                      ? Stack(
-                                          fit: StackFit.expand,
-                                          children: [
-                                            AspectRatio(
-                                              aspectRatio: 1,
-                                              child: CameraPreview(_cameraController!),
-                                            ),
-                                            // Live Detection Overlay
-                                            if (_scanningActive && _detectedFace != null)
-                                              Positioned.fill(
-                                                child: CustomPaint(
-                                                  painter: FaceOverlayPainter(
-                                                    face: _detectedFace!,
-                                                    imageSize: _cameraController!.value.previewSize!,
-                                                    blinkDetected: _blinkDetected,
-                                                  ),
-                                                ),
-                                              ),
-                                            // Moving Laser Line Animation
-                                            if (_scanningActive && !_isVerified)
-                                              AnimatedBuilder(
-                                                animation: _controller,
-                                                builder: (context, child) {
-                                                  return Positioned(
-                                                    top: 40 + (160 * _controller.value),
-                                                    left: 40,
-                                                    right: 40,
-                                                    child: Container(
-                                                      height: 2,
-                                                      decoration: BoxDecoration(
-                                                        color: const Color(0xFF7B9E89),
-                                                        boxShadow: [
-                                                          BoxShadow(
-                                                            color: const Color(0xFF7B9E89).withOpacity(0.8),
-                                                            blurRadius: 10,
-                                                            spreadRadius: 2,
-                                                          )
-                                                        ],
-                                                      ),
-                                                    ),
-                                                  );
-                                                },
-                                              ),
-                                            // Real-time silhouette guide
-                                            Center(
-                                              child: Opacity(
-                                                opacity: 0.15,
-                                                child: Icon(
-                                                  Icons.person_pin,
-                                                  size: 200,
-                                                  color: Colors.white,
-                                                ),
-                                              ),
-                                            ),
-                                            // Rotation Gauge Overlay
-                                            if (_scanningActive && !_isVerified)
-                                              Positioned(
-                                                bottom: 15,
-                                                left: 40,
-                                                right: 40,
-                                                child: _buildRotationGauge(),
-                                              ),
-                                            // Real-time Debug Status
-                                            if (_scanningActive && !_isVerified)
-                                              Positioned(
-                                                top: 20,
-                                                child: Container(
-                                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                                  decoration: BoxDecoration(
-                                                    color: Colors.black54,
-                                                    borderRadius: BorderRadius.circular(10),
-                                                  ),
-                                                  child: Column(
-                                                    children: [
-                                                      Text(
-                                                        _detectedFace != null ? "FACE LOCKED" : "SEARCHING...",
-                                                        style: GoogleFonts.outfit(
-                                                          fontSize: 10,
-                                                          color: _detectedFace != null ? Colors.greenAccent : Colors.white70,
-                                                          fontWeight: FontWeight.bold,
-                                                        ),
-                                                      ),
-                                                      if (_detectedFace != null)
-                                                        Text(
-                                                          "Angle: ${_currentEulerY.toStringAsFixed(1)}°",
-                                                          style: GoogleFonts.outfit(
-                                                            fontSize: 9,
-                                                            color: Colors.white,
-                                                          ),
-                                                        ),
-                                                    ],
-                                                  ),
-                                                ),
-                                              ),
-                                          ],
-                                        )
-                                      : const Center(child: CircularProgressIndicator(color: Color(0xFF7B9E89))),
-                                ),
-                              ),
-                              // Scanning Corners Overlay
-                              SizedBox(
-                                width: 140,
-                                height: 170,
-                                child: CustomPaint(
-                                  painter: ScannerCornersPainter(),
-                                ),
-                              ),
-                              
-                              // Scanning Line Animation (Optional)
-                               AnimatedBuilder(
-                                animation: _controller,
-                                builder: (context, child) {
-                                  return Positioned(
-                                    top: 40 + (160 * _controller.value),
-                                    child: Container(
-                                      width: 200,
-                                      height: 2,
-                                      decoration: BoxDecoration(
-                                        boxShadow: [
-                                          BoxShadow(color: const Color(0xFF7B9E89).withOpacity(0.5), blurRadius: 5)
-                                        ],
-                                        color: Colors.white.withOpacity(0.5), 
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
-                            ],
-                          ),
-
-                          const SizedBox(height: 40),
-
-                          // Instruction Pill
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(30),
-                              border: Border.all(color: const Color(0xFFF0F0F0)),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.02),
-                                  blurRadius: 10,
-                                  offset: const Offset(0, 4),
-                                )
-                              ],
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  _isVerified ? Icons.check_circle : Icons.face_retouching_natural,
-                                  color: const Color(0xFF7B9E89),
-                                  size: 20,
-                                ),
-                                const SizedBox(width: 12),
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        Text(
-                                          _currentInstruction,
-                                          style: GoogleFonts.outfit(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.bold,
-                                            color: _isVerified ? const Color(0xFF7B9E89) : const Color(0xFF1E2742),
-                                          ),
-                                        ),
-                                        if (_detectedFace != null && !_isVerified)
-                                          Padding(
-                                            padding: const EdgeInsets.only(left: 8),
-                                            child: Container(
-                                              width: 8,
-                                              height: 8,
-                                              decoration: BoxDecoration(
-                                                color: Colors.greenAccent,
-                                                shape: BoxShape.circle,
-                                                boxShadow: [BoxShadow(color: Colors.greenAccent, blurRadius: 4)],
-                                              ),
-                                            ),
-                                          ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      _hintText,
-                                      style: GoogleFonts.outfit(
-                                        fontSize: 12,
-                                        color: const Color(0xFF7A8C85),
-                                      ),
-                                    ),
-                                    if (_scanningActive && !_isVerified)
-                                      Padding(
-                                        padding: const EdgeInsets.only(top: 8),
-                                        child: Row(
-                                          children: [
-                                            _buildStepDot(_blinkDetected),
-                                            _buildStepDot(_turnLeftDetected),
-                                            _buildStepDot(_turnRightDetected),
-                                          ],
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 40),
-                        ],
-                      ),
-                      
-                      // Bottom Section
-                      Column(
-                        children: [
-                          // Privacy Note
-                          Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFE8F1EB), // Light sage tint
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            child: Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(8),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white.withOpacity(0.6),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: const Icon(Icons.lock_outline, size: 18, color: Color(0xFF7B9E89)),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Text(
-                                    "Your biometric data is encrypted and never shared. It's used only for this one-time verification.",
-                                    style: GoogleFonts.outfit(
-                                      fontSize: 11,
-                                      height: 1.4,
-                                      color: const Color(0xFF4A6356),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-
-                          const SizedBox(height: 24),
-
-                          // Emergency Skip Button
-                          if (_showSkipButton && !_isVerified)
-                            TextButton(
-                              onPressed: () {
-                                setState(() => _isVerified = true);
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text("Bypassing verification for this session...")),
-                                );
-                                _startScan();
-                              },
-                              child: Text(
-                                "Cant get it work? Skip for now",
-                                style: GoogleFonts.outfit(
-                                  fontSize: 13,
-                                  color: Colors.grey[600],
-                                  decoration: TextDecoration.underline,
-                                ),
-                              ),
-                            ),
-
-                          const SizedBox(height: 12),
-
-                          // Start Scan Button
-                          SizedBox(
-                            width: double.infinity,
-                            height: 56,
-                            child: ElevatedButton(
-                              onPressed: _startScan,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF7B9E89), // Primary Sage Green
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(16),
-                                ),
-                                elevation: 0,
-                              ),
-                              child: Text(
-                                _isVerified 
-                                  ? 'Continue' 
-                                  : (_scanningActive ? 'Scanning...' : 'Start Verification'),
-                                style: GoogleFonts.outfit(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ),
-                          ),
-
-                          const SizedBox(height: 20),
-                          
-                          // Bottom Links
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              TextButton(
-                                onPressed: (){}, 
-                                child: Text(
-                                  'Retake photo',
-                                  style: GoogleFonts.outfit(
-                                    color: const Color(0xFFAAAAAA),
-                                    fontSize: 13,
-                                  ),
-                                )
-                              ),
-                              TextButton(
-                                 onPressed: (){}, 
-                                 child: Row(
-                                   children: [
-                                     Text(
-                                       'Help center',
-                                       style: GoogleFonts.outfit(
-                                         color: const Color(0xFFAAAAAA),
-                                         fontSize: 13,
-                                       ),
-                                     ),
-                                     const SizedBox(width: 4),
-                                     const Icon(Icons.open_in_new, size: 12, color: Color(0xFFAAAAAA)),
-                                   ],
-                                 ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 10),
-                        ],
-                      ),
-                    ],
+                Text(
+                  'Face Verification',
+                  style: GoogleFonts.playfairDisplay(
+                    fontSize: 30,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF324F43),
                   ),
                 ),
-              ),
-            );
-          }
+                const SizedBox(height: 8),
+
+                // Phase switching build
+                if (_currentPhase == _VerificationPhase.uploadID)
+                  _buildUploadIdPhase()
+                else if (_currentPhase == _VerificationPhase.liveScan)
+                  _buildLiveScanPhase()
+                else
+                  _buildResultPhase(),
+              ],
+            ),
+          ),
         ),
       ),
     );
   }
-  Widget _buildRotationGauge() {
-    // Determine progress based on current step
-    double progress = 0;
-    if (_blinkDetected && !_turnLeftDetected) {
-      progress = (_currentEulerY / 20).clamp(0.0, 1.0);
-    } else if (_turnLeftDetected && !_turnRightDetected) {
-      progress = (_currentEulerY / -20).clamp(0.0, 1.0);
-    }
+
+  // Phase 1: Upload ID Layout
+  Widget _buildUploadIdPhase() {
+    final bool isAutoMode = widget.icImagePath != null;
 
     return Column(
       children: [
+        Text(
+          isAutoMode
+              ? 'Preparing your IC for face verification...'
+              : 'We need to extract your face from your ID card or passport.',
+          textAlign: TextAlign.center,
+          style: GoogleFonts.outfit(fontSize: 14, height: 1.5, color: const Color(0xFF7A8C85)),
+        ),
+        const SizedBox(height: 32),
+
+        // Card Container Slot
         Container(
-          height: 6,
+          width: double.infinity,
+          height: 220,
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.3),
-            borderRadius: BorderRadius.circular(3),
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: _idFaceExtracted
+                  ? const Color(0xFF7B9E89)
+                  : (_idErrorMessage != null ? Colors.red.shade200 : Colors.grey.shade200),
+              width: 2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.02),
+                blurRadius: 15,
+                offset: const Offset(0, 5),
+              ),
+            ],
           ),
-          child: FractionallySizedBox(
-            widthFactor: progress,
-            alignment: Alignment.centerLeft,
-            child: Container(
-              decoration: BoxDecoration(
-                color: const Color(0xFF7B9E89),
-                borderRadius: BorderRadius.circular(3),
-                boxShadow: [
-                  BoxShadow(color: const Color(0xFF7B9E89).withOpacity(0.5), blurRadius: 4)
-                ],
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(22),
+            child: _idImageFile == null
+                ? (isAutoMode
+                    // Auto mode: show loading while image is being set up
+                    ? const Center(child: CircularProgressIndicator(color: Color(0xFF7B9E89)))
+                    : InkWell(
+                        onTap: () => _showPickerOptions(),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: const BoxDecoration(
+                                color: Color(0xFFE8F1EB),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.add_photo_alternate_outlined, color: Color(0xFF7B9E89), size: 36),
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              'Upload ID card / Passport',
+                              style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w600, color: const Color(0xFF1E2742)),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Tap to select from Camera or Gallery',
+                              style: GoogleFonts.outfit(fontSize: 12, color: Colors.grey[400]),
+                            ),
+                          ],
+                        ),
+                      ))
+                : Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      Image.file(_idImageFile!, fit: BoxFit.cover),
+                      // If face is found, overlay highlight box
+                      if (_idFaceExtracted && _idFace != null && _idImageSize != null)
+                        CustomPaint(
+                          painter: _IdFacePainter(
+                            boundingBox: _idFace!.boundingBox,
+                            imageSize: _idImageSize!,
+                          ),
+                        ),
+                      if (_isProcessingId)
+                        Container(
+                          color: Colors.black45,
+                          child: const Center(
+                            child: CircularProgressIndicator(color: Colors.white),
+                          ),
+                        ),
+                    ],
+                  ),
+          ),
+        ),
+        const SizedBox(height: 24),
+
+        // Helper messages
+        if (_idFaceExtracted)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.check_circle_rounded, color: Color(0xFF2E7D32), size: 20),
+              const SizedBox(width: 8),
+              Text(
+                isAutoMode ? 'IC face detected — starting scan...' : 'Face detected on ID successfully!',
+                style: GoogleFonts.outfit(color: const Color(0xFF2E7D32), fontWeight: FontWeight.w600, fontSize: 14),
+              ),
+            ],
+          )
+        else if (_idErrorMessage != null)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              _idErrorMessage!,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.outfit(color: Colors.redAccent, fontWeight: FontWeight.w600, fontSize: 14),
+            ),
+          ),
+
+        const SizedBox(height: 40),
+
+        // Buttons — only shown in manual mode or on error
+        if (!isAutoMode && _idImageFile != null) ...[
+          SizedBox(
+            width: double.infinity,
+            height: 56,
+            child: ElevatedButton(
+              onPressed: _idFaceExtracted && !_isProcessingId ? _startLiveScan : null,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF7B9E89),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                elevation: 0,
+              ),
+              child: Text(
+                'Start Face Verification',
+                style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white),
               ),
             ),
+          ),
+          const SizedBox(height: 16),
+          TextButton(
+            onPressed: () => _showPickerOptions(),
+            child: Text(
+              'Upload Different Image',
+              style: GoogleFonts.outfit(color: const Color(0xFF7B9E89), fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+
+        // In auto mode, only show retry option if there was an error
+        if (isAutoMode && _idErrorMessage != null && !_isProcessingId) ...[
+          SizedBox(
+            width: double.infinity,
+            height: 56,
+            child: ElevatedButton(
+              onPressed: () => _showPickerOptions(),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF7B9E89),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                elevation: 0,
+              ),
+              child: Text(
+                'Upload ID Manually',
+                style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white),
+              ),
+            ),
+          ),
+        ],
+
+        // In auto mode and no error, no manual upload button is shown
+        if (!isAutoMode && _idImageFile == null)
+          SizedBox(
+            width: double.infinity,
+            height: 56,
+            child: ElevatedButton(
+              onPressed: () => _showPickerOptions(),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF7B9E89),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                elevation: 0,
+              ),
+              child: Text(
+                'Upload ID card / Passport',
+                style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  void _showPickerOptions() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt, color: Color(0xFF7B9E89)),
+              title: Text('Take Photo', style: GoogleFonts.outfit()),
+              onTap: () {
+                Navigator.pop(context);
+                _pickIdImage(ImageSource.camera);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library, color: Color(0xFF7B9E89)),
+              title: Text('Choose from Gallery', style: GoogleFonts.outfit()),
+              onTap: () {
+                Navigator.pop(context);
+                _pickIdImage(ImageSource.gallery);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Phase 2: Live Scanning Layout
+  Widget _buildLiveScanPhase() {
+    // How many frames collected so far (capped to framesRequired)
+    final progress = (_alignFrames / _framesRequired).clamp(0.0, 1.0);
+
+    return Column(
+      children: [
+        Text(
+          'Look straight at the camera to compare with your IC photo.',
+          textAlign: TextAlign.center,
+          style: GoogleFonts.outfit(fontSize: 14, height: 1.5, color: const Color(0xFF7A8C85)),
+        ),
+        const SizedBox(height: 24),
+
+        // Live camera preview with guided overlay
+        AnimatedBuilder(
+          animation: _pulseAnimation,
+          builder: (_, __) {
+            final scale = _currentLivenessStep == _LivenessStep.scanning
+                ? _pulseAnimation.value
+                : 1.0;
+            return Transform.scale(
+              scale: scale,
+              child: SizedBox(
+                width: 270,
+                height: 270,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    // Scanning progress ring
+                    CustomPaint(
+                      size: const Size(270, 270),
+                      painter: _ScanningProgressPainter(
+                        progress: progress,
+                        isDone: _currentLivenessStep == _LivenessStep.done,
+                      ),
+                    ),
+
+                    // Camera clip preview
+                    ClipOval(
+                      child: SizedBox(
+                        width: 240,
+                        height: 240,
+                        child: _buildCameraPreview(),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+        const SizedBox(height: 20),
+
+        // Position/Action Status pill
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          decoration: BoxDecoration(
+            color: _faceStatus == 'Good position'
+                ? const Color(0xFFE8F1EB)
+                : Colors.orange.shade50,
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.circle,
+                size: 10,
+                color: _faceStatus == 'Good position' ? const Color(0xFF2E7D32) : Colors.orange,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                _faceStatus,
+                style: GoogleFonts.outfit(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: _faceStatus == 'Good position'
+                      ? const Color(0xFF2E7D32)
+                      : Colors.orange.shade800,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 24),
+
+        // Instruction card
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.02),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                _stepInstruction,
+                style: GoogleFonts.outfit(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: const Color(0xFF1E2742),
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                _stepHint,
+                style: GoogleFonts.outfit(fontSize: 14, color: const Color(0xFF7A8C85)),
+              ),
+              const SizedBox(height: 16),
+              // Simple progress bar showing scanning progress
+              ClipRRect(
+                borderRadius: BorderRadius.circular(99),
+                child: LinearProgressIndicator(
+                  value: progress,
+                  minHeight: 6,
+                  backgroundColor: Colors.grey.shade100,
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    progress >= 1.0 ? const Color(0xFF2E7D32) : const Color(0xFF7B9E89),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                _alignFrames >= _framesRequired
+                    ? 'Scan complete ✓'
+                    : 'Scanning... hold still',
+                style: GoogleFonts.outfit(
+                  fontSize: 12,
+                  color: _alignFrames >= _framesRequired
+                      ? const Color(0xFF2E7D32)
+                      : Colors.grey[400],
+                ),
+              ),
+            ],
           ),
         ),
       ],
     );
   }
 
-  Widget _buildStepDot(bool completed) {
-    return Container(
-      margin: const EdgeInsets.only(right: 4),
-      width: 8,
-      height: 8,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: completed ? const Color(0xFF7B9E89) : Colors.grey[200],
+  Widget _buildCameraPreview() {
+    if (!_isCameraInitialized || _cameraController == null) {
+      return Container(
+        color: Colors.black,
+        child: const Center(
+          child: CircularProgressIndicator(color: Color(0xFF7B9E89)),
+        ),
+      );
+    }
+
+    final previewSize = _cameraController!.value.previewSize;
+    if (previewSize == null) return Container(color: Colors.black);
+
+    return FittedBox(
+      fit: BoxFit.cover,
+      child: SizedBox(
+        width: previewSize.height,
+        height: previewSize.width,
+        child: CameraPreview(_cameraController!),
       ),
     );
   }
 
-  Widget _buildProgressStep(bool isActive) {
+  // Phase 3: Results Layout
+  Widget _buildResultPhase() {
+    final matchPct = (_similarityScore * 100).round();
+    return Column(
+      children: [
+        const SizedBox(height: 20),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(28),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.03),
+                blurRadius: 15,
+                offset: const Offset(0, 5),
+              ),
+            ],
+          ),
+          child: Column(
+            children: [
+              // Icon Status Header
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: _verificationSuccess ? const Color(0xFFE8F1EB) : Colors.red.shade50,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  _verificationSuccess ? Icons.verified_user_rounded : Icons.gpp_bad_outlined,
+                  size: 56,
+                  color: _verificationSuccess ? const Color(0xFF7B9E89) : Colors.redAccent,
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              Text(
+                _verificationSuccess ? 'Verification Successful' : 'Verification Failed',
+                style: GoogleFonts.playfairDisplay(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: const Color(0xFF1E2742),
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // Similarity Score Badge
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: _verificationSuccess ? const Color(0xFF7B9E89).withOpacity(0.1) : Colors.redAccent.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(30),
+                ),
+                child: Text(
+                  '$matchPct% Similarity Match',
+                  style: GoogleFonts.outfit(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: _verificationSuccess ? const Color(0xFF4A6356) : Colors.redAccent,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              Text(
+                _verificationSuccess
+                    ? 'Congratulations! Your facial features match the uploaded ID document. You are set to go.'
+                    : 'The facial match ratio is below the secure threshold. Please retry in a well-lit area or capture a clearer ID photo.',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.outfit(fontSize: 14, color: const Color(0xFF7A8C85), height: 1.6),
+              ),
+              const SizedBox(height: 32),
+
+              // Primary Actions
+              if (_verificationSuccess)
+                Center(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 12.0),
+                    child: Text(
+                      'Processing...',
+                      style: GoogleFonts.outfit(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF7B9E89),
+                      ),
+                    ),
+                  ),
+                )
+              else ...[
+                SizedBox(
+                  width: double.infinity,
+                  height: 56,
+                  child: ElevatedButton(
+                    onPressed: _retryLiveScan,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF7B9E89),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      elevation: 0,
+                    ),
+                    child: Text(
+                      'Retry Live Face Scan',
+                      style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── Utils ──────────────────────────────────────────────────────────────────
+
+  Widget _buildProgressStep(bool active) {
     return Container(
       width: 60,
       height: 2,
-      color: isActive ? const Color(0xFF7B9E89) : Colors.grey[300],
+      decoration: BoxDecoration(
+        color: active ? const Color(0xFF7B9E89) : Colors.grey[200],
+        borderRadius: BorderRadius.circular(2),
+      ),
     );
   }
 }
 
-class FaceOverlayPainter extends CustomPainter {
-  final Face face;
+// Custom Painter to draw bounding box on selected ID document face
+class _IdFacePainter extends CustomPainter {
+  final Rect boundingBox;
   final Size imageSize;
-  final bool blinkDetected;
 
-  FaceOverlayPainter({
-    required this.face,
-    required this.imageSize,
-    required this.blinkDetected,
-  });
+  _IdFacePainter({required this.boundingBox, required this.imageSize});
 
   @override
   void paint(Canvas canvas, Size size) {
-    final scaleX = size.width / imageSize.height;
-    final scaleY = size.height / imageSize.width;
+    final scaleX = size.width / imageSize.width;
+    final scaleY = size.height / imageSize.height;
+
+    final rect = Rect.fromLTRB(
+      boundingBox.left * scaleX,
+      boundingBox.top * scaleY,
+      boundingBox.right * scaleX,
+      boundingBox.bottom * scaleY,
+    );
 
     final paint = Paint()
+      ..color = const Color(0xFF7B9E89)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.0
-      ..color = const Color(0xFF7B9E89).withOpacity(0.4);
+      ..strokeWidth = 3;
 
-    // Draw Face Bounding Box (Scaled)
-    final rect = Rect.fromLTRB(
-      face.boundingBox.left * scaleX,
-      face.boundingBox.top * scaleY,
-      face.boundingBox.right * scaleX,
-      face.boundingBox.bottom * scaleY,
-    );
-    
-    // Draw rounded corner bracket instead of full box for premium feel
-    final path = Path();
-    double len = 20;
-    // Top Left
-    path.moveTo(rect.left, rect.top + len);
-    path.lineTo(rect.left, rect.top);
-    path.lineTo(rect.left + len, rect.top);
-    // Top Right
-    path.moveTo(rect.right - len, rect.top);
-    path.lineTo(rect.right, rect.top);
-    path.lineTo(rect.right, rect.top + len);
-    // Bottom Right
-    path.moveTo(rect.right, rect.bottom - len);
-    path.lineTo(rect.right, rect.bottom);
-    path.lineTo(rect.right - len, rect.bottom);
-    // Bottom Left
-    path.moveTo(rect.left + len, rect.bottom);
-    path.lineTo(rect.left, rect.bottom);
-    path.lineTo(rect.left, rect.bottom - len);
-
-    canvas.drawPath(path, paint);
-
-    // Draw Eye Indicators
-    final eyePaint = Paint()
-      ..style = PaintingStyle.fill
-      ..color = blinkDetected ? const Color(0xFF7B9E89).withOpacity(0.8) : Colors.white.withOpacity(0.4);
-
-    // Left Eye
-    final leftEye = face.landmarks[FaceLandmarkType.leftEye];
-    if (leftEye != null) {
-      canvas.drawCircle(
-        Offset(leftEye.position.x * scaleX, leftEye.position.y * scaleY),
-        4 * (face.leftEyeOpenProbability ?? 1.0).clamp(0.5, 1.0),
-        eyePaint
-      );
-    }
-
-    // Right Eye
-    final rightEye = face.landmarks[FaceLandmarkType.rightEye];
-    if (rightEye != null) {
-      canvas.drawCircle(
-        Offset(rightEye.position.x * scaleX, rightEye.position.y * scaleY),
-        4 * (face.rightEyeOpenProbability ?? 1.0).clamp(0.5, 1.0),
-        eyePaint
-      );
-    }
+    canvas.drawRRect(RRect.fromRectAndRadius(rect, const Radius.circular(8)), paint);
   }
 
   @override
-  bool shouldRepaint(FaceOverlayPainter oldDelegate) => true;
+  bool shouldRepaint(covariant _IdFacePainter oldDelegate) {
+    return oldDelegate.boundingBox != boundingBox || oldDelegate.imageSize != imageSize;
+  }
 }
 
-class ScannerCornersPainter extends CustomPainter {
+// Custom Painter for the circular scanning progress ring
+class _ScanningProgressPainter extends CustomPainter {
+  final double progress; // 0.0 to 1.0
+  final bool isDone;
+
+  _ScanningProgressPainter({required this.progress, this.isDone = false});
+
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.white.withOpacity(0.6)
-      ..strokeWidth = 1.5
-      ..style = PaintingStyle.stroke;
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.width / 2 - 7;
+    const strokeWidth = 5.0;
 
-    double cornerLength = 20;
+    final bgPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..color = Colors.grey.shade200;
 
-    // Top Left
-    canvas.drawPath(
-      Path()
-        ..moveTo(0, cornerLength)
-        ..lineTo(0, 0)
-        ..lineTo(cornerLength, 0),
-      paint,
-    );
+    // Background ring
+    canvas.drawCircle(center, radius, bgPaint);
 
-    // Top Right
-    canvas.drawPath(
-      Path()
-        ..moveTo(size.width - cornerLength, 0)
-        ..lineTo(size.width, 0)
-        ..lineTo(size.width, cornerLength),
-      paint,
-    );
+    // Progress arc
+    final progressPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..strokeCap = StrokeCap.round
+      ..color = isDone ? const Color(0xFF2E7D32) : const Color(0xFF7B9E89);
 
-    // Bottom Right
-    canvas.drawPath(
-      Path()
-        ..moveTo(size.width, size.height - cornerLength)
-        ..lineTo(size.width, size.height)
-        ..lineTo(size.width - cornerLength, size.height),
-      paint,
-    );
-
-    // Bottom Left
-    canvas.drawPath(
-      Path()
-        ..moveTo(cornerLength, size.height)
-        ..lineTo(0, size.height)
-        ..lineTo(0, size.height - cornerLength),
-      paint,
+    final sweepAngle = 2 * pi * progress;
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius),
+      -pi / 2, // start from top
+      sweepAngle,
+      false,
+      progressPaint,
     );
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant _ScanningProgressPainter oldDelegate) {
+    return oldDelegate.progress != progress || oldDelegate.isDone != isDone;
+  }
 }

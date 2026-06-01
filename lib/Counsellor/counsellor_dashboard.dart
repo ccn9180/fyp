@@ -1,8 +1,9 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'counsellor_analytics.dart';
-import 'counsellor_feedback.dart';
-import 'counsellor_schedule.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'counsellor_history.dart';
 import 'shared_chats.dart';
 
 class CounsellorDashboardScreen extends StatelessWidget {
@@ -17,76 +18,99 @@ class CounsellorDashboardScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: backgroundColor,
       body: SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(24.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Expert Dashboard',
-                    style: GoogleFonts.playfairDisplay(
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
-                      color: const Color(0xFF1E2742),
-                    ),
-                  ),
-                  Text(
-                    'Performance and stats at a glance',
-                    style: GoogleFonts.outfit(
-                      fontSize: 16,
-                      color: Colors.grey[600],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 40),
+              // Dynamic Welcome Header
+              StreamBuilder<DocumentSnapshot>(
+                stream: FirebaseFirestore.instance
+                    .collection('users')
+                    .doc(FirebaseAuth.instance.currentUser?.uid)
+                    .snapshots(),
+                builder: (context, snapshot) {
+                  String name = 'Expert';
+                  String? profileUrl;
 
-              // Stats
+                  if (snapshot.hasData && snapshot.data!.exists) {
+                    final data = snapshot.data!.data() as Map<String, dynamic>;
+                    name = data['fullName']?.split(' ')[0] ?? 'Expert';
+                    profileUrl = data['profileImageUrl'];
+                  }
+
+                  return Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Hello, Dr. $name',
+                            style: GoogleFonts.playfairDisplay(
+                              fontSize: 28,
+                              fontWeight: FontWeight.bold,
+                              color: const Color(0xFF1E2742),
+                            ),
+                          ),
+                          Text(
+                            'Your clinical overview for today',
+                            style: GoogleFonts.outfit(
+                              fontSize: 16,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                        ],
+                      ),
+                      CircleAvatar(
+                        radius: 24,
+                        backgroundColor: const Color(0xFFBBCBC2),
+                        backgroundImage: profileUrl != null
+                            ? (profileUrl.startsWith('data:image')
+                                ? MemoryImage(base64Decode(profileUrl.split(',').last)) as ImageProvider
+                                : NetworkImage(profileUrl))
+                            : const NetworkImage('https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&q=80&w=2000'),
+                      ),
+                    ],
+                  );
+                },
+              ),
+              const SizedBox(height: 32),
+
+              // Next Session Card
+              Text(
+                'NEXT SESSION',
+                style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.2, color: Colors.grey[500]),
+              ),
+              const SizedBox(height: 12),
+              _buildNextSessionCard(primaryGreen),
+              
+              const SizedBox(height: 32),
+
+              // Summary Stats Row
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  _buildStatCard('Analysis', '\$ 1,240', Icons.account_balance_wallet_outlined, primaryGreen, () {
-                    Navigator.push(context, MaterialPageRoute(builder: (context) => const CounsellorAnalyticsScreen()));
-                  }),
-                  _buildStatCard('Reviews', '4.9', Icons.star_outline_rounded, Colors.amber, () {
-                    Navigator.push(context, MaterialPageRoute(builder: (context) => const CounsellorFeedbackScreen()));
-                  }),
+                  _buildMiniStat('Today', '4 Sessions', Icons.timer_outlined, primaryGreen),
+                  const SizedBox(width: 16),
+                  _buildMiniStat('Rating', '4.8 ⭐', Icons.star_outline_rounded, const Color(0xFFFFD700)),
                 ],
               ),
-              const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  _buildStatCard('Upcoming', '3', Icons.today_outlined, Colors.blue, () {
-                    Navigator.push(context, MaterialPageRoute(builder: (context) => const CounsellorScheduleScreen()));
-                  }),
-                  _buildStatCard('Completed', '42', Icons.task_alt_rounded, Colors.green, () {}),
-                ],
-              ),
+
               const SizedBox(height: 40),
 
               Text(
-                'QUICK ACTIONS',
-                style: GoogleFonts.outfit(
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.2,
-                  color: Colors.grey[500],
-                ),
+                'MANAGEMENT TOOLS',
+                style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.2, color: Colors.grey[500]),
               ),
               const SizedBox(height: 16),
 
-              _buildActionItem(Icons.calendar_month_rounded, 'Schedule Sessions', 'Update your availability', () {
-                onTabChange?.call(3); // Navigate to Profile tab (index 3)
+              _buildActionItem(Icons.calendar_month_rounded, 'Update Availability', 'Manage your booking slots', () => onTabChange?.call(3)),
+              _buildActionItem(Icons.analytics_rounded, 'Performance Insights', 'View your clinical growth', () => onTabChange?.call(2)),
+              _buildActionItem(Icons.history_rounded, 'Session History', 'Audit past clinical sessions', () {
+                Navigator.push(context, MaterialPageRoute(builder: (context) => const SessionHistoryScreen()));
               }),
-              _buildActionItem(Icons.chat_bubble_outline_rounded, 'Shared Insights', 'Review client AI chatbot sessions', () {
+              _buildActionItem(Icons.chat_bubble_outline_rounded, 'Client Shared Section', 'Review client shared diary, chatbot, mood trend', () {
                 Navigator.push(context, MaterialPageRoute(builder: (context) => const SharedChatsScreen()));
-              }),
-              _buildActionItem(Icons.analytics_outlined, 'Performance Metrics', 'View growth and session trends', () {
-                Navigator.push(context, MaterialPageRoute(builder: (context) => const CounsellorAnalyticsScreen()));
               }),
             ],
           ),
@@ -95,52 +119,79 @@ class CounsellorDashboardScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildStatCard(String label, String value, IconData icon, Color color, VoidCallback onTap) {
+  Widget _buildNextSessionCard(Color primaryGreen) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(28),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          const CircleAvatar(
+            radius: 24,
+            backgroundImage: NetworkImage('https://images.unsplash.com/photo-1438761681033-6461ffad8d80?auto=format&fit=crop&q=80&w=2000'),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Sarah Jenkins', style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold)),
+                Text('Anxiety Protocol • 45m', style: GoogleFonts.outfit(fontSize: 13, color: Colors.grey)),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: primaryGreen.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text(
+              'IN 15 MIN',
+              style: GoogleFonts.outfit(fontSize: 10, fontWeight: FontWeight.bold, color: primaryGreen),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMiniStat(String label, String val, IconData icon, Color color) {
     return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 4),
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.02),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(icon, color: color, size: 20),
-              const SizedBox(height: 12),
-              Text(
-                value,
-                style: GoogleFonts.outfit(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: const Color(0xFF333333),
-                ),
-              ),
-              Text(
-                label,
-                style: GoogleFonts.outfit(
-                  fontSize: 11,
-                  color: Colors.grey[500],
-                ),
-              ),
-            ],
-          ),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: color, size: 20),
+            const SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(val, style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.bold)),
+                Text(label, style: GoogleFonts.outfit(fontSize: 11, color: Colors.grey)),
+              ],
+            ),
+          ],
         ),
       ),
     );
   }
 
   Widget _buildActionItem(IconData icon, String title, String subtitle, VoidCallback onTap) {
+    final Color primaryGreen = const Color(0xFF7C9C84);
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -148,7 +199,7 @@ class CounsellorDashboardScreen extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(24),
         ),
         child: Row(
           children: [
@@ -158,27 +209,15 @@ class CounsellorDashboardScreen extends StatelessWidget {
                 color: const Color(0xFFF5F7F6),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(icon, color: const Color(0xFF7C9C84), size: 22),
+              child: Icon(icon, color: primaryGreen, size: 20),
             ),
             const SizedBox(width: 16),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    title,
-                    style: GoogleFonts.outfit(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  Text(
-                    subtitle,
-                    style: GoogleFonts.outfit(
-                      fontSize: 12,
-                      color: Colors.grey[500],
-                    ),
-                  ),
+                  Text(title, style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w600)),
+                  Text(subtitle, style: GoogleFonts.outfit(fontSize: 12, color: Colors.grey[500])),
                 ],
               ),
             ),
@@ -188,4 +227,5 @@ class CounsellorDashboardScreen extends StatelessWidget {
       ),
     );
   }
+
 }

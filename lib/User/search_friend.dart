@@ -16,17 +16,27 @@ class _SearchFriendScreenState extends State<SearchFriendScreen> {
   final Color primaryGreen = const Color(0xFF7C9C84);
   final Color backgroundColor = const Color(0xFFF2F1EC);
   final Color textColorMain = const Color(0xFF333333);
+  final Color textColorSub = const Color(0xFF888888);
 
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = "";
   User? currentUser = FirebaseAuth.instance.currentUser;
   List<String> _searchHistory = [];
   bool _historyLoaded = false;
+  late Stream<QuerySnapshot> _requestsStream;
 
   @override
   void initState() {
     super.initState();
     _loadSearchHistory();
+    if (currentUser != null) {
+      _requestsStream = FirebaseFirestore.instance
+          .collection('notifications')
+          .where('to', isEqualTo: currentUser!.uid)
+          .where('type', isEqualTo: 'friend_request')
+          .where('status', isEqualTo: 'pending')
+          .snapshots();
+    }
   }
 
   Future<void> _loadSearchHistory() async {
@@ -97,18 +107,77 @@ class _SearchFriendScreenState extends State<SearchFriendScreen> {
       ),
       body: Column(
         children: [
+          // Pending Requests Section
+          if (currentUser != null)
+            StreamBuilder<QuerySnapshot>(
+              stream: _requestsStream,
+              builder: (context, snapshot) {
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) return const SizedBox.shrink();
+                final requests = snapshot.data!.docs;
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'CONNECTION REQUESTS',
+                            style: GoogleFonts.outfit(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1.5,
+                              color: textColorSub,
+                            ),
+                          ),
+                          if (requests.length > 2)
+                            Text(
+                              'SEE ALL (${requests.length})',
+                              style: GoogleFonts.outfit(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: primaryGreen,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    ListView.builder(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: requests.length > 3 ? 3 : requests.length,
+                      itemBuilder: (context, index) {
+                        final doc = requests[index];
+                        final data = doc.data() as Map<String, dynamic>;
+                        return _buildRequestTile(doc.id, data);
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 24),
+                      child: Divider(height: 1, thickness: 1, color: Color(0xFFE5E5E0)),
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+                );
+              },
+            ),
+
           // Search Bar
           Padding(
-            padding: const EdgeInsets.all(24.0),
+            padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
             child: Container(
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(20),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withOpacity(0.02),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
+                    blurRadius: 15,
+                    offset: const Offset(0, 5),
                   ),
                 ],
               ),
@@ -126,11 +195,11 @@ class _SearchFriendScreenState extends State<SearchFriendScreen> {
                 },
                 decoration: InputDecoration(
                   hintText: 'Search by name or email...',
-                  hintStyle: GoogleFonts.outfit(color: Colors.grey[400], fontSize: 14),
-                  prefixIcon: Icon(Icons.search, color: primaryGreen),
+                  hintStyle: GoogleFonts.outfit(color: Colors.grey[400], fontSize: 13),
+                  prefixIcon: Icon(Icons.search, color: primaryGreen, size: 20),
                   suffixIcon: _searchQuery.isNotEmpty
                       ? IconButton(
-                    icon: const Icon(Icons.clear, size: 20),
+                    icon: const Icon(Icons.clear, size: 18),
                     onPressed: () {
                       _searchController.clear();
                       setState(() => _searchQuery = "");
@@ -170,9 +239,12 @@ class _SearchFriendScreenState extends State<SearchFriendScreen> {
                   final fullName = (data['fullName'] ?? '').toString().toLowerCase();
                   final email = (data['email'] ?? '').toString().toLowerCase();
                   final uid = doc.id;
+                  final role = data['role'] ?? '';
 
-                  // Exclude current user and filter by search query
+                  // Exclude current user, admins, counsellors, and filter by search query
                   return uid != currentUser?.uid &&
+                      role != 'admin' &&
+                      role != 'counsellor' &&
                       (fullName.contains(_searchQuery) || email.contains(_searchQuery));
                 }).toList();
 
@@ -230,7 +302,12 @@ class _SearchFriendScreenState extends State<SearchFriendScreen> {
 
             final suggestions = (suggestSnapshot.data?.docs ?? []).where((doc) {
               final uid = doc.id;
-              return uid != currentUser?.uid && !following.contains(uid);
+              final data = doc.data() as Map<String, dynamic>;
+              final role = data['role'] ?? '';
+              return uid != currentUser?.uid &&
+                  !following.contains(uid) &&
+                  role != 'admin' &&
+                  role != 'counsellor';
             }).toList();
 
             return SingleChildScrollView(
@@ -471,6 +548,132 @@ class _SearchFriendScreenState extends State<SearchFriendScreen> {
         ),
       ),
     );
+  }
+
+  Widget _buildRequestTile(String notificationId, Map<String, dynamic> data) {
+    String senderName = data['senderName'] ?? 'Someone';
+    String? senderPhoto = data['senderPhoto'];
+
+    ImageProvider? imageProvider;
+    if (senderPhoto != null) {
+      if (senderPhoto.startsWith('data:image')) {
+        imageProvider = MemoryImage(base64Decode(senderPhoto.split(',').last));
+      } else {
+        imageProvider = NetworkImage(senderPhoto);
+      }
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 24,
+            backgroundColor: const Color(0xFFF1F3EE),
+            backgroundImage: imageProvider,
+            child: imageProvider == null ? Icon(Icons.person, color: primaryGreen, size: 24) : null,
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  senderName,
+                  style: GoogleFonts.outfit(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: textColorMain,
+                  ),
+                ),
+                Text(
+                  'Sent you a request',
+                  style: GoogleFonts.outfit(
+                    fontSize: 12,
+                    color: textColorSub,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          // Accept Button
+          GestureDetector(
+            onTap: () => _handleIncomingRequest(notificationId, data, true),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: primaryGreen,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                'Accept',
+                style: GoogleFonts.outfit(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          // Reject Button
+          GestureDetector(
+            onTap: () => _handleIncomingRequest(notificationId, data, false),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF9F9F7),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFFFEBEE)),
+              ),
+              child: Text(
+                'Reject',
+                style: GoogleFonts.outfit(
+                  color: const Color(0xFFE57373),
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _handleIncomingRequest(String notificationId, Map<String, dynamic> data, bool accept) async {
+    final senderId = data['from'];
+    final receiverId = data['to'];
+
+    try {
+      if (accept) {
+        await FirebaseFirestore.instance.collection('users').doc(receiverId).update({
+          'following': FieldValue.arrayUnion([senderId]),
+          'followers': FieldValue.arrayUnion([senderId]),
+        });
+        await FirebaseFirestore.instance.collection('users').doc(senderId).update({
+          'following': FieldValue.arrayUnion([receiverId]),
+          'followers': FieldValue.arrayUnion([receiverId]),
+        });
+        await FirebaseFirestore.instance.collection('notifications').doc(notificationId).update({
+          'status': 'accepted',
+          'message': 'You are now connected with ${data['senderName'] ?? "a new friend"}.',
+        });
+        await FirebaseFirestore.instance.collection('notifications').add({
+          'from': receiverId,
+          'to': senderId,
+          'type': 'friend_accepted',
+          'isRead': false,
+          'timestamp': FieldValue.serverTimestamp(),
+          'message': '${currentUser!.displayName ?? "Someone"} accepted your friend request.',
+        });
+      } else {
+        await FirebaseFirestore.instance.collection('notifications').doc(notificationId).delete();
+      }
+    } catch (e) {
+      debugPrint("Error handling friend request: $e");
+    }
   }
 }
 

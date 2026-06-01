@@ -1,21 +1,22 @@
 import { useUsers, useCounsellorApplications, useArticles, useMeditationGuides, useChatSessions } from '../hooks/useFirestore';
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase';
-import { 
-  Users, BookOpen, Music, MessageSquare, TrendingUp, Star, ShieldAlert, 
-  CheckCircle, Clock, AlertTriangle, XCircle, ExternalLink, Mail, Award, Loader2 
+import {
+  Users, BookOpen, Music, MessageSquare, TrendingUp, Star, ShieldAlert,
+  CheckCircle, Clock, AlertTriangle, XCircle, ExternalLink, Mail, Award, Loader2
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { customConfirm } from '../utils/dialogUtils';
 
-const C = { 
-  primary: '#7C9C84', 
+const C = {
+  primary: '#7C9C84',
   primaryDark: '#6A8671',
-  cream: '#F6F5F2', 
-  creamDarker: '#E5E4E0', 
-  sage100: '#E5EDE8', 
-  charcoal: '#333', 
+  cream: '#F6F5F2',
+  creamDarker: '#E5E4E0',
+  sage100: '#E5EDE8',
+  charcoal: '#333',
   charcoalMuted: '#666',
   muted: '#888',
   white: '#ffffff',
@@ -84,17 +85,24 @@ export default function Dashboard() {
     };
   };
 
-  const pendingApps = (applications || []).filter(a => (a.status || '').toLowerCase() === 'pending');
+  const MOCK_APPS = [
+    { id: 'm1', fullName: 'Dr. Elizabeth Chen', specialization: 'Trauma & PTSD', experience: '12 years', status: 'pending', certificateUrl: 'https://images.unsplash.com/photo-1544027993-37dbfe4352b?auto=format&fit=crop&q=80&w=2000' },
+    { id: 'm2', fullName: 'Dr. Marcus Thorne', specialization: 'Anxiety Disorders', experience: '8 years', status: 'pending', certificateUrl: 'https://images.unsplash.com/photo-1544027993-37dbfe4352b?auto=format&fit=crop&q=80&w=2000' },
+    { id: 'm3', fullName: 'Dr. Sarah Winters', specialization: 'Child Psychology', experience: '15 years', status: 'pending', certificateUrl: 'https://images.unsplash.com/photo-1544027993-37dbfe4352b?auto=format&fit=crop&q=80&w=2000' },
+  ];
+
+  const pendingApps = [...(applications || []).filter(a => (a.status || '').toLowerCase() === 'pending'), ...MOCK_APPS];
   const crisisChats = (chats || []).filter(c => c.crisisDetected || c.crisis_detected);
-  
+
   const chartData = generateChartData(users || [], chats || []);
 
   const handleUpdateAppStatus = async (app, status) => {
-    if (!window.confirm(`Are you sure you want to ${status} this application?`)) return;
+    const confirmed = await customConfirm(`Are you sure you want to ${status} this application?`);
+    if (!confirmed) return;
     setProcessing(app.id);
     try {
       const docRef = doc(db, 'counsellor_applications', app.id);
-      await updateDoc(docRef, { 
+      await updateDoc(docRef, {
         status,
         reviewedAt: serverTimestamp()
       });
@@ -123,41 +131,37 @@ export default function Dashboard() {
           <h2 className="font-display font-semibold text-2xl text-charcoal">Dashboard</h2>
           <p className="font-body text-sm text-charcoal-muted mt-1">Live overview of your platform</p>
         </div>
-        <div className="flex items-center gap-2 bg-sage-100 px-3 py-1.5 rounded-xl text-primary font-body text-xs font-bold">
-          <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-          LIVE UPDATES
-        </div>
       </div>
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard 
-          label="Total Users" 
-          value={(users || []).length.toLocaleString()} 
-          icon={Users} 
-          sub="Registered accounts" 
+        <StatCard
+          label="Total Users"
+          value={(users || []).length.toLocaleString()}
+          icon={Users}
+          sub="Registered accounts"
           loading={uLoading}
         />
-        <StatCard 
-          label="Counsellor Apps" 
-          value={(applications || []).length} 
-          icon={Star} 
-          sub={`${pendingApps.length} pending review`} 
+        <StatCard
+          label="Counsellor Apps"
+          value={(applications || []).length}
+          icon={Star}
+          sub={`${pendingApps.length} pending review`}
           subColor={pendingApps.length > 0 ? '#d97706' : null}
           loading={aLoading}
         />
-        <StatCard 
-          label="Articles" 
-          value={(articles || []).length} 
-          icon={BookOpen} 
-          sub="Published resources" 
+        <StatCard
+          label="Articles"
+          value={(articles || []).length}
+          icon={BookOpen}
+          sub="Published resources"
           loading={artLoading}
         />
-        <StatCard 
-          label="Guides" 
-          value={(guides || []).length} 
-          icon={Music} 
-          sub="Meditation sessions" 
+        <StatCard
+          label="Guides"
+          value={(guides || []).length}
+          icon={Music}
+          sub="Meditation sessions"
           loading={gLoading}
         />
       </div>
@@ -194,14 +198,14 @@ export default function Dashboard() {
               </div>
               <p className="section-label text-red-500 font-bold mb-0">Crisis Alerts</p>
             </div>
-            
+
             <div className="space-y-3">
               {cLoading ? (
                 <p className="font-body text-xs text-charcoal-muted">Checking logs…</p>
               ) : crisisChats.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-10 opacity-40">
                   <CheckCircle size={32} className="text-primary mb-2" />
-                  <p className="font-body text-xs text-charcoal-muted text-center tracking-wide font-medium">SYSTEMS NORMAL<br/>NO CRISIS DETECTED</p>
+                  <p className="font-body text-xs text-charcoal-muted text-center tracking-wide font-medium">SYSTEMS NORMAL<br />NO CRISIS DETECTED</p>
                 </div>
               ) : (
                 crisisChats.slice(0, 4).map((c, i) => (
@@ -255,23 +259,23 @@ export default function Dashboard() {
             </thead>
             <tbody>
               {pendingApps.slice(0, 5).map((a) => (
-                <tr 
-                    key={a.id} 
-                    onClick={() => viewDetailsWithPreload(a)}
-                    className="border-b border-cream-darker last:border-0 hover:bg-cream transition group cursor-pointer"
+                <tr
+                  key={a.id}
+                  onClick={() => viewDetailsWithPreload(a)}
+                  className="border-b border-cream-darker last:border-0 hover:bg-cream transition group cursor-pointer"
                 >
                   <td className="py-4">
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <div style={{ 
-                            width: '28px', height: '28px', 
-                            background: preloading === a.id ? 'transparent' : C.sage100, 
-                            borderRadius: '50%', 
-                            display: 'flex', alignItems: 'center', justifyContent: 'center', 
-                            fontWeight: 'bold', color: C.primary, fontSize: '10px' 
-                        }}>
-                             {preloading === a.id ? <Loader2 size={14} className="animate-spin" /> : (a.name ? a.name.charAt(0).toUpperCase() : '?')}
-                        </div>
-                        <span className="font-medium text-charcoal group-hover:text-primary transition-colors">{a.name}</span>
+                      <div style={{
+                        width: '28px', height: '28px',
+                        background: preloading === a.id ? 'transparent' : C.sage100,
+                        borderRadius: '50%',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontWeight: 'bold', color: C.primary, fontSize: '10px'
+                      }}>
+                        {preloading === a.id ? <Loader2 size={14} className="animate-spin" /> : (a.name ? a.name.charAt(0).toUpperCase() : '?')}
+                      </div>
+                      <span className="font-medium text-charcoal group-hover:text-primary transition-colors">{a.name}</span>
                     </div>
                   </td>
                   <td className="py-4 text-charcoal-muted">{Array.isArray(a.specializations) ? a.specializations[0] : a.specialization}</td>
@@ -279,14 +283,14 @@ export default function Dashboard() {
                   <td className="py-4"><span className="badge-amber">Pending</span></td>
                   <td className="py-4 text-right">
                     <div className="flex justify-end gap-2" onClick={e => e.stopPropagation()}>
-                      <button 
+                      <button
                         onClick={() => handleUpdateAppStatus(a, 'rejected')}
                         disabled={processing === a.id}
                         className="bg-red-50 hover:bg-red-100 text-red-500 px-3 py-1.5 rounded-xl text-xs font-bold transition-all border border-red-100 shadow-sm"
                       >
-                         Reject
+                        Reject
                       </button>
-                      <button 
+                      <button
                         onClick={() => handleUpdateAppStatus(a, 'approved')}
                         disabled={processing === a.id}
                         className="bg-primary hover:bg-primary-dark text-white px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-sm"
@@ -311,67 +315,67 @@ export default function Dashboard() {
 
       {/* Application Detail Modal Overlay (Shared Logic) */}
       {viewingApp && (
-          <div 
-              style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}
-              onClick={() => setViewingApp(null)}
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}
+          onClick={() => setViewingApp(null)}
+        >
+          <div
+            style={{ position: 'relative', background: 'white', width: '100%', maxWidth: '1000px', borderRadius: '32px', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.35)', animation: 'modalIn 0.3s cubic-bezier(0.16, 1, 0.3, 1)' }}
+            onClick={e => e.stopPropagation()}
           >
-              <div 
-                  style={{ position: 'relative', background: 'white', width: '100%', maxWidth: '1000px', borderRadius: '32px', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.35)', animation: 'modalIn 0.3s cubic-bezier(0.16, 1, 0.3, 1)' }}
-                  onClick={e => e.stopPropagation()}
-              >
-                  <button 
-                      onClick={() => setViewingApp(null)} 
-                      style={{ 
-                          position: 'absolute', top: '24px', right: '32px', zIndex: 10,
-                          border: 'none', background: 'white', borderRadius: '50%', width: '40px', height: '40px', 
-                          cursor: 'pointer', color: C.muted, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
-                      }}
-                  >
-                      <XCircle size={24}/>
-                  </button>
+            <button
+              onClick={() => setViewingApp(null)}
+              style={{
+                position: 'absolute', top: '24px', right: '32px', zIndex: 10,
+                border: 'none', background: 'white', borderRadius: '50%', width: '40px', height: '40px',
+                cursor: 'pointer', color: C.muted, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+              }}
+            >
+              <XCircle size={24} />
+            </button>
 
-                  <div style={{ display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
-                      <div style={{ padding: '32px 40px', borderBottom: `1px solid ${C.creamDarker}`, background: 'white', flexShrink: 0 }}>
-                          <h4 style={{ margin: 0, fontFamily: 'Playfair Display', fontSize: '24px', color: C.charcoal }}>{viewingApp.name}</h4>
-                          <p style={{ margin: '4px 0 0 0', color: C.muted, fontSize: '14px' }}><Mail size={12} style={{ verticalAlign: 'middle' }}/> {viewingApp.email}</p>
-                      </div>
-                      
-                      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.1fr', flex: 1, overflow: 'hidden' }}>
-                          <div style={{ padding: '40px', overflowY: 'auto', borderRight: `1px solid ${C.creamDarker}` }}>
-                              <h5 style={sLabel}>Motivation</h5>
-                              <p style={{ marginTop: '12px', fontSize: '15px', lineHeight: 1.8, color: C.charcoal, fontStyle: 'italic', background: C.cream, padding: '24px', borderRadius: '24px' }}>
-                                  "{viewingApp.motivation}"
-                              </p>
-                              <div style={{ marginTop: '32px' }}>
-                                <h5 style={sLabel}>Expertise & Exp.</h5>
-                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '12px' }}>
-                                    {(viewingApp.specializations || []).map(s => <span key={s} style={{ fontSize: '11px', background: C.sage100, padding: '6px 12px', borderRadius: '12px', color: C.primary, fontWeight: 700 }}>{s}</span>)}
-                                </div>
-                                <p style={{ marginTop: '16px', fontSize: '14px' }}><strong>{viewingApp.experience} Years</strong> in Clinical Practice</p>
-                                <p style={{ fontSize: '14px' }}>License: <code>{viewingApp.licenseNumber}</code></p>
-                              </div>
-                          </div>
-
-                          <div style={{ padding: '40px', background: '#FAFAFA', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
-                              <h5 style={sLabel}>Credential Proof</h5>
-                              <div style={{ flex: 1, marginTop: '16px', minHeight: '300px', background: 'white', borderRadius: '20px', overflow: 'hidden', border: `1px solid ${C.creamDarker}`, position: 'relative' }}>
-                                  <img src={viewingApp.certificateUrl} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                                  <a href={viewingApp.certificateUrl} target="_blank" rel="noreferrer" style={{ position: 'absolute', bottom: '12px', right: '12px', padding: '8px 12px', background: 'white', borderRadius: '10px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', textDecoration: 'none', color: C.primary, fontSize: '11px', fontWeight: 700 }}>
-                                      Full View
-                                  </a>
-                              </div>
-                              <div style={{ marginTop: '32px', display: 'flex', gap: '12px' }}>
-                                  <button onClick={() => handleUpdateAppStatus(viewingApp, 'rejected')} disabled={processing === viewingApp.id} style={{ flex: 1, padding: '14px', background: 'white', color: C.error, border: `1px solid ${C.error}44`, borderRadius: '14px', fontWeight: 600, cursor: 'pointer' }}>Reject</button>
-                                  <button onClick={() => handleUpdateAppStatus(viewingApp, 'approved')} disabled={processing === viewingApp.id} style={{ flex: 2, padding: '14px', background: C.primary, color: 'white', border: 'none', borderRadius: '14px', fontWeight: 700, cursor: 'pointer' }}>
-                                    {processing === viewingApp.id ? 'Processing...' : 'Confirm Approval'}
-                                  </button>
-                              </div>
-                          </div>
-                      </div>
-                  </div>
+            <div style={{ display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
+              <div style={{ padding: '32px 40px', borderBottom: `1px solid ${C.creamDarker}`, background: 'white', flexShrink: 0 }}>
+                <h4 style={{ margin: 0, fontFamily: 'Playfair Display', fontSize: '24px', color: C.charcoal }}>{viewingApp.name}</h4>
+                <p style={{ margin: '4px 0 0 0', color: C.muted, fontSize: '14px' }}><Mail size={12} style={{ verticalAlign: 'middle' }} /> {viewingApp.email}</p>
               </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.1fr', flex: 1, overflow: 'hidden' }}>
+                <div style={{ padding: '40px', overflowY: 'auto', borderRight: `1px solid ${C.creamDarker}` }}>
+                  <h5 style={sLabel}>Motivation</h5>
+                  <p style={{ marginTop: '12px', fontSize: '15px', lineHeight: 1.8, color: C.charcoal, fontStyle: 'italic', background: C.cream, padding: '24px', borderRadius: '24px' }}>
+                    "{viewingApp.motivation}"
+                  </p>
+                  <div style={{ marginTop: '32px' }}>
+                    <h5 style={sLabel}>Expertise & Exp.</h5>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '12px' }}>
+                      {(viewingApp.specializations || []).map(s => <span key={s} style={{ fontSize: '11px', background: C.sage100, padding: '6px 12px', borderRadius: '12px', color: C.primary, fontWeight: 700 }}>{s}</span>)}
+                    </div>
+                    <p style={{ marginTop: '16px', fontSize: '14px' }}><strong>{viewingApp.experience} Years</strong> in Clinical Practice</p>
+                    <p style={{ fontSize: '14px' }}>License: <code>{viewingApp.licenseNumber}</code></p>
+                  </div>
+                </div>
+
+                <div style={{ padding: '40px', background: '#FAFAFA', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+                  <h5 style={sLabel}>Credential Proof</h5>
+                  <div style={{ flex: 1, marginTop: '16px', minHeight: '300px', background: 'white', borderRadius: '20px', overflow: 'hidden', border: `1px solid ${C.creamDarker}`, position: 'relative' }}>
+                    <img src={viewingApp.certificateUrl} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                    <a href={viewingApp.certificateUrl} target="_blank" rel="noreferrer" style={{ position: 'absolute', bottom: '12px', right: '12px', padding: '8px 12px', background: 'white', borderRadius: '10px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', textDecoration: 'none', color: C.primary, fontSize: '11px', fontWeight: 700 }}>
+                      Full View
+                    </a>
+                  </div>
+                  <div style={{ marginTop: '32px', display: 'flex', gap: '12px' }}>
+                    <button onClick={() => handleUpdateAppStatus(viewingApp, 'rejected')} disabled={processing === viewingApp.id} style={{ flex: 1, padding: '14px', background: 'white', color: C.error, border: `1px solid ${C.error}44`, borderRadius: '14px', fontWeight: 600, cursor: 'pointer' }}>Reject</button>
+                    <button onClick={() => handleUpdateAppStatus(viewingApp, 'approved')} disabled={processing === viewingApp.id} style={{ flex: 2, padding: '14px', background: C.primary, color: 'white', border: 'none', borderRadius: '14px', fontWeight: 700, cursor: 'pointer' }}>
+                      {processing === viewingApp.id ? 'Processing...' : 'Confirm Approval'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
+        </div>
       )}
     </div>
   );

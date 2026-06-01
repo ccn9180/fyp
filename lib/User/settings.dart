@@ -7,6 +7,9 @@ import 'terms_of_service.dart';
 import 'privacy_policy.dart';
 import '../app_localizations.dart';
 import '../main.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:local_auth/local_auth.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -21,6 +24,193 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _emailAlerts = false;
   bool _offlineMode = false;
   bool _dailyReminder = true;
+  bool _isFaceIdEnabled = false;
+  bool _isFingerprintEnabled = false;
+  final LocalAuthentication _localAuth = LocalAuthentication();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSettings();
+  }
+
+  Future<void> _loadSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _isFaceIdEnabled = prefs.getBool('face_id_enabled') ?? false;
+      _isFingerprintEnabled = prefs.getBool('fingerprint_enabled') ?? false;
+    });
+  }
+
+  Future<void> _showPasswordConfirmationDialog(String type) async {
+    final passwordCtrl = TextEditingController();
+    bool isVerifying = false;
+    final formKey = GlobalKey<FormState>();
+
+    await showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              backgroundColor: Colors.white,
+              title: Text(
+                'Confirm Password',
+                style: GoogleFonts.playfairDisplay(
+                  fontWeight: FontWeight.bold,
+                  color: const Color(0xFF324F43),
+                ),
+              ),
+              content: Form(
+                key: formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Please enter your account password to enable biometric login.',
+                      style: GoogleFonts.outfit(color: const Color(0xFF7A8C85), fontSize: 14),
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: passwordCtrl,
+                      obscureText: true,
+                      validator: (val) => val == null || val.isEmpty ? 'Password is required' : null,
+                      style: GoogleFonts.outfit(color: const Color(0xFF333333)),
+                      decoration: InputDecoration(
+                        hintText: 'Enter password',
+                        hintStyle: GoogleFonts.outfit(color: Colors.grey[400]),
+                        filled: true,
+                        fillColor: const Color(0xFFF5F7F6),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text('Cancel', style: GoogleFonts.outfit(color: Colors.grey)),
+                ),
+                TextButton(
+                  onPressed: isVerifying ? null : () async {
+                    if (!formKey.currentState!.validate()) return;
+                    setStateDialog(() => isVerifying = true);
+                    
+                    try {
+                      final user = FirebaseAuth.instance.currentUser;
+                      if (user != null && user.email != null) {
+                        // Reauthenticate to verify password
+                        final AuthCredential credential = EmailAuthProvider.credential(
+                          email: user.email!,
+                          password: passwordCtrl.text.trim(),
+                        );
+                        await user.reauthenticateWithCredential(credential);
+                        
+                        // If reauthentication succeeds, trigger biometric auth
+                        final didAuth = await _localAuth.authenticate(
+                          localizedReason: 'Verify your identity to enable ${type == 'face_id' ? 'Face ID' : 'Fingerprint'}',
+                          options: const AuthenticationOptions(biometricOnly: true, stickyAuth: true),
+                        );
+
+                        if (didAuth) {
+                          final prefs = await SharedPreferences.getInstance();
+                          await prefs.setBool('${type}_enabled', true);
+                          await prefs.setString('biometric_email', user.email!);
+                          await prefs.setString('biometric_password', passwordCtrl.text.trim());
+                          
+                          if (mounted) {
+                            Navigator.pop(context);
+                            _loadSettings();
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('${type == 'face_id' ? 'Face ID' : 'Fingerprint'} enabled successfully!'),
+                                backgroundColor: const Color(0xFF7B9E89),
+                              ),
+                            );
+                          }
+                        } else {
+                          setStateDialog(() => isVerifying = false);
+                        }
+                      } else {
+                        throw Exception('User is not logged in.');
+                      }
+                    } catch (e) {
+                      setStateDialog(() => isVerifying = false);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Verification failed. Please check your password.'),
+                          backgroundColor: Colors.redAccent,
+                        ),
+                      );
+                    }
+                  },
+                  child: isVerifying
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF7B9E89)),
+                        )
+                      : Text(
+                          'Confirm',
+                          style: GoogleFonts.outfit(
+                            color: const Color(0xFF7B9E89),
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _toggleBiometrics(bool value, String type) async {
+    if (value) {
+      try {
+        final available = await _localAuth.getAvailableBiometrics();
+        final bool isSupported = type == 'face_id' 
+            ? available.contains(BiometricType.face) || available.contains(BiometricType.strong)
+            : available.contains(BiometricType.fingerprint);
+
+        if (!isSupported && type == 'face_id') {
+           final canCheck = await _localAuth.canCheckBiometrics;
+           if (!canCheck) {
+             _showError('Your device does not support biometric authentication.');
+             return;
+           }
+        }
+
+        await _showPasswordConfirmationDialog(type);
+      } catch (e) {
+        _showError('Error enabling biometrics: $e');
+      }
+    } else {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('${type}_enabled', false);
+      final bool faceId = prefs.getBool('face_id_enabled') ?? false;
+      final bool fingerprint = prefs.getBool('fingerprint_enabled') ?? false;
+      if (!faceId && !fingerprint) {
+        await prefs.remove('biometric_email');
+        await prefs.remove('biometric_password');
+      }
+      _loadSettings();
+    }
+  }
+
+  void _showError(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), backgroundColor: Colors.orangeAccent),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -100,6 +290,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     MaterialPageRoute(builder: (context) => const ChangePasswordScreen()),
                   );
                 },
+              ),
+              const Divider(height: 1, indent: 60),
+              _buildSwitchTile(
+                icon: Icons.face_retouching_natural,
+                title: 'Face Unlock',
+                subtitle: 'Enable face recognition login',
+                value: _isFaceIdEnabled,
+                onChanged: (val) => _toggleBiometrics(val, 'face_id'),
+              ),
+              const Divider(height: 1, indent: 60),
+              _buildSwitchTile(
+                icon: Icons.fingerprint_rounded,
+                title: 'Fingerprint Unlock',
+                subtitle: 'Enable fingerprint sensor login',
+                value: _isFingerprintEnabled,
+                onChanged: (val) => _toggleBiometrics(val, 'fingerprint'),
               ),
               const Divider(height: 1, indent: 60),
               _buildNavigationTile(

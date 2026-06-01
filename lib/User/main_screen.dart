@@ -11,6 +11,7 @@ import '../Counsellor/counsellor_main.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../services/gamification_service.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -22,6 +23,7 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int _selectedIndex = 0;
   bool _isCounsellor = false;
+  bool _isEmailVerified = true; // Default to true to avoid flicker
 
   final GlobalKey<State> _homeKey = GlobalKey();
   final GlobalKey<State> _counselorKey = GlobalKey();
@@ -38,9 +40,53 @@ class _MainScreenState extends State<MainScreen> {
   Future<void> _checkCounsellorStatus() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
+      // 1. Check Email Verification
+      await user.reload(); // Refresh user state from Firebase
+      final updatedUser = FirebaseAuth.instance.currentUser;
+      if (mounted) setState(() => _isEmailVerified = updatedUser?.emailVerified ?? true);
+
+      // 2. Check Counsellor Status
       final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
       if (doc.exists && doc.data()?['role'] == 'counsellor') {
         if (mounted) setState(() => _isCounsellor = true);
+      }
+
+      // 3. Initialise & Update Gamification Streak
+      try {
+        await GamificationService.initUserGamification(user.uid);
+        final bool streakUpdated = await GamificationService.updateStreak(user.uid);
+        if (streakUpdated && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: const [
+                  Icon(Icons.stars_rounded, color: Colors.amber),
+                  SizedBox(width: 8),
+                  Text('Daily Login Reward: +5 XP & +2 Coins!'),
+                ],
+              ),
+              backgroundColor: const Color(0xFF7C9C84),
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
+      } catch (e) {
+        debugPrint('Error updating gamification: $e');
+      }
+    }
+  }
+
+  Future<void> _resendVerificationEmail() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      await user.sendEmailVerification();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Verification email resent! Please check your inbox.'),
+            backgroundColor: Color(0xFF7C9C84),
+          ),
+        );
       }
     }
   }
@@ -95,9 +141,16 @@ class _MainScreenState extends State<MainScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF2F1EC), // Light beige/cream background consistent with app theme
       extendBody: false, // Prevents body from extending behind the navbar
-      body: IndexedStack(
-        index: _selectedIndex,
-        children: pages,
+      body: Column(
+        children: [
+          if (!_isEmailVerified) _buildVerificationBanner(),
+          Expanded(
+            child: IndexedStack(
+              index: _selectedIndex,
+              children: pages,
+            ),
+          ),
+        ],
       ),
       bottomNavigationBar: Container(
         margin: const EdgeInsets.only(left: 24, right: 24, bottom: 24),
@@ -323,6 +376,58 @@ class _MainScreenState extends State<MainScreen> {
             ),
             if (isActive)
               const Icon(Icons.check_circle_rounded, color: Color(0xFF7C9C84), size: 20),
+          ],
+        ),
+      ),
+    );
+  }
+  Widget _buildVerificationBanner() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF7C9C84).withOpacity(0.95),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        bottom: false,
+        child: Row(
+          children: [
+            const Icon(Icons.mark_email_unread_outlined, color: Colors.white, size: 20),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Verify your email to secure your account.',
+                style: GoogleFonts.outfit(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            TextButton(
+              onPressed: _resendVerificationEmail,
+              style: TextButton.styleFrom(
+                backgroundColor: Colors.white.withOpacity(0.2),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+                minimumSize: const Size(0, 32),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              ),
+              child: Text(
+                'Resend',
+                style: GoogleFonts.outfit(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
           ],
         ),
       ),

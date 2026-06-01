@@ -318,6 +318,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     String message = data['message'] ?? 'New notification';
     Timestamp? ts = data['timestamp'] as Timestamp?;
     String timeStr = ts != null ? timeago.format(ts.toDate()).toUpperCase() : 'NOW';
+    bool isRec = data['type'] == 'recommendation';
 
     return _buildBaseCard(
       isRead: isRead,
@@ -326,11 +327,15 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         children: [
           Container(
             padding: const EdgeInsets.all(12),
-            decoration: const BoxDecoration(
-              color: Color(0xFFF4F7F5),
+            decoration: BoxDecoration(
+              color: isRec ? const Color(0xFFC5A880).withOpacity(0.1) : const Color(0xFFF4F7F5),
               shape: BoxShape.circle,
             ),
-            child: Icon(Icons.info_outline_rounded, color: primaryGreen, size: 18),
+            child: Icon(
+              isRec ? Icons.spa_rounded : Icons.info_outline_rounded,
+              color: isRec ? const Color(0xFFC5A880) : primaryGreen,
+              size: 18,
+            ),
           ),
           const SizedBox(width: 16),
           Expanded(

@@ -25,6 +25,7 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
   String _selectedArticleDuration = 'All';
   bool _isPreloading = true;
   Set<String> _favoritedResources = {};
+  Set<String> _recommendedResourceIds = {};
   late ScrollController _scrollController;
   final ScrollController _meditationFilterScrollController = ScrollController();
   final ScrollController _articleFilterScrollController = ScrollController();
@@ -62,6 +63,7 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
       });
     });
     _loadFavorites();
+    _loadRecommendations();
     _preloadAssets();
   }
 
@@ -88,6 +90,24 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
     setState(() {
       _favoritedResources = snapshot.docs.map((doc) => doc.id).toSet();
     });
+  }
+
+  Future<void> _loadRecommendations() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('recommendations')
+          .where('patientId', isEqualTo: uid)
+          .get();
+
+      setState(() {
+        _recommendedResourceIds = snapshot.docs.map((doc) => doc.data()['resourceId'] as String).toSet();
+      });
+    } catch (e) {
+      debugPrint('Error loading recommendations: $e');
+    }
   }
 
   Future<void> _recordView(String resourceId, String type) async {
@@ -539,6 +559,8 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
                           const SizedBox(width: 12),
                           _buildFilterChip('Favourite', false, isSelected: _selectedMeditationCategory == 'Favourite', onTap: () => _onMeditationFilterTap('Favourite')),
                           const SizedBox(width: 12),
+                          _buildFilterChip('Recommend', false, isSelected: _selectedMeditationCategory == 'Recommend', onTap: () => _onMeditationFilterTap('Recommend')),
+                          const SizedBox(width: 12),
                           _buildFilterChip('Stress', false, isSelected: _selectedMeditationCategory == 'Stress', onTap: () => _onMeditationFilterTap('Stress')),
                           const SizedBox(width: 12),
                           _buildFilterChip('Sleep', false, isSelected: _selectedMeditationCategory == 'Sleep', onTap: () => _onMeditationFilterTap('Sleep')),
@@ -555,10 +577,14 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
                     ),
                   ),
                   const SliverToBoxAdapter(child: SizedBox(height: 32)),
+                  if (_selectedMeditationCategory == 'Recommend')
+                    SliverToBoxAdapter(
+                      child: _buildCounsellorAnnouncement(),
+                    ),
                   StreamBuilder<QuerySnapshot>(
                     stream: _selectedMeditationCategory == 'All'
                         ? FirebaseFirestore.instance.collection('meditation_guides').where('status', isEqualTo: 'published').limit(10).snapshots()
-                        : _selectedMeditationCategory == 'Favourite'
+                        : (_selectedMeditationCategory == 'Favourite' || _selectedMeditationCategory == 'Recommend')
                         ? FirebaseFirestore.instance.collection('meditation_guides').where('status', isEqualTo: 'published').snapshots()
                         : FirebaseFirestore.instance.collection('meditation_guides').where('status', isEqualTo: 'published').where('category', isEqualTo: _selectedMeditationCategory).snapshots(),
                     builder: (context, snapshot) {
@@ -569,6 +595,8 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
                           bool matchesCategory = true;
                           if (_selectedMeditationCategory == 'Favourite') {
                             matchesCategory = _favoritedResources.contains(doc.id);
+                          } else if (_selectedMeditationCategory == 'Recommend') {
+                            matchesCategory = _recommendedResourceIds.contains(doc.id);
                           }
 
                           return matchesCategory;
@@ -626,6 +654,7 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
                                         isFavorite: _favoritedResources.contains(filteredDocs[index].id),
                                         onFavoriteToggle: () => _toggleFavorite(filteredDocs[index].id, data['title'] ?? 'Untitled'),
                                         resourceId: filteredDocs[index].id,
+                                        isRecommended: _recommendedResourceIds.contains(filteredDocs[index].id),
                                       ),
                                     );
                                   },
@@ -654,7 +683,7 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
                   ),
                   SliverToBoxAdapter(child: const SizedBox(height: 16)),
                   StreamBuilder<QuerySnapshot>(
-                    stream: (_selectedMeditationCategory == 'All' || _selectedMeditationCategory == 'Favourite')
+                    stream: (_selectedMeditationCategory == 'All' || _selectedMeditationCategory == 'Favourite' || _selectedMeditationCategory == 'Recommend')
                         ? FirebaseFirestore.instance.collection('meditation_guides').where('status', isEqualTo: 'published').snapshots()
                         : FirebaseFirestore.instance.collection('meditation_guides').where('status', isEqualTo: 'published').where('category', isEqualTo: _selectedMeditationCategory).snapshots(),
                     builder: (context, snapshot) {
@@ -681,6 +710,8 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
                           bool matchesCategory = true;
                           if (_selectedMeditationCategory == 'Favourite') {
                             matchesCategory = _favoritedResources.contains(doc.id);
+                          } else if (_selectedMeditationCategory == 'Recommend') {
+                            matchesCategory = _recommendedResourceIds.contains(doc.id);
                           }
 
                           return matchesSearch && matchesDuration && matchesCategory;
@@ -704,6 +735,7 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
                                 isFavorite: _favoritedResources.contains(filteredDocs[index].id),
                                 onFavoriteToggle: () => _toggleFavorite(filteredDocs[index].id, data['title'] ?? 'Untitled'),
                                 resourceId: filteredDocs[index].id,
+                                isRecommended: _recommendedResourceIds.contains(filteredDocs[index].id),
                               );
                             },
                             childCount: filteredDocs.length,
@@ -801,10 +833,14 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
                     ),
                   ),
                   const SliverToBoxAdapter(child: SizedBox(height: 32)),
+                  if (_selectedArticleCategory == 'Recommend')
+                    SliverToBoxAdapter(
+                      child: _buildCounsellorAnnouncement(),
+                    ),
                   StreamBuilder<QuerySnapshot>(
                     stream: _selectedArticleCategory == 'All'
                         ? FirebaseFirestore.instance.collection('articles').where('status', isEqualTo: 'published').limit(10).snapshots()
-                        : _selectedArticleCategory == 'Favourite'
+                        : (_selectedArticleCategory == 'Favourite' || _selectedArticleCategory == 'Recommend')
                         ? FirebaseFirestore.instance.collection('articles').where('status', isEqualTo: 'published').snapshots()
                         : FirebaseFirestore.instance.collection('articles').where('status', isEqualTo: 'published').where('tag', isEqualTo: _selectedArticleCategory).snapshots(),
                     builder: (context, snapshot) {
@@ -828,6 +864,8 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
                           bool matchesCategory = true;
                           if (_selectedArticleCategory == 'Favourite') {
                             matchesCategory = _favoritedResources.contains(doc.id);
+                          } else if (_selectedArticleCategory == 'Recommend') {
+                            matchesCategory = _recommendedResourceIds.contains(doc.id);
                           }
 
                           return (title.contains(_searchQuery) || tag.contains(_searchQuery)) && matchesDuration && matchesCategory;
@@ -893,6 +931,7 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
                                         isFavorite: _favoritedResources.contains(filteredDocs[index].id),
                                         onFavoriteToggle: () => _toggleFavorite(filteredDocs[index].id, data['title'] ?? 'Untitled'),
                                         resourceId: filteredDocs[index].id,
+                                        isRecommended: _recommendedResourceIds.contains(filteredDocs[index].id),
                                       ),
                                     );
                                   },
@@ -921,7 +960,7 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
                   ),
                   const SliverToBoxAdapter(child: SizedBox(height: 16)),
                   StreamBuilder<QuerySnapshot>(
-                    stream: (_selectedArticleCategory == 'All' || _selectedArticleCategory == 'Favourite')
+                    stream: (_selectedArticleCategory == 'All' || _selectedArticleCategory == 'Favourite' || _selectedArticleCategory == 'Recommend')
                         ? FirebaseFirestore.instance.collection('articles').where('status', isEqualTo: 'published').snapshots()
                         : FirebaseFirestore.instance.collection('articles').where('status', isEqualTo: 'published').where('tag', isEqualTo: _selectedArticleCategory).snapshots(),
                     builder: (context, snapshot) {
@@ -945,6 +984,8 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
                           bool matchesArticleCategory = true;
                           if (_selectedArticleCategory == 'Favourite') {
                             matchesArticleCategory = _favoritedResources.contains(doc.id);
+                          } else if (_selectedArticleCategory == 'Recommend') {
+                            matchesArticleCategory = _recommendedResourceIds.contains(doc.id);
                           }
 
                           return (title.contains(_searchQuery) || tag.contains(_searchQuery)) && matchesDuration && matchesArticleCategory;
@@ -976,6 +1017,7 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
                                 isFavorite: _favoritedResources.contains(filteredDocs[index].id),
                                 onFavoriteToggle: () => _toggleFavorite(filteredDocs[index].id, data['title'] ?? 'Untitled'),
                                 resourceId: filteredDocs[index].id,
+                                isRecommended: _recommendedResourceIds.contains(filteredDocs[index].id),
                               );
                             },
                             childCount: filteredDocs.length,
@@ -1003,7 +1045,14 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
     );
   }
 
-  Widget _buildSuggestedCard(BuildContext context, String title, String subtitle, String imageUrl, {String? audioUrl, double? rating, required bool isFavorite, required VoidCallback onFavoriteToggle, required String resourceId}) {
+  Widget _buildSuggestedCard(BuildContext context, String title, String subtitle, String imageUrl, {
+    String? audioUrl,
+    double? rating,
+    required bool isFavorite,
+    required VoidCallback onFavoriteToggle,
+    required String resourceId,
+    bool isRecommended = false,
+  }) {
     return GestureDetector(
       onTap: () {
         Navigator.push(
@@ -1013,7 +1062,7 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
               type: 'meditation',
               title: title.replaceAll('\n', ' '),
               subtitle: subtitle,
-              tag: 'RECOMMEND',
+              tag: isRecommended ? 'COUNSELLOR' : 'RECOMMEND',
               imageUrl: imageUrl,
               duration: subtitle.contains(' • ') ? subtitle.split(' • ')[0] : '10:00',
               rating: rating,
@@ -1061,85 +1110,112 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
               ],
             ),
           ),
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          padding: const EdgeInsets.all(16),
+          child: Stack(
             children: [
-              Align(
-                alignment: Alignment.topRight,
+              // Top-left: counsellor badge
+              if (isRecommended)
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFC5A880),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.star_rounded, color: Colors.white, size: 9),
+                        const SizedBox(width: 3),
+                        Text(
+                          'COUNSELLOR',
+                          style: GoogleFonts.outfit(
+                            color: Colors.white,
+                            fontSize: 8,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              // Top-right: heart
+              Positioned(
+                top: 0,
+                right: 0,
                 child: GestureDetector(
                   onTap: onFavoriteToggle,
                   child: Container(
-                    padding: const EdgeInsets.all(8),
+                    padding: const EdgeInsets.all(7),
                     decoration: BoxDecoration(
                       color: Colors.white.withOpacity(0.3),
                       shape: BoxShape.circle,
                     ),
                     child: Icon(
-                        isFavorite ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-                        color: isFavorite ? Colors.redAccent : Colors.white,
-                        size: 20
+                      isFavorite ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                      color: isFavorite ? Colors.redAccent : Colors.white,
+                      size: 18,
                     ),
                   ),
                 ),
               ),
-              const Spacer(),
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF7C9C84).withOpacity(0.8),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      'RECOMMENDED',
-                      style: GoogleFonts.outfit(
-                        color: Colors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                  ),
-                  const Spacer(),
-                  if (rating != null && rating > 0)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.5),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.star_rounded, color: Color(0xFFEAB308), size: 14),
-                          const SizedBox(width: 4),
-                          Text(
-                            rating.toStringAsFixed(1),
-                            style: GoogleFonts.outfit(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+              // Bottom content
+              Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (rating != null && rating > 0)
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          margin: const EdgeInsets.only(bottom: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.5),
+                            borderRadius: BorderRadius.circular(10),
                           ),
-                        ],
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.star_rounded, color: Color(0xFFEAB308), size: 13),
+                              const SizedBox(width: 3),
+                              Text(
+                                rating.toStringAsFixed(1),
+                                style: GoogleFonts.outfit(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
+                    Text(
+                      title,
+                      style: GoogleFonts.playfairDisplay(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w500,
+                        height: 1.2,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Text(
-                title,
-                style: GoogleFonts.playfairDisplay(
-                  color: Colors.white,
-                  fontSize: 22,
-                  fontWeight: FontWeight.w500,
-                  height: 1.2,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                subtitle,
-                style: GoogleFonts.outfit(
-                  color: Colors.white.withOpacity(0.8),
-                  fontSize: 12,
+                    const SizedBox(height: 6),
+                    Text(
+                      subtitle,
+                      style: GoogleFonts.outfit(
+                        color: Colors.white.withOpacity(0.8),
+                        fontSize: 12,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -1204,6 +1280,62 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
             ]
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildCounsellorAnnouncement() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFFE8ECE9), Color(0xFFD2DDD6)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFF7C9C84).withOpacity(0.3), width: 1),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: const BoxDecoration(
+              color: Color(0xFF7C9C84),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.spa_rounded,
+              color: Colors.white,
+              size: 24,
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Counsellor Recommendations',
+                  style: GoogleFonts.playfairDisplay(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFF2C3E30),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'These resources were handpicked by your counsellor to support you on your mental wellness journey.',
+                  style: GoogleFonts.outfit(
+                    fontSize: 12,
+                    color: const Color(0xFF556B5B),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1288,7 +1420,14 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
     );
   }
 
-  Widget _buildDailyPracticeCard(BuildContext context, String tag, String title, String subtitle, String imageUrl, {String? audioUrl, double? rating, required bool isFavorite, required VoidCallback onFavoriteToggle, required String resourceId}) {
+  Widget _buildDailyPracticeCard(BuildContext context, String tag, String title, String subtitle, String imageUrl, {
+    String? audioUrl,
+    double? rating,
+    required bool isFavorite,
+    required VoidCallback onFavoriteToggle,
+    required String resourceId,
+    bool isRecommended = false,
+  }) {
     return GestureDetector(
       onTap: () {
         Navigator.push(
@@ -1298,7 +1437,7 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
               type: 'meditation',
               title: title,
               subtitle: subtitle,
-              tag: tag == 'IMPROVE' ? 'RECOMMEND' : tag,
+              tag: tag == 'IMPROVE' ? 'RECOMMEND' : (isRecommended ? 'COUNSELLOR' : tag),
               imageUrl: imageUrl,
               duration: subtitle.split(' • ')[0],
               rating: rating,
@@ -1355,6 +1494,7 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // TAG row: tag text on left, star rating on right
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -1369,6 +1509,7 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
                       ),
                       if (rating != null && rating > 0)
                         Row(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
                             const Icon(Icons.star_rounded, color: Color(0xFFEAB308), size: 12),
                             const SizedBox(width: 2),
@@ -1384,6 +1525,33 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
                         ),
                     ],
                   ),
+                  // RECOMMENDED badge on its own line (no overflow possible)
+                  if (isRecommended) ...[
+                    const SizedBox(height: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFC5A880).withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: const Color(0xFFC5A880).withOpacity(0.4), width: 0.8),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.spa_rounded, color: Color(0xFFC5A880), size: 9),
+                          const SizedBox(width: 3),
+                          Text(
+                            'Recommended by Counsellor',
+                            style: GoogleFonts.outfit(
+                              color: const Color(0xFFC5A880),
+                              fontSize: 8,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 6),
                   Text(
                     title,
@@ -1434,6 +1602,7 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
     required bool isFavorite,
     required VoidCallback onFavoriteToggle,
     required String resourceId,
+    bool isRecommended = false,
   }) {
     return GestureDetector(
         onTap: () {
@@ -1444,7 +1613,7 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
                 type: 'article',
                 title: title,
                 subtitle: dbSubtitle ?? subtitle,
-                tag: tag,
+                tag: isRecommended ? 'COUNSELLOR' : tag,
                 imageUrl: imageUrl ?? 'https://images.unsplash.com/photo-1544367567-0f2fcb009e0b',
                 duration: readingTime ?? '5 min read',
                 rating: rating,
@@ -1460,7 +1629,7 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
                       builder: (context) => ArticleDetailScreen(
                         title: title,
                         subtitle: dbSubtitle ?? '',
-                        tag: tag,
+                        tag: isRecommended ? 'COUNSELLOR' : tag,
                         authorName: authorName ?? 'Eunoia Team',
                         authorRole: authorRole ?? 'Contributor',
                         authorImageUrl: authorImageUrl ?? 'https://ui-avatars.com/api/?name=${authorName ?? 'Eunoia'}&background=7C9C84&color=fff',
@@ -1508,85 +1677,130 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
                 ],
               ),
             ),
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            padding: const EdgeInsets.all(16),
+            child: Stack(
               children: [
-                Align(
-                  alignment: Alignment.topRight,
+                // Top-left: counsellor badge
+                if (isRecommended)
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFC5A880),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.star_rounded, color: Colors.white, size: 9),
+                          const SizedBox(width: 3),
+                          Text(
+                            'COUNSELLOR',
+                            style: GoogleFonts.outfit(
+                              color: Colors.white,
+                              fontSize: 8,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                // Top-right: heart
+                Positioned(
+                  top: 0,
+                  right: 0,
                   child: GestureDetector(
                     onTap: onFavoriteToggle,
                     child: Container(
-                      padding: const EdgeInsets.all(8),
+                      padding: const EdgeInsets.all(7),
                       decoration: BoxDecoration(
                         color: Colors.white.withOpacity(0.3),
                         shape: BoxShape.circle,
                       ),
                       child: Icon(
-                          isFavorite ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-                          color: isFavorite ? Colors.redAccent : Colors.white,
-                          size: 20
+                        isFavorite ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                        color: isFavorite ? Colors.redAccent : Colors.white,
+                        size: 18,
                       ),
                     ),
                   ),
                 ),
-                const Spacer(),
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        tag,
-                        style: GoogleFonts.outfit(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                    ),
-                    const Spacer(),
-                    if (rating != null && rating > 0)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.3),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.star_rounded, color: Color(0xFFEAB308), size: 14),
-                            const SizedBox(width: 4),
-                            Text(
-                              rating.toStringAsFixed(1),
-                              style: GoogleFonts.outfit(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                // Bottom content
+                Positioned(
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(10),
                             ),
-                          ],
-                        ),
+                            child: Text(
+                              tag,
+                              style: GoogleFonts.outfit(
+                                color: Colors.white,
+                                fontSize: 9,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ),
+                          if (rating != null && rating > 0)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withOpacity(0.4),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.star_rounded, color: Color(0xFFEAB308), size: 12),
+                                  const SizedBox(width: 3),
+                                  Text(
+                                    rating.toStringAsFixed(1),
+                                    style: GoogleFonts.outfit(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                                  ),
+                                ],
+                              ),
+                            ),
+                        ],
                       ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  title,
-                  style: GoogleFonts.playfairDisplay(
-                    color: Colors.white,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w500,
-                    height: 1.2,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  subtitle,
-                  style: GoogleFonts.outfit(
-                    color: Colors.white.withOpacity(0.8),
-                    fontSize: 12,
+                      const SizedBox(height: 10),
+                      Text(
+                        title,
+                        style: GoogleFonts.playfairDisplay(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w500,
+                          height: 1.2,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        subtitle,
+                        style: GoogleFonts.outfit(
+                          color: Colors.white.withOpacity(0.8),
+                          fontSize: 12,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -1608,6 +1822,7 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
     required bool isFavorite,
     required VoidCallback onFavoriteToggle,
     required String resourceId,
+    bool isRecommended = false,
   }) {
     return GestureDetector(
         onTap: () {
@@ -1618,7 +1833,7 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
                 type: 'article',
                 title: title,
                 subtitle: dbSubtitle ?? subtitle,
-                tag: tag,
+                tag: isRecommended ? 'COUNSELLOR' : tag,
                 imageUrl: imageUrl ?? 'https://images.unsplash.com/photo-1544367567-0f2fcb009e0b',
                 duration: readingTime ?? '5 min read',
                 rating: rating,
@@ -1634,7 +1849,7 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
                       builder: (context) => ArticleDetailScreen(
                         title: title,
                         subtitle: dbSubtitle ?? '',
-                        tag: tag,
+                        tag: isRecommended ? 'COUNSELLOR' : tag,
                         authorName: authorName ?? 'Eunoia Team',
                         authorRole: authorRole ?? 'Contributor',
                         authorImageUrl: authorImageUrl ?? 'https://ui-avatars.com/api/?name=${authorName ?? 'Eunoia'}&background=7C9C84&color=fff',
@@ -1695,6 +1910,7 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // TAG row: tag text left, rating right
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -1709,6 +1925,7 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
                         ),
                         if (rating != null && rating > 0)
                           Row(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
                               const Icon(Icons.star_rounded, color: Color(0xFFEAB308), size: 10),
                               const SizedBox(width: 2),
@@ -1724,6 +1941,33 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
                           ),
                       ],
                     ),
+                    // RECOMMENDED badge on its own line
+                    if (isRecommended) ...[
+                      const SizedBox(height: 4),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFC5A880).withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: const Color(0xFFC5A880).withOpacity(0.4), width: 0.8),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.spa_rounded, color: Color(0xFFC5A880), size: 9),
+                            const SizedBox(width: 3),
+                            Text(
+                              'Recommended by Counsellor',
+                              style: GoogleFonts.outfit(
+                                color: const Color(0xFFC5A880),
+                                fontSize: 8,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 4),
                     Text(
                       title,

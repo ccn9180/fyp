@@ -194,7 +194,7 @@ class _CounsellorAvailabilityManagementState extends State<CounsellorAvailabilit
               final bool isPastDate = isCurrentView && currentDay.isBefore(today);
 
               final isSelected = isCurrentView && d == _selectedDate.day && _selectedDate.month == _currentMonthView.month && _selectedDate.year == _currentMonthView.year;
-              final isAvailable = isCurrentView && availableDays.contains(d);
+              final isAvailable = isCurrentView && availableDays.contains(d) && !isPastDate;
 
               return InkWell(
                 onTap: (isCurrentView && !isPastDate) ? () {
@@ -297,13 +297,19 @@ class _CounsellorAvailabilityManagementState extends State<CounsellorAvailabilit
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Expanded(
-            child: Text(
-              slot['timeRange'] ?? '00:00 AM',
-              style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.bold, color: textColorMain),
+            child: Row(
+              children: [
+                Text(
+                  slot['timeRange'] ?? '00:00 AM',
+                  style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.bold, color: textColorMain),
+                ),
+                const SizedBox(width: 8),
+                Icon(Icons.edit_outlined, size: 14, color: primaryGreen.withOpacity(0.4)),
+              ],
             ),
           ),
           GestureDetector(
-            onTap: () => _confirmDelete(slot['id']),
+            onTap: () => _confirmDelete(slot),
             child: Container(
               padding: const EdgeInsets.all(4),
               decoration: BoxDecoration(color: Colors.red.withOpacity(0.1), shape: BoxShape.circle),
@@ -315,23 +321,103 @@ class _CounsellorAvailabilityManagementState extends State<CounsellorAvailabilit
     );
   }
 
-  void _confirmDelete(String id) {
-    showDialog(
+  void _confirmDelete(Map<String, dynamic> slot) {
+    final Color primaryGreen = const Color(0xFF7C9C84);
+    final String time = slot['timeRange'] ?? '--:--';
+    final String date = slot['date'] ?? '-- --- ----';
+
+    showModalBottomSheet(
       context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: Text('Delete Slot?', style: GoogleFonts.playfairDisplay(fontWeight: FontWeight.bold)),
-        content: Text('This session time will be removed from your active availability.', style: GoogleFonts.outfit()),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: Text('CANCEL', style: GoogleFonts.outfit(color: Colors.grey))),
-          TextButton(
-              onPressed: () {
-                FirebaseFirestore.instance.collection('counsellor_availability').doc(id).delete();
-                Navigator.pop(context);
-              },
-              child: Text('DELETE', style: GoogleFonts.outfit(color: Colors.red, fontWeight: FontWeight.bold))
-          ),
-        ],
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(32),
+        decoration: const BoxDecoration(
+          color: Color(0xFFF2F1EC),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(36)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Align(alignment: Alignment.center, child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2)))),
+            const SizedBox(height: 24),
+            Text('Remove Availability', style: GoogleFonts.playfairDisplay(fontSize: 24, fontWeight: FontWeight.bold, color: const Color(0xFF1E2742))),
+            const SizedBox(height: 12),
+            Text(
+              'Are you sure you want to remove this slot? Clients will no longer be able to book this session time.',
+              style: GoogleFonts.outfit(fontSize: 14, color: Colors.grey[600], height: 1.5),
+            ),
+            const SizedBox(height: 32),
+            
+            // Slot Summary Card
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: Colors.red.withOpacity(0.05)),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(color: Colors.red.withOpacity(0.05), shape: BoxShape.circle),
+                    child: const Icon(Icons.event_busy_rounded, color: Colors.red, size: 20),
+                  ),
+                  const SizedBox(width: 16),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(time, style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold, color: const Color(0xFF333333))),
+                      Text(date, style: GoogleFonts.outfit(fontSize: 13, color: Colors.grey)),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            
+            const SizedBox(height: 40),
+            
+            Row(
+              children: [
+                Expanded(
+                  child: TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: Text('Keep Slot', style: GoogleFonts.outfit(color: Colors.grey[600], fontWeight: FontWeight.w600)),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  flex: 2,
+                  child: SizedBox(
+                    height: 56,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        FirebaseFirestore.instance.collection('counsellor_availability').doc(slot['id']).delete();
+                        Navigator.pop(context);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Availability slot removed.', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+                            backgroundColor: Colors.red[400],
+                            behavior: SnackBarBehavior.floating,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                        );
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red[400],
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      ),
+                      child: Text('Remove Slot', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: Colors.white)),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+          ],
+        ),
       ),
     );
   }

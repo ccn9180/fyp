@@ -9,7 +9,7 @@ import { auth, db } from '../firebase';
 import { doc, getDoc, collection, query, where, getDocs, limit } from 'firebase/firestore';
 import logo from '../assets/leaf.png';
 
-const C = { primary: '#7C9C84', cream: '#F6F5F2', charcoal: '#333' };
+const C = { primary: '#7C9C84', cream: '#F6F5F2', creamDarker: '#E5E4E0', charcoal: '#333', muted: '#888' };
 
 const NAV = [
   { label: 'Overview', icon: LayoutDashboard, path: '/dashboard' },
@@ -18,6 +18,8 @@ const NAV = [
     label: 'Resource Control', icon: FileText, children: [
       { label: 'Article Content', path: '/content/articles', icon: FileText },
       { label: 'Meditation Guide', path: '/content/meditation', icon: Music },
+      { label: 'Community Pulse', path: '/monitoring/post-feeds', icon: MessageSquare },
+      { label: 'Community Rules', path: '/content/community-rules', icon: ShieldCheck },
       { label: 'Content Report', path: '/monitoring/content', icon: BarChart2 },
     ]
   },
@@ -39,84 +41,30 @@ const NAV = [
   },
   { type: 'divider' },
   {
-    label: 'Engagement Hub', icon: Gift, children: [
-      { label: 'Gamification System', path: '/gamification/engagement', icon: Award },
-      { label: 'Engagement Metrics', path: '/monitoring/gamification', icon: BarChart2 },
+    label: 'Gamification Hub', icon: Gift, children: [
+      { label: 'Gamification Management', path: '/gamification/engagement', icon: Award },
+      { label: 'Reward System Settings', path: '/gamification/rewards', icon: Settings },
+      { label: 'Gamification Metrics', path: '/monitoring/gamification', icon: BarChart2 },
     ]
   },
 ];
 
-const S = {
-  sidebar: (collapsed) => ({
-    width: collapsed ? '64px' : '240px',
-    minWidth: collapsed ? '64px' : '240px',
-    background: 'white',
-    borderRight: '1px solid #E5E4E0',
-    display: 'flex',
-    flexDirection: 'column',
-    transition: 'width 0.25s ease',
-    overflow: 'hidden',
-  }),
-  logoBox: {
-    display: 'flex', alignItems: 'center', gap: '12px',
-    padding: '20px 16px', borderBottom: '1px solid #E5E4E0',
-  },
-  logoIcon: {
-    width: '48px', height: '48px', borderRadius: '50%',
-    background: 'white', display: 'flex', alignItems: 'center',
-    justifyContent: 'center', flexShrink: 0,
-    border: '1px solid #E5E4E0',
-    boxShadow: '0 10px 30px rgba(124,156,132,0.08)', // Match exact 0.08 Flutter opacity
-  },
-  logoText: {
-    fontFamily: '"Playfair Display", serif', fontWeight: 600,
-    fontSize: '15px', color: '#333', lineHeight: '1.3',
-  },
-  logoSub: { fontFamily: 'Outfit, sans-serif', fontSize: '11px', fontWeight: 400, color: '#888' },
-  nav: { flex: 1, overflowY: 'auto', padding: '12px 8px', display: 'flex', flexDirection: 'column', gap: '2px' },
-  navGroup: (isActive) => ({
-    display: 'flex', alignItems: 'center', gap: '12px', justifyContent: 'space-between',
-    padding: '10px 16px', borderRadius: '12px', width: '100%',
-    fontSize: '14px', fontFamily: 'Outfit, sans-serif', fontWeight: isActive ? 600 : 500,
-    color: isActive ? '#7C9C84' : '#555',
-    background: isActive ? '#E5EDE8' : 'transparent',
-    cursor: 'pointer', border: 'none', transition: 'all 0.15s',
-    textDecoration: 'none', whiteSpace: 'nowrap',
-  }),
-  divider: { height: '1px', minHeight: '1px', flexShrink: 0, background: '#E5E4E0', margin: '12px 16px', opacity: 0.6 },
-  subNav: { marginLeft: '16px', borderLeft: '1px solid #E5EDE8', display: 'flex', flexDirection: 'column', gap: '2px' },
-  subLink: (isActive) => ({
-    display: 'flex', alignItems: 'center', gap: '12px',
-    padding: '8px 16px', borderRadius: '10px',
-    fontSize: '13px', fontFamily: 'Outfit, sans-serif', fontWeight: isActive ? 600 : 400,
-    color: isActive ? '#7C9C84' : '#777',
-    background: isActive ? '#E5EDE8' : 'transparent',
-    cursor: 'pointer', textDecoration: 'none', transition: 'all 0.15s',
-  }),
-  topbar: {
-    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-    padding: '14px 24px', background: 'white', borderBottom: '1px solid #E5E4E0', flexShrink: 0,
-  },
-  topbarTitle: { fontFamily: '"Playfair Display", serif', fontWeight: 600, fontSize: '18px', color: '#333' },
-  avatar: {
-    width: '32px', height: '32px', borderRadius: '50%',
-    background: '#BBCBC2', display: 'flex', alignItems: 'center', justifyContent: 'center',
-    color: '#7C9C84', fontFamily: 'Outfit, sans-serif', fontWeight: 700, fontSize: '14px',
-  },
-};
-
-function SidebarGroup({ item, collapsed }) {
+function SidebarGroup({ item, collapsed, setCollapsed }) {
   const [open, setOpen] = useState(true);
 
   if (item.type === 'divider') {
-    return <div style={S.divider} />;
+    return <div className="h-px min-h-[1px] shrink-0 bg-[#E5E4E0] mx-4 my-3 opacity-60" />;
   }
 
   if (!item.children) {
     return (
-      <NavLink to={item.path} style={({ isActive }) => S.navGroup(isActive)}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <item.icon size={17} style={{ flexShrink: 0 }} />
+      <NavLink 
+        to={item.path} 
+        onClick={() => { if (collapsed && setCollapsed) setCollapsed(false); }}
+        className={({ isActive }) => `flex items-center gap-3 justify-between px-4 py-2.5 rounded-xl w-full text-sm font-body cursor-pointer border-none transition-all whitespace-nowrap outline-none no-underline ${isActive ? 'bg-sage-100 text-primary font-semibold' : 'text-charcoal-muted font-medium hover:bg-cream/50'}`}
+      >
+        <div className="flex items-center gap-3">
+          <item.icon size={17} className="shrink-0" />
           {!collapsed && item.label}
         </div>
       </NavLink>
@@ -124,18 +72,32 @@ function SidebarGroup({ item, collapsed }) {
   }
   return (
     <div>
-      <button onClick={() => setOpen(o => !o)} style={S.navGroup(false)}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <item.icon size={17} style={{ flexShrink: 0 }} />
+      <button 
+        onClick={() => {
+          if (collapsed && setCollapsed) {
+            setOpen(true);
+            setCollapsed(false);
+          } else {
+            setOpen(o => !o);
+          }
+        }}
+        className="flex items-center gap-3 justify-between px-4 py-2.5 rounded-xl w-full text-sm font-body cursor-pointer border-none transition-all whitespace-nowrap outline-none no-underline text-charcoal-muted font-medium hover:bg-cream/50"
+      >
+        <div className="flex items-center gap-3">
+          <item.icon size={17} className="shrink-0" />
           {!collapsed && item.label}
         </div>
-        {!collapsed && (open ? <ChevronDown size={17} style={{ flexShrink: 0 }} /> : <ChevronRight size={17} style={{ flexShrink: 0 }} />)}
+        {!collapsed && (open ? <ChevronDown size={17} className="shrink-0" /> : <ChevronRight size={17} className="shrink-0" />)}
       </button>
       {open && !collapsed && (
-        <div style={S.subNav}>
+        <div className="ml-4 border-l border-sage-100 flex flex-col gap-0.5">
           {item.children.map(c => (
-            <NavLink key={c.path} to={c.path} style={({ isActive }) => S.subLink(isActive)}>
-              <c.icon size={17} style={{ flexShrink: 0, opacity: 0.8 }} /> {c.label}
+            <NavLink 
+              key={c.path} 
+              to={c.path} 
+              className={({ isActive }) => `flex items-center gap-3 px-4 py-2 rounded-xl text-[13px] font-body cursor-pointer no-underline transition-all outline-none ${isActive ? 'bg-sage-100 text-primary font-semibold' : 'text-[#777] hover:bg-cream/50 font-normal'}`}
+            >
+              <c.icon size={17} className="shrink-0 opacity-80" /> {c.label}
             </NavLink>
           ))}
         </div>
@@ -165,6 +127,14 @@ export default function AdminLayout({ children, onLogout }) {
           if (!querySnap.empty) userData = querySnap.docs[0].data();
         }
 
+        if (!userData && u.email) {
+          const qEmail = query(collection(db, 'users'), where('email', '==', u.email), limit(1));
+          const querySnapEmail = await getDocs(qEmail);
+          if (!querySnapEmail.empty) {
+            userData = querySnapEmail.docs[0].data();
+          }
+        }
+
         if (userData) {
           setAdminUser({
             name: userData.name || userData.fullName || 'Admin User',
@@ -178,125 +148,81 @@ export default function AdminLayout({ children, onLogout }) {
   }, []);
 
   return (
-    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: '#F6F5F2' }}>
+    <div className="flex h-screen overflow-hidden bg-[#F6F5F2]">
       {/* Sidebar */}
-      <aside style={S.sidebar(collapsed)}>
-        <div style={{ 
-          padding: '28px 20px', 
-          display: 'flex', 
-          alignItems: 'center', 
-          justifyContent: collapsed ? 'center' : 'space-between',
-          borderBottom: collapsed ? 'none' : `1px solid ${C.creamDarker}`,
-          marginBottom: '10px'
-        }}>
-          {!collapsed && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <div style={S.logoIcon}>
-                <img src={logo} alt="Logo" style={{ width: '28px', height: '28px' }} />
-              </div>
-              <div>
-                <p style={{ margin: 0, fontFamily: '"Playfair Display", serif', fontWeight: 600, fontSize: '22px', color: C.charcoal, lineHeight: 1 }}>Eunoia</p>
-                <p style={{ margin: 0, fontFamily: 'Outfit, sans-serif', fontWeight: 600, fontSize: '10px', color: C.muted, textTransform: 'uppercase', letterSpacing: '0.08em', marginTop: '2px' }}>Admin</p>
-              </div>
+      <aside className={`bg-white border-r border-cream-darker flex flex-col transition-[width] duration-200 ease-in-out overflow-hidden ${collapsed ? 'w-16 min-w-[64px]' : 'w-60 min-w-[240px]'}`}>
+        <div className={`py-7 flex mb-2.5 ${collapsed ? 'flex-col items-center justify-center gap-4 px-2 border-none' : 'items-center justify-between px-5 border-b border-cream-darker'}`}>
+          <div className={`flex items-center gap-2 ${collapsed ? 'justify-center' : 'justify-start'}`}>
+            <div className={`bg-white flex flex-col items-center justify-center shrink-0 border border-cream-darker rounded-full shadow-[0_10px_30px_rgba(124,156,132,0.08)] ${collapsed ? 'w-10 h-10' : 'w-12 h-12'}`}>
+              <img src={logo} alt="Logo" className={`${collapsed ? 'w-[27px] h-[27px]' : 'w-[33px] h-[33px]'}`} />
             </div>
-          )}
-          
-          <button 
+            {!collapsed && (
+              <div>
+                <p className="m-0 font-display font-semibold text-[22px] text-charcoal leading-none">Eunoia</p>
+                <p className="m-0 font-body font-semibold text-[10px] text-muted uppercase tracking-[0.08em] mt-0.5">Admin</p>
+              </div>
+            )}
+          </div>
+
+          <button
             onClick={() => setCollapsed(!collapsed)}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '6px', color: C.charcoal, display: 'flex', alignItems: 'center', borderRadius: '8px' }}
-            className="hover:bg-cream transition-colors"
+            className="bg-transparent border-none cursor-pointer p-1.5 text-charcoal flex items-center rounded-lg hover:bg-cream transition-colors"
           >
             <Menu size={20} />
           </button>
         </div>
-        <nav style={S.nav}>
-          {NAV.map((item, index) => <SidebarGroup key={item.label || `divider-${index}`} item={item} collapsed={collapsed} />)}
+        <nav className="flex-1 overflow-y-auto px-2 py-3 flex flex-col gap-0.5 custom-scrollbar">
+          {NAV.map((item, index) => <SidebarGroup key={item.label || `divider-${index}`} item={item} collapsed={collapsed} setCollapsed={setCollapsed} />)}
         </nav>
-        <div style={{ padding: '16px', borderTop: collapsed ? 'none' : `1px solid ${C.creamDarker}`, marginTop: 'auto' }}>
-            <NavLink to="/account" style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: '12px', 
-                textDecoration: 'none', 
-                color: 'inherit',
-                background: C.cream,
-                padding: '12px',
-                borderRadius: '16px',
-                border: `1px solid ${C.creamDarker}`,
-                width: '100%',
-                justifyContent: collapsed ? 'center' : 'flex-start'
-            }} className="hover:bg-cream-darker transition-all group">
-                <div style={{ 
-                    width: '32px', height: '32px', 
-                    borderRadius: '8px', 
-                    background: C.primary, 
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    overflow: 'hidden', flexShrink: 0
-                }}>
-                    {adminUser.photo ? (
-                        <img src={adminUser.photo} alt="P" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    ) : (
-                        <span style={{ color: 'white', fontWeight: 700, fontSize: '13px' }}>{adminUser.name?.charAt(0)}</span>
-                    )}
-                </div>
-                {!collapsed && (
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                        <p style={{ margin: 0, fontSize: '13px', fontWeight: 700, color: '#333', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{adminUser.name}</p>
-                        <p style={{ margin: 0, fontSize: '10px', color: C.primary, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{adminUser.role}</p>
-                    </div>
-                )}
-            </NavLink>
+        <div className={`p-4 mt-auto flex-shrink-0 ${collapsed ? 'border-none flex justify-center' : 'border-t border-cream-darker'}`}>
+          <NavLink to="/account" className={`flex items-center no-underline text-inherit transition-all group ${collapsed ? 'justify-center p-0 rounded-xl w-10 h-10 min-w-[40px] min-h-[40px] aspect-square mx-auto hover:scale-105 border-2 border-primary/20 shadow-sm' : 'justify-start gap-3 p-3 rounded-2xl w-full bg-cream border border-cream-darker hover:bg-cream-darker'}`}>
+            <div className={`bg-primary flex items-center justify-center overflow-hidden shrink-0 ${collapsed ? 'rounded-xl w-full h-full' : 'rounded-full w-8 h-8 border border-cream-darker'}`}>
+              {adminUser.photo ? (
+                <img src={adminUser.photo} alt="P" className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-white font-bold text-[13px]">{adminUser.name?.charAt(0)}</span>
+              )}
+            </div>
+            {!collapsed && (
+              <div className="flex-1 min-w-0 flex items-center">
+                <p className="m-0 text-[14px] font-bold text-charcoal truncate">{adminUser.name}</p>
+              </div>
+            )}
+          </NavLink>
         </div>
       </aside>
 
       {/* Main */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        <header style={S.topbar}>
-          <span style={S.topbarTitle}>Strategic Control Console</span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{ position: 'relative' }}>
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <header className="flex items-center justify-between px-6 py-3.5 bg-white border-b border-cream-darker shrink-0">
+          <span className="font-display font-semibold text-lg text-charcoal">System Oversight Hub</span>
+          <div className="flex items-center gap-3">
+            <div className="relative">
               <button
                 onClick={() => setShowNotify(!showNotify)}
-                style={{ position: 'relative', padding: '8px', border: 'none', background: showNotify ? '#E8ECE9' : 'transparent', cursor: 'pointer', borderRadius: '10px', transition: 'all 0.2s' }}
+                className={`relative p-2 border-none cursor-pointer rounded-xl transition-all ${showNotify ? 'bg-[#E8ECE9]' : 'bg-transparent'}`}
               >
-                <Bell size={18} color={showNotify ? C.primary : "#888"} />
-                <span style={{ position: 'absolute', top: '8px', right: '8px', width: '8px', height: '8px', background: '#f87171', borderRadius: '50%', border: '2px solid white' }} />
+                <Bell size={18} className={showNotify ? "text-primary" : "text-muted"} />
+                <span className="absolute top-2 right-2 w-2 h-2 bg-red-400 rounded-full border-2 border-white" />
               </button>
 
               {showNotify && (
-                <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '12px', width: '280px', background: 'white', borderRadius: '20px', boxShadow: '0 15px 50px rgba(0,0,0,0.12)', padding: '20px', zIndex: 100 }}>
-                  <p style={{ fontFamily: 'Outfit', fontWeight: 600, fontSize: '14px', marginBottom: '8px' }}>Recent Activity</p>
-                  <div style={{ fontSize: '12px', color: '#888', textAlign: 'center', padding: '12px 0' }}>No new system notifications.</div>
+                <div className="absolute top-full right-0 mt-3 w-72 bg-white rounded-2xl shadow-[0_15px_50px_rgba(0,0,0,0.12)] p-5 z-[100]">
+                  <p className="font-body font-semibold text-sm mb-2">Recent Activity</p>
+                  <div className="text-xs text-muted text-center py-3">No new system notifications.</div>
                 </div>
               )}
             </div>
 
-            <button 
-              onClick={onLogout} 
-              style={{ 
-                marginLeft: '12px',
-                padding: '10px 18px', 
-                border: `1px solid ${C.creamDarker}`, 
-                background: 'white', 
-                cursor: 'pointer', 
-                borderRadius: '12px', 
-                color: '#f87171', 
-                fontWeight: 600, 
-                fontSize: '13px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                boxShadow: '0 2px 4px rgba(0,0,0,0.02)',
-                transition: 'all 0.2s'
-              }}
-              onMouseEnter={e => { e.currentTarget.style.background = '#fef2f2'; e.currentTarget.style.borderColor = '#fecaca'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'white'; e.currentTarget.style.borderColor = C.creamDarker; }}
+            <button
+              onClick={onLogout}
+              className="ml-3 px-4.5 py-2.5 border border-cream-darker bg-white cursor-pointer rounded-xl text-red-400 font-semibold text-[13px] flex items-center gap-2 shadow-[0_2px_4px_rgba(0,0,0,0.02)] transition-all hover:bg-red-50 hover:border-red-200"
             >
               <LogOut size={16} /> Log Out
             </button>
           </div>
         </header>
-        <main style={{ flex: 1, overflowY: 'auto', padding: '24px' }}>
+        <main className="flex-1 overflow-y-auto p-6">
           {children}
         </main>
       </div>

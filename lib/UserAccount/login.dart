@@ -4,7 +4,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:local_auth/local_auth.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'register.dart';
+import 'user_details_page.dart';
 import '../User/main_screen.dart';
 
 class LoginPage extends StatefulWidget {
@@ -23,6 +26,71 @@ class _LoginPageState extends State<LoginPage> {
 
   bool _isLoading = false;
   bool _passwordVisible = false;
+
+  final LocalAuthentication _localAuth = LocalAuthentication();
+  bool _isBiometricAvailable = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkBiometricSupport();
+  }
+
+  Future<void> _checkBiometricSupport() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final bool fingerprintEnabled = prefs.getBool('fingerprint_enabled') ?? false;
+      final bool faceIdEnabled = prefs.getBool('face_id_enabled') ?? false;
+      
+      if (fingerprintEnabled || faceIdEnabled) {
+        final bool canCheck = await _localAuth.canCheckBiometrics;
+        final bool isDeviceSupported = await _localAuth.isDeviceSupported();
+        if (canCheck && isDeviceSupported) {
+          setState(() {
+            _isBiometricAvailable = true;
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Error checking biometric support: $e');
+    }
+  }
+
+  Future<void> _authenticateWithBiometrics() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedEmail = prefs.getString('biometric_email');
+    final savedPassword = prefs.getString('biometric_password');
+
+    if (savedEmail == null || savedPassword == null || savedEmail.isEmpty || savedPassword.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please log in with password once to link biometrics.'),
+            backgroundColor: Colors.orangeAccent,
+          ),
+        );
+      }
+      return;
+    }
+
+    try {
+      final bool didAuth = await _localAuth.authenticate(
+        localizedReason: 'Scan fingerprint to log in',
+        options: const AuthenticationOptions(
+          biometricOnly: true,
+          stickyAuth: true,
+        ),
+      );
+
+      if (didAuth && mounted) {
+        _emailCtrl.text = savedEmail;
+        _passwordCtrl.text = savedPassword;
+        _login();
+      }
+    } catch (e) {
+      debugPrint('Biometric authentication failed: $e');
+    }
+  }
 
   @override
   void dispose() {
@@ -59,7 +127,43 @@ class _LoginPageState extends State<LoginPage> {
           return;
         }
 
+        // Check if Firestore profile exists
+        final userDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .get();
+
+        if (!userDoc.exists) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Completing your setup...'),
+                backgroundColor: Color(0xFF7B9E89),
+              ),
+            );
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => UserDetailsPage(
+                  email: _emailCtrl.text.trim(),
+                  password: _passwordCtrl.text.trim(),
+                  isGoogle: false,
+                ),
+              ),
+            );
+          }
+          return;
+        }
+
         if (mounted) {
+          final prefs = await SharedPreferences.getInstance();
+          final bool fingerprintEnabled = prefs.getBool('fingerprint_enabled') ?? false;
+          final bool faceIdEnabled = prefs.getBool('face_id_enabled') ?? false;
+          if (fingerprintEnabled || faceIdEnabled) {
+            await prefs.setString('biometric_email', _emailCtrl.text.trim());
+            await prefs.setString('biometric_password', _passwordCtrl.text.trim());
+          }
+
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(builder: (context) => const MainScreen()),
@@ -376,30 +480,54 @@ class _LoginPageState extends State<LoginPage> {
 
                 const SizedBox(height: 40),
 
-                // Login Button
-                SizedBox(
-                  width: double.infinity,
-                  height: 56,
-                  child: ElevatedButton(
-                    onPressed: _isLoading ? null : _login,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF7B9E89), // Primary Sage Green from Register Page
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      elevation: 0, // Flat elevation to match Register Page
-                    ),
-                    child: _isLoading
-                        ? const CircularProgressIndicator(color: Colors.white)
-                        : Text(
-                            'Login',
-                            style: GoogleFonts.outfit(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white,
+                // Login Button with Biometrics next to it if available
+                Row(
+                  children: [
+                    Expanded(
+                      child: SizedBox(
+                        height: 56,
+                        child: ElevatedButton(
+                          onPressed: _isLoading ? null : _login,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF7B9E89), // Primary Sage Green
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
                             ),
+                            elevation: 0,
                           ),
-                  ),
+                          child: _isLoading
+                              ? const CircularProgressIndicator(color: Colors.white)
+                              : Text(
+                                  'Login',
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                        ),
+                      ),
+                    ),
+                    if (_isBiometricAvailable) ...[
+                      const SizedBox(width: 12),
+                      Container(
+                        width: 56,
+                        height: 56,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE8F1EB),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: IconButton(
+                          onPressed: _isLoading ? null : _authenticateWithBiometrics,
+                          icon: const Icon(
+                            Icons.fingerprint_rounded,
+                            color: Color(0xFF7B9E89),
+                            size: 28,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
 
                 const SizedBox(height: 24),

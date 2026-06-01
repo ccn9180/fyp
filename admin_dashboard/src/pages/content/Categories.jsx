@@ -3,6 +3,8 @@ import { doc, deleteDoc, addDoc, updateDoc, collection, serverTimestamp } from '
 import { db } from '../../firebase';
 import { useCategories, useArticles, useMeditationGuides } from '../../hooks/useFirestore';
 import { Plus, Pencil, Trash2, X, Save, Send, Tag } from 'lucide-react';
+import { customAlert, customConfirm } from '../../utils/dialogUtils';
+import Skeleton from '../../components/Skeleton.jsx';
 
 const COLOR_PRESETS = [
   { name: 'Blue', color: 'bg-blue-100 text-blue-500' },
@@ -60,6 +62,10 @@ export default function Categories() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!formData.name.trim()) {
+      await customAlert("Category name cannot be empty.", "Missing Details");
+      return;
+    }
     try {
       if (editingCategory) {
         const docRef = doc(db, 'categories', editingCategory.id);
@@ -77,12 +83,13 @@ export default function Categories() {
       handleCloseEditor();
     } catch (error) {
       console.error("Error saving category: ", error);
-      alert("Failed to save category.");
+      await customAlert("Failed to save category.", "Error");
     }
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Delete this category? Articles and guides using this category will not be deleted but will appear as Uncategorized.')) return;
+    const confirmed = await customConfirm('Delete this category? Articles and guides using this category will not be deleted but will appear as Uncategorized.', 'Confirm Delete');
+    if (!confirmed) return;
     setDeleting(id);
     try {
       await deleteDoc(doc(db, 'categories', id));
@@ -108,7 +115,28 @@ export default function Categories() {
       </div>
 
       {catLoading ? (
-        <p className="font-body text-sm text-charcoal-muted">Loading categories…</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {[1, 2, 3, 4, 5, 6].map((i) => (
+            <div key={i} className="card flex flex-col gap-4">
+              <Skeleton type="rectangle" className="w-24 h-6" />
+              <div className="flex gap-4">
+                <div className="flex flex-col gap-1">
+                  <Skeleton type="rectangle" className="w-6 h-6" />
+                  <Skeleton type="text" className="w-12 h-3" />
+                </div>
+                <div className="w-px bg-cream-darker" />
+                <div className="flex flex-col gap-1">
+                  <Skeleton type="rectangle" className="w-6 h-6" />
+                  <Skeleton type="text" className="w-12 h-3" />
+                </div>
+              </div>
+              <div className="flex gap-2 pt-2 border-t border-cream-darker">
+                <Skeleton type="rectangle" className="flex-1 h-8" />
+                <Skeleton type="rectangle" className="w-8 h-8 rounded-xl" />
+              </div>
+            </div>
+          ))}
+        </div>
       ) : categories.length === 0 ? (
         <p className="font-body text-sm text-charcoal-muted">No categories found.</p>
       ) : (
