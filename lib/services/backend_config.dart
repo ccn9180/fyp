@@ -5,7 +5,9 @@ class BackendConfig {
   static String? _cachedBaseUrl;
 
   static final List<String> _baseUrlsToTry = [
-    'http://192.168.68.115:5000', // Host PC's current local IP
+    'http://192.168.101.97:5000', // Host PC's current local Wi-Fi IP
+    'http://172.20.10.3:5000',    // Host PC's old local IP
+    'http://192.168.68.115:5000', // Host PC's older local IP
     'http://10.0.2.2:5000',       // Android emulator loopback
     'http://127.0.0.1:5000',      // Localhost/Simulator/Desktop
   ];
@@ -24,7 +26,7 @@ class BackendConfig {
       try {
         await http
             .get(Uri.parse(baseUrl))
-            .timeout(const Duration(milliseconds: 1000));
+            .timeout(const Duration(milliseconds: 3000));
         // If we get any HTTP response (even a 404 or 405), the server is active and reachable
         _cachedBaseUrl = baseUrl;
         debugPrint('BackendConfig: Resolved server URL to $baseUrl');

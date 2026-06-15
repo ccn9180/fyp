@@ -76,7 +76,7 @@ class GamificationService {
   }
 
   // ─────────────────────────────────────────────────────────────
-  // STREAK  — call once per app launch
+  // STREAK  — call when a user records their daily mood
   // ─────────────────────────────────────────────────────────────
   static Future<bool> updateStreak(String uid) async {
     final ref  = _db.collection('users').doc(uid);
@@ -121,7 +121,7 @@ class GamificationService {
     } catch (e) {
       print("Error fetching daily login xp: $e");
     }
-    await awardXP(uid, loginXp, 'Daily Login Streak', coinsToAdd: 2);
+    await awardXP(uid, loginXp, 'Daily Mood Check-in Streak', coinsToAdd: 2);
 
     // Check streak badges
     await checkAndUnlockBadges(uid);
@@ -345,7 +345,11 @@ class GamificationService {
     }
 
     if (newlyUnlocked.isNotEmpty) {
-      await userRef.update({'badges': earned});
+      final updates = <String, dynamic>{'badges': earned};
+      for (final b in newlyUnlocked) {
+        updates['badge_unlock_times.$b'] = FieldValue.serverTimestamp();
+      }
+      await userRef.update(updates);
     }
     return newlyUnlocked;
   }
@@ -440,16 +444,36 @@ class GamificationService {
     return snap.exists;
   }
 
+  /// Calculate the real streak (resetting to 0 if missed yesterday)
+  static int getRealStreak(Map<String, dynamic> d) {
+    int streak = (d['streak_days'] ?? 0) as int;
+    final lastRaw = d['last_active_date'];
+    if (lastRaw is Timestamp && streak > 0) {
+      final lastActive = lastRaw.toDate();
+      final now = DateTime.now();
+      final todayStr = DateFormat('yyyy-MM-dd').format(now);
+      final yesterdayStr = DateFormat('yyyy-MM-dd').format(now.subtract(const Duration(days: 1)));
+      final lastStr = DateFormat('yyyy-MM-dd').format(lastActive);
+      
+      if (lastStr != todayStr && lastStr != yesterdayStr) {
+        return 0;
+      }
+    }
+    return streak;
+  }
+
   /// Quick stream of user gamification fields
   static Stream<Map<String, dynamic>> userGamificationStream(String uid) {
     return _db.collection('users').doc(uid).snapshots().map((snap) {
       if (!snap.exists) return {};
       final d = snap.data()!;
+      int streak = getRealStreak(d);
+
       return {
         'xp':           (d['xp']           ?? 0) as int,
         'level':        (d['level']        ?? 1) as int,
         'coins':        (d['coins']        ?? 0) as int,
-        'streak_days':  (d['streak_days']  ?? 0) as int,
+        'streak_days':  streak,
         'badges':       (d['badges']       ?? []) as List<dynamic>,
         'redeemed_rewards': (d['redeemed_rewards'] ?? []) as List<dynamic>,
       };

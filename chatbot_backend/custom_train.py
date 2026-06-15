@@ -3,6 +3,8 @@ import re
 import random
 from collections import Counter
 
+import nltk
+from nltk.stem import WordNetLemmatizer
 import numpy as np
 import torch
 import torch.nn as nn
@@ -18,8 +20,20 @@ torch.manual_seed(SEED)
 if torch.cuda.is_available():
     torch.cuda.manual_seed_all(SEED)
 
+try:
+    nltk.data.find('corpora/wordnet')
+except LookupError:
+    nltk.download('wordnet')
+try:
+    nltk.data.find('corpora/omw-1.4')
+except LookupError:
+    nltk.download('omw-1.4')
+
+lemmatizer = WordNetLemmatizer()
+
 def tokenize(sentence):
-    return re.findall(r"\b\w+\b", sentence.lower())
+    words = re.findall(r"\b\w+\b", sentence.lower())
+    return [lemmatizer.lemmatize(w) for w in words]
 
 PAD_TOKEN = "<PAD>"
 UNK_TOKEN = "<UNK>"
@@ -59,7 +73,7 @@ def collate_batch(batch, pad_idx=0):
     y = torch.tensor(labels, dtype=torch.long)
     return x, y
 
-def load_and_prepare_data(intents_path="intents.json"):
+def load_and_prepare_data(intents_path="intents_combined.json"):
     print(f"Loading {intents_path}...")
     with open(intents_path, "r", encoding="utf-8") as f:
         intents = json.load(f)
@@ -129,8 +143,11 @@ def evaluate(model, dataloader, criterion, device):
 
 def evaluate_per_class(model, dataloader, tags, device):
     model.eval()
-    class_correct = {tag: 0 for tag in tags}
+    class_tp = {tag: 0 for tag in tags}
+    class_fp = {tag: 0 for tag in tags}
+    class_fn = {tag: 0 for tag in tags}
     class_total = {tag: 0 for tag in tags}
+    
     with torch.no_grad():
         for x, y in dataloader:
             x = x.to(device)
@@ -138,29 +155,61 @@ def evaluate_per_class(model, dataloader, tags, device):
             outputs = model(x)
             _, predicted = torch.max(outputs, dim=1)
             for true_label, pred_label in zip(y.tolist(), predicted.tolist()):
-                tag = tags[true_label]
-                class_total[tag] += 1
+                true_tag = tags[true_label]
+                pred_tag = tags[pred_label]
+                
+                class_total[true_tag] += 1
                 if true_label == pred_label:
-                    class_correct[tag] += 1
-    print("\n📊 Per-Class Accuracy:")
+                    class_tp[true_tag] += 1
+                else:
+                    class_fn[true_tag] += 1
+                    class_fp[pred_tag] += 1
+
+    print("\n📊 Per-Class Metrics:")
+    print(f"{'Intent':<30} {'Acc%':>6} {'Prec%':>6} {'Rec%':>6} {'F1%':>6} {'Total':>6}")
+    
+    macro_p, macro_r, macro_f1 = 0.0, 0.0, 0.0
+    total_samples = 0
+    total_correct = 0
+
     for tag in tags:
+        tp = class_tp[tag]
+        fp = class_fp[tag]
+        fn = class_fn[tag]
         total = class_total[tag]
-        correct = class_correct[tag]
-        acc = (correct / total * 100) if total > 0 else 0.0
-        print(f"{tag:<35} {correct:>7} {total:>6} {acc:>6.1f}%")
+        
+        acc = (tp / total * 100) if total > 0 else 0.0
+        prec = (tp / (tp + fp) * 100) if (tp + fp) > 0 else 0.0
+        rec = (tp / (tp + fn) * 100) if (tp + fn) > 0 else 0.0
+        f1 = (2 * prec * rec / (prec + rec)) if (prec + rec) > 0 else 0.0
+        
+        macro_p += prec
+        macro_r += rec
+        macro_f1 += f1
+        total_samples += total
+        total_correct += tp
+        
+        print(f"{tag:<30} {acc:>6.1f} {prec:>6.1f} {rec:>6.1f} {f1:>6.1f} {total:>6}")
+
+    num_classes = len(tags)
+    print("\n📈 Overall Metrics:")
+    print(f"Overall Accuracy : {(total_correct / total_samples * 100) if total_samples > 0 else 0.0:.2f}%")
+    print(f"Macro Precision  : {macro_p / num_classes:.2f}%")
+    print(f"Macro Recall     : {macro_r / num_classes:.2f}%")
+    print(f"Macro F1-Score   : {macro_f1 / num_classes:.2f}%")
 
 def train_model():
     print("🚀 Initializing Eunoia FYP BiLSTM Training Pipeline...")
-    sequences, labels, vocab, tags = load_and_prepare_data("intents.json")
-    num_epochs = 120
+    sequences, labels, vocab, tags = load_and_prepare_data("intents_combined.json")
+    num_epochs = 150
     batch_size = 16
-    learning_rate = 0.001
+    learning_rate = 0.0005
     embedding_dim = 128
     hidden_size = 128
     num_layers = 2
-    dropout = 0.35
+    dropout = 0.5
     validation_ratio = 0.2
-    early_stopping_patience = 20
+    early_stopping_patience = 25
     min_delta = 0.005
     vocab_size = len(vocab)
     output_size = len(tags)

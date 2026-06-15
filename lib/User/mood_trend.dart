@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:fl_chart/fl_chart.dart';
@@ -6,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'report_generator_service.dart';
+import 'widgets/mood_calendar_widget.dart';
 
 class MoodTrendScreen extends StatefulWidget {
   const MoodTrendScreen({super.key});
@@ -42,23 +42,128 @@ class _MoodTrendScreenState extends State<MoodTrendScreen> {
     _loadMoodData();
   }
 
+  List<Map<String, dynamic>> _monthlyRecords = [];
+
   Future<void> _loadMoodData() async {
     setState(() => _isLoading = true);
-    // Instant load for premium feel during demo
-    Future.microtask(() {
-      setState(() {
-        _chartSpots = [
-          const FlSpot(0, 3.2), 
-          const FlSpot(1, 4.0), 
-          const FlSpot(2, 3.5), 
-          const FlSpot(3, 4.8), 
-          const FlSpot(4, 4.2), 
-          const FlSpot(5, 3.8), 
-          const FlSpot(6, 3.5), 
-        ];
-        _isLoading = false;
-      });
-    });
+    
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    try {
+      final now = DateTime.now();
+      // Fetch for the current month for calendar
+      final startOfMonth = DateTime(now.year, now.month, 1);
+      final endOfMonth = DateTime(now.year, now.month + 1, 0, 23, 59, 59);
+
+      // Fetch Mood Check-ins
+      final checkinsSnap = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('mood_checkins')
+          .where('timestamp', isGreaterThanOrEqualTo: Timestamp.fromDate(startOfMonth))
+          .where('timestamp', isLessThanOrEqualTo: Timestamp.fromDate(endOfMonth))
+          .get();
+
+      // Fetch Diary Entries
+      final diarySnap = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('diary_entries')
+          .where('timestamp', isGreaterThanOrEqualTo: Timestamp.fromDate(startOfMonth))
+          .where('timestamp', isLessThanOrEqualTo: Timestamp.fromDate(endOfMonth))
+          .get();
+
+      // Fetch Chat Sessions
+      final chatSnap = await FirebaseFirestore.instance
+          .collection('chat_sessions')
+          .where('userId', isEqualTo: uid)
+          .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(startOfMonth))
+          .where('createdAt', isLessThanOrEqualTo: Timestamp.fromDate(endOfMonth))
+          .get();
+
+      List<Map<String, dynamic>> records = [];
+
+      for (var doc in checkinsSnap.docs) {
+        final data = doc.data();
+        if (data['timestamp'] != null) {
+          records.add({
+            'date': (data['timestamp'] as Timestamp).toDate(),
+            'mood': data['emotion'] ?? 'Neutral',
+            'source': 'Daily Check-in',
+          });
+        }
+      }
+
+      for (var doc in diarySnap.docs) {
+        final data = doc.data();
+        if (data['timestamp'] != null) {
+          records.add({
+            'date': (data['timestamp'] as Timestamp).toDate(),
+            'mood': data['mood'] ?? 'Neutral',
+            'source': 'Diary AI',
+          });
+        }
+      }
+
+      for (var doc in chatSnap.docs) {
+        final data = doc.data();
+        if (data['createdAt'] != null) {
+          records.add({
+            'date': (data['createdAt'] as Timestamp).toDate(),
+            'mood': data['tag'] ?? 'Neutral',
+            'source': 'AI Chat',
+          });
+        }
+      }
+
+      // Sort by date
+      records.sort((a, b) => (a['date'] as DateTime).compareTo(b['date'] as DateTime));
+
+      // Calculate chart spots based on selected date range
+      List<FlSpot> newSpots = [];
+      final daysDiff = _selectedDateRange.end.difference(_selectedDateRange.start).inDays + 1;
+      
+      for (int i = 0; i < daysDiff; i++) {
+        final targetDate = _selectedDateRange.start.add(Duration(days: i));
+        
+        // Find records for this exact day
+        final dayRecords = records.where((r) {
+          final d = r['date'] as DateTime;
+          return d.year == targetDate.year && d.month == targetDate.month && d.day == targetDate.day;
+        }).toList();
+
+        double dailyVal = 0;
+        if (dayRecords.isNotEmpty) {
+          double sum = 0;
+          for (var r in dayRecords) {
+            final m = (r['mood'] as String).toLowerCase();
+            if (m.contains('happy') || m.contains('joy') || m.contains('great')) sum += 5;
+            else if (m.contains('calm') || m.contains('grateful') || m.contains('peace')) sum += 4;
+            else if (m.contains('neutral') || m.contains('focus')) sum += 3;
+            else if (m.contains('anxious') || m.contains('sleepy')) sum += 2;
+            else if (m.contains('angry') || m.contains('sad') || m.contains('low')) sum += 1;
+            else sum += 3;
+          }
+          dailyVal = sum / dayRecords.length;
+        }
+        
+        newSpots.add(FlSpot(i.toDouble(), dailyVal == 0 ? 3.0 : dailyVal)); // Default 3 if no record
+      }
+
+      if (mounted) {
+        setState(() {
+          _monthlyRecords = records;
+          _chartSpots = newSpots;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint("Error loading mood data: $e");
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
   }
 
   @override
@@ -109,7 +214,7 @@ class _MoodTrendScreenState extends State<MoodTrendScreen> {
                   const SizedBox(height: 32),
                   _buildEmotionalVarietyAnalysis(),
                   const SizedBox(height: 32),
-                  _buildMoodCalendarOverview(),
+                  const MoodCalendarWidget(),
                   const SizedBox(height: 100),
                 ],
               ),
@@ -629,96 +734,4 @@ class _MoodTrendScreenState extends State<MoodTrendScreen> {
       ),
     );
   }
-
-  Widget _buildMoodCalendarOverview() {
-    final daysOfWeek = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
-    return Container(
-      padding: const EdgeInsets.all(28),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(32)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('Monthly Landscape', style: GoogleFonts.playfairDisplay(fontSize: 22, fontWeight: FontWeight.bold)),
-              Row(
-                children: [
-                  Icon(Icons.chevron_left_rounded, size: 20, color: Colors.grey[300]),
-                  const SizedBox(width: 12),
-                  Text(DateFormat('MMMM').format(DateTime.now()), style: GoogleFonts.outfit(fontSize: 12, color: primaryGreen, fontWeight: FontWeight.bold)),
-                  const SizedBox(width: 12),
-                  Icon(Icons.chevron_right_rounded, size: 20, color: primaryGreen),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 32),
-          // Day Labels Row
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: daysOfWeek.map((day) {
-              return SizedBox(width: 38, child: Center(child: Text(day, style: GoogleFonts.outfit(fontSize: 10, color: Colors.grey[400], fontWeight: FontWeight.bold))));
-            }).toList(),
-          ),
-          const SizedBox(height: 12),
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 7, mainAxisSpacing: 8, crossAxisSpacing: 8),
-            itemCount: 30, // Example for September
-            itemBuilder: (context, index) {
-              final val = (index % 5) / 5.0; // Mock intensity
-              final isToday = (index + 1) == 12; // Oct 12 as today
-              
-              return GestureDetector(
-                onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Insights for ${DateFormat('MMM').format(DateTime.now())} ${index+1}: Balanced'), backgroundColor: primaryGreen, duration: const Duration(milliseconds: 500)));
-                },
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: index < 15 ? primaryGreen.withOpacity(val.clamp(0.1, 1.0)) : const Color(0xFFFBFBF6), 
-                    borderRadius: BorderRadius.circular(8),
-                    border: isToday ? Border.all(color: primaryGreen, width: 2) : null,
-                  ),
-                  child: Center(
-                    child: Text(
-                      '${index + 1}',
-                      style: GoogleFonts.outfit(fontSize: 9, color: index < 15 ? Colors.white : Colors.grey[300], fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
-          const SizedBox(height: 32),
-          // Legend and Summary Label
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  _buildPixelLegend('Low', const Color(0xFFFBFBF6)),
-                  const SizedBox(width: 8),
-                  _buildPixelLegend('Peak', primaryGreen),
-                ],
-              ),
-              Text('Trend: Upward', style: GoogleFonts.outfit(fontSize: 10, color: primaryGreen, fontWeight: FontWeight.bold)),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPixelLegend(String label, Color color) {
-    return Row(
-      children: [
-        Container(width: 8, height: 8, decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(2), border: color == const Color(0xFFFBFBF6) ? Border.all(color: Colors.grey[100]!) : null)),
-        const SizedBox(width: 8),
-        Text(label, style: GoogleFonts.outfit(fontSize: 10, color: Colors.grey)),
-      ],
-    );
-  }
-
 }

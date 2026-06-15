@@ -236,7 +236,7 @@ class _SearchFriendScreenState extends State<SearchFriendScreen> {
 
                 final users = snapshot.data!.docs.where((doc) {
                   final data = doc.data() as Map<String, dynamic>;
-                  final fullName = (data['fullName'] ?? '').toString().toLowerCase();
+                  final fullName = ((data['nickname'] != null && data['nickname'].toString().trim().isNotEmpty) ? data['nickname'] : data['fullName'] ?? '').toString().toLowerCase();
                   final email = (data['email'] ?? '').toString().toLowerCase();
                   final uid = doc.id;
                   final role = data['role'] ?? '';
@@ -264,7 +264,7 @@ class _SearchFriendScreenState extends State<SearchFriendScreen> {
                     final userDoc = users[index];
                     final userData = userDoc.data() as Map<String, dynamic>;
                     final uid = userDoc.id;
-                    final name = userData['fullName'] ?? 'User';
+                    final name = (userData['nickname'] != null && userData['nickname'].toString().trim().isNotEmpty) ? userData['nickname'] : userData['fullName'] ?? 'User';
                     final email = userData['email'] ?? '';
                     final profileImageUrl = userData['profileImageUrl'];
                     final isFollowing = followingList.contains(uid);
@@ -401,7 +401,7 @@ class _SearchFriendScreenState extends State<SearchFriendScreen> {
                         final data = doc.data() as Map<String, dynamic>;
                         return _buildUserTile(
                             doc.id,
-                            data['fullName'] ?? 'User',
+                            (data['nickname'] != null && data['nickname'].toString().trim().isNotEmpty) ? data['nickname'] : data['fullName'] ?? 'User',
                             data['email'] ?? '',
                             data['profileImageUrl'],
                             false
@@ -807,6 +807,114 @@ Future<void> handleRequestActionGlobal(BuildContext context, User? currentUser, 
   }
 
   if (isRequested) {
+    bool confirm = await showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+        elevation: 0,
+        backgroundColor: Colors.transparent,
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF2F1EC),
+            borderRadius: BorderRadius.circular(28),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.1),
+                blurRadius: 20,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: const BoxDecoration(
+                  color: Color(0xFFFFF3E0),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.person_add_disabled_rounded,
+                  color: Color(0xFFE65100),
+                  size: 32,
+                ),
+              ),
+              const SizedBox(height: 24),
+              Text(
+                'Cancel Request?',
+                style: GoogleFonts.playfairDisplay(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: const Color(0xFF333333),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Are you sure you want to cancel the friend request sent to $targetName?',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.outfit(
+                  fontSize: 14,
+                  color: const Color(0xFF666666),
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 32),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextButton(
+                      onPressed: () => Navigator.pop(context, false),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                      child: Text(
+                        'Keep Request',
+                        style: GoogleFonts.outfit(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF888888),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.pop(context, true),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFE57373),
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                      child: Text(
+                        'Cancel',
+                        style: GoogleFonts.outfit(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    ) ?? false;
+
+    if (!confirm) return;
+
     // Cancel request
     try {
       final query = await FirebaseFirestore.instance
@@ -819,6 +927,15 @@ Future<void> handleRequestActionGlobal(BuildContext context, User? currentUser, 
       for (var doc in query.docs) {
         await doc.reference.delete();
       }
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Friend request cancelled', style: GoogleFonts.outfit()),
+            backgroundColor: const Color(0xFFE57373),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
     } catch (e) {
       debugPrint("Error canceling request: $e");
     }
@@ -828,17 +945,30 @@ Future<void> handleRequestActionGlobal(BuildContext context, User? currentUser, 
       final senderDoc = await FirebaseFirestore.instance.collection('users').doc(currentUserId).get();
       final senderData = senderDoc.data() as Map<String, dynamic>?;
 
+      final senderNickname = senderData?['nickname']?.toString().trim() ?? '';
+      final senderFullName = senderData?['fullName']?.toString().trim() ?? 'Someone';
+      final finalSenderName = senderNickname.isNotEmpty ? senderNickname : senderFullName;
+
       await FirebaseFirestore.instance.collection('notifications').add({
         'from': currentUserId,
         'to': targetUid,
         'type': 'friend_request',
         'status': 'pending',
         'isRead': false,
-        'senderName': senderData?['fullName'] ?? 'Someone',
+        'senderName': finalSenderName,
         'senderPhoto': senderData?['profileImageUrl'],
         'timestamp': FieldValue.serverTimestamp(),
-        'message': '${senderData?['fullName'] ?? "Someone"} sent you a connection request.',
+        'message': '$finalSenderName sent you a connection request.',
       });
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Friend request sent to $targetName!', style: GoogleFonts.outfit()),
+            backgroundColor: const Color(0xFF7C9C84),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
     } catch (e) {
       debugPrint("Error sending request: $e");
     }

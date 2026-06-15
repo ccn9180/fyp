@@ -9,6 +9,7 @@ import 'package:fyp/app_localizations.dart';
 import 'entry_summary.dart';
 import '../services/gamification_service.dart';
 import '../widgets/level_up_dialog.dart';
+import '../widgets/quest_completed_dialog.dart';
 
 
 class AddDiaryScreen extends StatefulWidget {
@@ -34,6 +35,7 @@ class _AddDiaryScreenState extends State<AddDiaryScreen> {
   final Color textColorSub = const Color(0xFF888888);
 
   String? _selectedEmotion;
+  final TextEditingController _titleController = TextEditingController();
   final TextEditingController _contentController = TextEditingController();
 
   File? _selectedImage;
@@ -58,6 +60,7 @@ class _AddDiaryScreenState extends State<AddDiaryScreen> {
     }
 
     if (widget.initialData != null) {
+      _titleController.text = widget.initialData!['title'] ?? '';
       _contentController.text = widget.initialData!['content'] ?? '';
       _selectedEmotion = widget.initialData!['userMood'] ?? widget.initialData!['emotion'];
     }
@@ -149,6 +152,43 @@ class _AddDiaryScreenState extends State<AddDiaryScreen> {
                   style: GoogleFonts.outfit(
                     fontSize: 14,
                     color: textColorSub,
+                  ),
+                ),
+                const SizedBox(height: 24),
+
+                // Title Area
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.02),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: TextField(
+                    controller: _titleController,
+                    style: GoogleFonts.outfit(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: textColorMain,
+                    ),
+                    decoration: InputDecoration(
+                      hintText: 'Entry Title',
+                      hintStyle: GoogleFonts.outfit(
+                        color: const Color(0xFFC0C0C0),
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(20),
+                        borderSide: BorderSide.none,
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 24),
@@ -286,9 +326,12 @@ class _AddDiaryScreenState extends State<AddDiaryScreen> {
                         context,
                         MaterialPageRoute(
                           builder: (context) => EntrySummaryScreen(
+                            entryTitle: _titleController.text.trim().isEmpty 
+                                ? "Untitled Entry" 
+                                : _titleController.text.trim(),
                             content: _contentController.text.trim(),
-                            onConfirm: (moodTitle, category, summary, isCrisis, sharingTeams, secondaryCategory) async {
-                              await _saveToFirebase(moodTitle, category, summary, isCrisis, sharingTeams, secondaryCategory);
+                            onConfirm: (moodTitle, category, summary, isCrisis, sharingTeams, secondaryCategory, emotionPercentages, keywords) async {
+                              await _saveToFirebase(moodTitle, category, summary, isCrisis, sharingTeams, secondaryCategory, emotionPercentages, keywords);
                             },
                           ),
                         ),
@@ -626,7 +669,7 @@ class _AddDiaryScreenState extends State<AddDiaryScreen> {
     }
   }
 
-  Future<void> _saveToFirebase(String aiMoodTitle, String aiCategory, String summary, bool isCrisis, Map<String, bool> sharingTeams, [String? secondaryCategory]) async {
+  Future<void> _saveToFirebase(String aiMoodTitle, String aiCategory, String summary, bool isCrisis, Map<String, bool> sharingTeams, [String? secondaryCategory, List<dynamic>? emotionPercentages, List<String>? keywords]) async {
     setState(() {
       _isUploading = true;
     });
@@ -635,10 +678,13 @@ class _AddDiaryScreenState extends State<AddDiaryScreen> {
       final User? user = FirebaseAuth.instance.currentUser;
       if (user != null) {
         String contentText = _contentController.text.trim();
-
-        // Extract a graceful short title from the content
-        List<String> words = contentText.split(' ');
-        String title = words.take(5).join(' ') + (words.length > 5 ? '...' : '');
+        String userTitle = _titleController.text.trim();
+        
+        if (userTitle.isEmpty) {
+          List<String> words = contentText.split(' ');
+          userTitle = words.take(5).join(' ') + (words.length > 5 ? '...' : '');
+          if (userTitle.isEmpty) userTitle = "Untitled Entry";
+        }
 
         String? imageUrl;
         if (_selectedImage != null) {
@@ -653,20 +699,22 @@ class _AddDiaryScreenState extends State<AddDiaryScreen> {
         }
 
         final diaryData = {
-          'title': title,
+          'title': userTitle,
           'content': contentText,
           'mood': aiCategory,
           'secondaryMood': secondaryCategory,
           'aiMoodTitle': aiMoodTitle,
           'summary': summary,
           'isCrisis': isCrisis,
+          'emotionPercentages': emotionPercentages,
+          'keywords': keywords,
           'sharingAccess': sharingTeams,
           'userMood': null,
           'imageUrl': imageUrl ?? widget.initialData?['imageUrl'],
           'timestamp': (widget.entryId != null && !widget.isDraft)
-              ? (widget.initialData?['timestamp'] ?? FieldValue.serverTimestamp())
-              : FieldValue.serverTimestamp(),
-          'lastEdited': FieldValue.serverTimestamp(),
+              ? (widget.initialData?['timestamp'] ?? Timestamp.now())
+              : Timestamp.now(),
+          'lastEdited': Timestamp.now(),
         };
 
         if (widget.entryId != null && !widget.isDraft) {
@@ -727,27 +775,27 @@ class _AddDiaryScreenState extends State<AddDiaryScreen> {
             const SnackBar(content: Text('Diary entry saved successfully.'), backgroundColor: Color(0xFF7C9C84)),
           );
 
-          if (hasSuccessfulCompletion) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Row(
-                  children: [
-                    const Icon(Icons.stars_rounded, color: Colors.amber),
-                    const SizedBox(width: 8),
-                    Text('Quest Completed: +$totalXp XP & +$totalCoins Coins!'),
-                  ],
-                ),
-                backgroundColor: const Color(0xFF7C9C84),
-                duration: const Duration(seconds: 4),
-              ),
-            );
-          }
-
           if (showLevelUp) {
             showDialog(
               context: context,
               barrierDismissible: false,
               builder: (context) => const LevelUpDialog(),
+            ).then((_) {
+              if (mounted) {
+                Navigator.pop(context); // Pop EntrySummaryScreen
+                Navigator.pop(context); // Pop AddDiaryScreen
+              }
+            });
+          } else if (hasSuccessfulCompletion) {
+            showDialog(
+              context: context,
+              barrierDismissible: false,
+              builder: (context) => QuestCompletedDialog(
+                xpEarned: totalXp,
+                coinsEarned: totalCoins,
+                title: 'Reflection Logged',
+                subtitle: 'Great job reflecting on your day!',
+              ),
             ).then((_) {
               if (mounted) {
                 Navigator.pop(context); // Pop EntrySummaryScreen

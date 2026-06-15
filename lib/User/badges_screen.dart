@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:intl/intl.dart';
 
 class BadgesScreen extends StatefulWidget {
   const BadgesScreen({super.key});
@@ -115,8 +116,10 @@ class _BadgesScreenState extends State<BadgesScreen> {
                   final badgeId = doc.id;
                   final badge = doc.data() as Map<String, dynamic>;
                   final bool isUnlocked = earnedBadges.contains(badgeId);
+                  final unlockTimes = userData['badge_unlock_times'] as Map<String, dynamic>? ?? {};
+                  final unlockTimestamp = unlockTimes[badgeId] as Timestamp?;
 
-                  return _buildBadgeCard(badge, isUnlocked);
+                  return _buildBadgeCard(badge, isUnlocked, unlockTimestamp);
                 },
               );
             },
@@ -126,7 +129,7 @@ class _BadgesScreenState extends State<BadgesScreen> {
     );
   }
 
-  Widget _buildBadgeCard(Map<String, dynamic> badge, bool isUnlocked) {
+  Widget _buildBadgeCard(Map<String, dynamic> badge, bool isUnlocked, Timestamp? unlockTimestamp) {
     String tier = badge['tier'] ?? 'Novice';
     
     Color tierColor;
@@ -153,7 +156,7 @@ class _BadgesScreenState extends State<BadgesScreen> {
     final iconData = _getIconData(badge['icon']);
 
     return GestureDetector(
-      onTap: () => _showBadgeDetails(badge, isUnlocked, tierColor, badgeGradient),
+      onTap: () => _showBadgeDetails(badge, isUnlocked, tierColor, badgeGradient, unlockTimestamp),
       child: Column(
         children: [
           Stack(
@@ -245,19 +248,21 @@ class _BadgesScreenState extends State<BadgesScreen> {
     );
   }
 
-  void _showBadgeDetails(Map<String, dynamic> badge, bool isUnlocked, Color tierColor, Gradient gradient) {
+  void _showBadgeDetails(Map<String, dynamic> badge, bool isUnlocked, Color tierColor, Gradient gradient, Timestamp? unlockTimestamp) {
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => Container(
-        padding: const EdgeInsets.all(32),
+        padding: EdgeInsets.fromLTRB(32, 32, 32, MediaQuery.of(context).padding.bottom + 32),
         decoration: BoxDecoration(
           color: backgroundColor,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(40)),
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
             Container(
               width: 40,
               height: 4,
@@ -341,15 +346,18 @@ class _BadgesScreenState extends State<BadgesScreen> {
                   ] else ...[
                     const SizedBox(height: 12),
                     Text(
-                      'Unlocked & active on your profile!',
+                      unlockTimestamp != null 
+                        ? 'Earned on ${DateFormat('MMM d, yyyy h:mm a').format(unlockTimestamp.toDate())}' 
+                        : 'Unlocked & active on your profile!',
                       style: GoogleFonts.outfit(fontSize: 13, color: Colors.grey[500]),
                     ),
                   ],
                 ],
               ),
             ),
-            const SizedBox(height: 16),
-          ],
+              const SizedBox(height: 16),
+            ],
+          ),
         ),
       ),
     );

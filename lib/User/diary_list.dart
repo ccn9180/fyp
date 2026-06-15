@@ -364,7 +364,7 @@ class _DiaryListScreenState extends State<DiaryListScreen> {
     final String title = data['title'] ?? 'Untitled Entry';
     final String content = data['content'] ?? '';
     final String mood = data['mood'] ?? 'Calm';
-    final String displayMood = data['aiMoodTitle'] ?? mood;
+    final String displayMood = mood;
     final String? imageUrl = data['imageUrl'];
 
     // Formatting date safely. Defaults to a hardcoded format string for UI demo purposes if missing.
@@ -421,6 +421,60 @@ class _DiaryListScreenState extends State<DiaryListScreen> {
         break;
     }
 
+    final List<dynamic>? emotionPercentages = data['emotion_percentages'];
+    String? secondaryMood;
+    if (emotionPercentages != null && emotionPercentages.length >= 2) {
+      final first = emotionPercentages[0];
+      final second = emotionPercentages[1];
+      final primaryScore = (first['score'] as num?)?.toInt() ?? 0;
+      final secondaryScore = (second['score'] as num?)?.toInt() ?? 0;
+      
+      if (primaryScore >= 2 && secondaryScore >= 2 && (primaryScore - secondaryScore) <= 1) {
+         secondaryMood = second['emotion'];
+      }
+    }
+
+    String? secondaryEmoji;
+    String? secondaryDisplay;
+    Color? secondaryColor;
+    Color? secondaryBgColor;
+
+    if (secondaryMood != null) {
+      switch (secondaryMood) {
+        case 'joy':
+          secondaryDisplay = 'Joyful';
+          secondaryEmoji = '😊';
+          secondaryColor = const Color(0xFF4CAf50);
+          secondaryBgColor = const Color(0xFFE8F5E9);
+          break;
+        case 'anger':
+          secondaryDisplay = 'Angry';
+          secondaryEmoji = '😠';
+          secondaryColor = const Color(0xFFF44336);
+          secondaryBgColor = const Color(0xFFFFEBEE);
+          break;
+        case 'anxiety':
+          secondaryDisplay = 'Anxious';
+          secondaryEmoji = '😰';
+          secondaryColor = const Color(0xFFFF9800);
+          secondaryBgColor = const Color(0xFFFFF3E0);
+          break;
+        case 'sadness':
+          secondaryDisplay = 'Sad';
+          secondaryEmoji = '😢';
+          secondaryColor = const Color(0xFF9C27B0);
+          secondaryBgColor = const Color(0xFFF3E5F5);
+          break;
+        case 'calm':
+        default:
+          secondaryDisplay = 'Calm';
+          secondaryEmoji = '😌';
+          secondaryColor = const Color(0xFF2196F3);
+          secondaryBgColor = const Color(0xFFE3F2FD);
+          break;
+      }
+    }
+
     return GestureDetector(
       onTap: () {
         Navigator.push(
@@ -464,12 +518,12 @@ class _DiaryListScreenState extends State<DiaryListScreen> {
                 GestureDetector(
                   onTap: () => _showActionSheet(context, docId, data),
                   child: Container(
-                    padding: const EdgeInsets.all(10),
+                    padding: const EdgeInsets.all(6),
                     decoration: BoxDecoration(
                       color: Colors.black.withOpacity(0.03),
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(Icons.more_vert_rounded, color: Color(0xFF888888), size: 20),
+                    child: const Icon(Icons.more_vert_rounded, color: Color(0xFF888888), size: 18),
                   ),
                 ),
               ],
@@ -499,6 +553,31 @@ class _DiaryListScreenState extends State<DiaryListScreen> {
                     ],
                   ),
                 ),
+                if (secondaryDisplay != null) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: secondaryBgColor,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          secondaryDisplay,
+                          style: GoogleFonts.outfit(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: secondaryColor,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(secondaryEmoji!, style: const TextStyle(fontSize: 12)),
+                      ],
+                    ),
+                  ),
+                ],
                 const SizedBox(width: 8),
                 if (data['sharingAccess'] != null && (data['sharingAccess'] as Map).values.any((v) => v == true))
                    Container(
@@ -567,31 +646,57 @@ class _DiaryListScreenState extends State<DiaryListScreen> {
   }
 
   Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.menu_book_rounded, size: 64, color: const Color(0xFFBBCBC2)),
-          const SizedBox(height: 16),
-          Text(
-            AppLocalizations.of(context)!.translate('no_entries'),
-            style: GoogleFonts.playfairDisplay(
-              fontSize: 22,
-              fontWeight: FontWeight.w600,
-              color: textColorMain,
+    final bool isSearching = _searchQuery.isNotEmpty;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          physics: const ClampingScrollPhysics(),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 24.0, horizontal: 24.0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: primaryGreen.withOpacity(0.08),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        isSearching ? Icons.search_off_rounded : Icons.menu_book_rounded,
+                        color: primaryGreen,
+                        size: 32,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      isSearching ? "No results found" : (AppLocalizations.of(context)?.translate('no_entries') ?? 'No reflections found'),
+                      style: GoogleFonts.playfairDisplay(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: textColorMain,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      isSearching ? 'Try adjusting your search terms or filters.' : (AppLocalizations.of(context)?.translate('no_entries_sub') ?? 'Start by writing down your thoughts.'),
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.outfit(
+                        fontSize: 13,
+                        color: textColorSub,
+                        height: 1.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
-          const SizedBox(height: 8),
-          Text(
-            AppLocalizations.of(context)!.translate('no_entries_sub'),
-            style: GoogleFonts.outfit(
-              fontSize: 14,
-              color: textColorSub,
-            ),
-          ),
-          const SizedBox(height: 80), // offset for spacing
-        ],
-      ),
+        );
+      },
     );
   }
 

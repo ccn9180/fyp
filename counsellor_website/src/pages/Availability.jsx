@@ -1,7 +1,73 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { collection, query, where, getDocs, addDoc, updateDoc, deleteDoc, doc, Timestamp, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../firebase';
-import { Calendar as CalIcon, Clock, Plus, Trash2, Edit2, ChevronLeft, ChevronRight, AlertCircle, CheckCircle2, X } from 'lucide-react';
+import { Calendar as CalIcon, Clock, Plus, Trash2, Edit2, ChevronLeft, ChevronRight, AlertCircle, CheckCircle2, X, Save } from 'lucide-react';
+
+const CustomSelect = ({ value, options, onChange }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  return (
+    <div ref={dropdownRef} style={{ position: 'relative', width: '100%' }}>
+      <div 
+        onClick={() => setIsOpen(!isOpen)}
+        style={{ 
+          width: '100%', padding: '10px 14px', borderRadius: '10px',
+          border: isOpen ? '1px solid var(--primary-color)' : '1px solid var(--border-color)',
+          backgroundColor: isOpen ? 'var(--bg-card)' : 'var(--bg-secondary)',
+          fontFamily: 'var(--font-main)', fontSize: '13.5px', color: 'var(--text-darker)',
+          cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          boxShadow: isOpen ? '0 0 0 3px rgba(124, 156, 132, 0.08)' : 'none',
+          transition: 'all 0.2s ease'
+        }}
+      >
+        <span>{value}</span>
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" 
+             stroke={isOpen ? "var(--primary-color)" : "#6b7280"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" 
+             style={{ transition: 'transform 0.2s', transform: isOpen ? 'rotate(180deg)' : 'rotate(0)' }}>
+          <polyline points="6 9 12 15 18 9"></polyline>
+        </svg>
+      </div>
+      
+      {isOpen && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0, zIndex: 100,
+          backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '12px',
+          boxShadow: '0 10px 25px rgba(0,0,0,0.1)', maxHeight: '220px', overflowY: 'auto',
+          padding: '6px 0', animation: 'fadeIn 0.2s ease-out'
+        }}>
+          {options.map(opt => (
+            <div 
+              key={opt}
+              onClick={() => { onChange(opt); setIsOpen(false); }}
+              style={{
+                padding: '10px 16px', fontSize: '13.5px', cursor: 'pointer',
+                backgroundColor: value === opt ? 'var(--primary-light)' : 'transparent',
+                color: value === opt ? 'var(--primary-color)' : 'var(--text-darker)',
+                fontWeight: value === opt ? 600 : 400,
+                transition: 'background-color 0.15s'
+              }}
+              onMouseEnter={(e) => { if (value !== opt) e.currentTarget.style.backgroundColor = '#f9fafb'; }}
+              onMouseLeave={(e) => { if (value !== opt) e.currentTarget.style.backgroundColor = 'transparent'; }}
+            >
+              {opt}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
 
 export default function Availability() {
   const [slots, setSlots] = useState([]);
@@ -18,6 +84,7 @@ export default function Availability() {
   
   const [adding, setAdding] = useState(false);
   const [editingSlot, setEditingSlot] = useState(null); // holds the slot being edited
+  const [slotToDelete, setSlotToDelete] = useState(null);
   const [validationError, setValidationError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
 
@@ -34,9 +101,7 @@ export default function Availability() {
     return `${day} ${month} ${year}`;
   };
 
-  const fetchAvailability = async () => {
-    const user = auth.currentUser;
-    if (!user) return;
+  const fetchAvailability = async (user) => {
     setLoading(true);
 
     try {
@@ -63,8 +128,22 @@ export default function Availability() {
   };
 
   useEffect(() => {
-    fetchAvailability();
+    const unsubscribe = auth.onAuthStateChanged(user => {
+      if (user) {
+        fetchAvailability(user);
+      } else {
+        if (typeof setLoading === 'function') setLoading(false);
+      }
+    });
+    return () => unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (successMessage) {
+      const timer = setTimeout(() => setSuccessMessage(''), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [successMessage]);
 
   // Calendar builder helper
   const getDaysInMonth = (date) => {
@@ -175,15 +254,15 @@ export default function Availability() {
 
     const now = new Date();
     
-    // 1. Validation: Future time check (3 hours in advance)
+    // 1. Validation: Future time check (1 hour in advance)
     if (slotDateTime <= now) {
       setValidationError("Cannot select a past time.");
       return;
     }
 
-    const minAdvanceTime = new Date(now.getTime() + 3 * 60 * 60 * 1000);
+    const minAdvanceTime = new Date(now.getTime() + 1 * 60 * 60 * 1000);
     if (slotDateTime < minAdvanceTime) {
-      setValidationError("Slots must be set at least 3 hours in advance.");
+      setValidationError("Slots must be set at least 1 hour in advance.");
       return;
     }
 
@@ -270,9 +349,13 @@ export default function Availability() {
     }
   };
 
-  const handleDeleteSlot = async (slotId) => {
-    if (!window.confirm("Are you sure you want to delete this availability slot? Patients will not be able to book this slot anymore.")) return;
+  const promptDeleteSlot = (slot) => {
+    setSlotToDelete(slot);
+  };
 
+  const confirmDeleteSlot = async () => {
+    if (!slotToDelete) return;
+    const slotId = slotToDelete.id;
     try {
       await deleteDoc(doc(db, 'counsellor_availability', slotId));
       setSlots(slots.filter(s => s.id !== slotId));
@@ -282,6 +365,8 @@ export default function Availability() {
       }
     } catch (err) {
       console.error("Error deleting slot:", err);
+    } finally {
+      setSlotToDelete(null);
     }
   };
 
@@ -313,18 +398,24 @@ export default function Availability() {
       </header>
 
       {successMessage && (
-        <div style={{ backgroundColor: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0', borderRadius: '12px', padding: '14px', marginBottom: '24px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <CheckCircle2 size={16} />
+        <div style={{ 
+          position: 'fixed', bottom: '24px', right: '24px', zIndex: 1000,
+          backgroundColor: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0', 
+          borderRadius: '12px', padding: '14px 20px', fontSize: '14px', fontWeight: 600,
+          display: 'flex', alignItems: 'center', gap: '10px',
+          boxShadow: '0 10px 25px rgba(0,0,0,0.1)'
+        }}>
+          <CheckCircle2 size={18} />
           <span>{successMessage}</span>
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '32px', alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '440px 1fr', gap: '32px', alignItems: 'start' }}>
         
         {/* Left Column - Custom Calendar Grid */}
         <div className="card" style={{ padding: '24px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-            <h2 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-darker)' }}>Select Date</h2>
+            <h2 style={{ fontSize: '24px', fontWeight: 700, color: 'var(--text-darker)' }}>Select Date</h2>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <button onClick={() => changeMonth(-1)} className="btn btn-secondary" style={{ padding: '6px', borderRadius: '50%' }}>
                 <ChevronLeft size={18} />
@@ -422,7 +513,7 @@ export default function Availability() {
                 <p style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-darker)' }}>No slots set for this date</p>
               </div>
             ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
                 {slotsForSelectedDate.map((slot) => {
                   const isCurrentEditing = editingSlot && editingSlot.id === slot.id;
                   return (
@@ -436,6 +527,8 @@ export default function Availability() {
                         display: 'flex', 
                         alignItems: 'center', 
                         justifyContent: 'space-between',
+                        gap: '24px',
+                        width: 'fit-content',
                         fontSize: '13px',
                         fontWeight: 600,
                         color: 'var(--text-darker)'
@@ -466,7 +559,7 @@ export default function Availability() {
                           <Edit2 size={13} />
                         </button>
                         <button 
-                          onClick={() => handleDeleteSlot(slot.id)}
+                          onClick={() => promptDeleteSlot(slot)}
                           style={{ 
                             background: 'none', 
                             border: 'none', 
@@ -512,45 +605,34 @@ export default function Availability() {
               <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
                 <div className="form-group" style={{ flex: 1 }}>
                   <label className="form-label">Hour</label>
-                  <select 
-                    className="form-control"
-                    value={hour}
-                    onChange={e => setHour(e.target.value)}
-                  >
-                    {hoursList.map(h => (
-                      <option key={h} value={h}>{h}</option>
-                    ))}
-                  </select>
+                  <CustomSelect 
+                    value={hour} 
+                    options={hoursList} 
+                    onChange={setHour} 
+                  />
                 </div>
 
                 <div className="form-group" style={{ flex: 1 }}>
                   <label className="form-label">Minute</label>
-                  <select 
-                    className="form-control"
-                    value={minute}
-                    onChange={e => setMinute(e.target.value)}
-                  >
-                    {minutesList.map(m => (
-                      <option key={m} value={m}>{m}</option>
-                    ))}
-                  </select>
+                  <CustomSelect 
+                    value={minute} 
+                    options={minutesList} 
+                    onChange={setMinute} 
+                  />
                 </div>
 
                 <div className="form-group" style={{ flex: 1 }}>
                   <label className="form-label">Period</label>
-                  <select 
-                    className="form-control"
-                    value={ampm}
-                    onChange={e => setAmpm(e.target.value)}
-                  >
-                    <option value="AM">AM</option>
-                    <option value="PM">PM</option>
-                  </select>
+                  <CustomSelect 
+                    value={ampm} 
+                    options={['AM', 'PM']} 
+                    onChange={setAmpm} 
+                  />
                 </div>
               </div>
 
               <div style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: '1.4' }}>
-                * System enforces a 3-hour lead time and 3-hour gap from other sessions on this date to prevent overlaps.
+                * System enforces a 1-hour lead time and 3-hour gap from other sessions on this date to prevent overlaps.
               </div>
 
               <div style={{ display: 'flex', gap: '10px' }}>
@@ -589,6 +671,45 @@ export default function Availability() {
         </div>
 
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {slotToDelete && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ backgroundColor: 'var(--bg-card)', borderRadius: '24px', width: '100%', maxWidth: '420px', padding: '32px', position: 'relative', boxShadow: '0 20px 40px rgba(0,0,0,0.15)', animation: 'fadeIn 0.2s ease-out' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', marginBottom: '32px' }}>
+              <div style={{ padding: '16px', backgroundColor: 'rgba(239, 68, 68, 0.1)', borderRadius: '50%', color: '#ef4444', marginBottom: '16px' }}>
+                <Clock size={32} />
+              </div>
+              <h2 style={{ fontSize: '24px', fontWeight: 700, color: 'var(--text-darker)', margin: 0, marginBottom: '12px' }}>Remove Availability?</h2>
+              <p style={{ fontSize: '15px', color: 'var(--text-muted)', lineHeight: '1.6', margin: 0, marginBottom: '20px' }}>
+                Are you sure you want to delete this availability slot? Patients will not be able to book this slot anymore.
+              </p>
+              
+              <div style={{ padding: '12px 24px', backgroundColor: '#fef2f2', borderRadius: '12px', display: 'inline-flex', flexDirection: 'column', alignItems: 'center', border: '1px solid #fee2e2' }}>
+                <div style={{ fontSize: '18px', fontWeight: 700, color: '#ef4444' }}>{slotToDelete.timeRange}</div>
+                <div style={{ fontSize: '14px', color: '#ef4444', opacity: 0.8 }}>{slotToDelete.date}</div>
+              </div>
+            </div>
+            
+            <div style={{ display: 'flex', gap: '16px' }}>
+              <button 
+                onClick={() => setSlotToDelete(null)} 
+                className="btn btn-secondary" 
+                style={{ flex: 1, padding: '14px', fontSize: '15px', fontWeight: 600, textAlign: 'center', display: 'flex', justifyContent: 'center' }}
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={confirmDeleteSlot}
+                className="btn" 
+                style={{ flex: 1, padding: '14px', fontSize: '15px', fontWeight: 600, backgroundColor: '#ef4444', color: 'white', border: 'none', textAlign: 'center', display: 'flex', justifyContent: 'center' }}
+              >
+                Remove Slot
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

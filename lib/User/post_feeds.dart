@@ -69,7 +69,12 @@ class _PostFeedsPageState extends State<PostFeedsPage> {
       final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
       if (userDoc.exists) {
         final userData = userDoc.data() as Map<String, dynamic>;
-        authorName = userData['fullName'] ?? user.displayName ?? 'User';
+        String? nickname = userData['nickname'] as String?;
+        if (nickname != null && nickname.trim().isNotEmpty) {
+          authorName = nickname;
+        } else {
+          authorName = userData['fullName'] ?? user.displayName ?? 'User';
+        }
         profileImageUrl = userData['profileImageUrl'];
       }
 

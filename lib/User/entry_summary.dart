@@ -8,6 +8,7 @@ import 'package:fyp/app_localizations.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:io' show Platform;
 import 'package:fyp/services/backend_config.dart';
+import 'package:fyp/services/friends_service.dart';
 
 
 // ── Backend URL ──────────────────────────────────────────────
@@ -24,13 +25,15 @@ String get _kBackendBase {
 }
 
 class EntrySummaryScreen extends StatefulWidget {
+  final String entryTitle;
   final String content;
   final String? imageUrl;
   final Future<void> Function(String mood, String category, String summary, bool isCrisis,
-      Map<String, bool> sharingTeams, String? secondaryCategory) onConfirm;
+      Map<String, bool> sharingTeams, String? secondaryCategory, List<dynamic>? emotionPercentages, List<String>? keywords) onConfirm;
 
   const EntrySummaryScreen({
     super.key,
+    required this.entryTitle,
     required this.content,
     this.imageUrl,
     required this.onConfirm,
@@ -51,6 +54,7 @@ class _EntrySummaryScreenState extends State<EntrySummaryScreen> {
   String? _secondaryEmotion;
   double _confidence = 0.0;
   bool _isCrisis = false;
+  List<dynamic> _emotionPercentages = [];
 
   List<Map<String, dynamic>> _tags = [];
 
@@ -62,6 +66,7 @@ class _EntrySummaryScreenState extends State<EntrySummaryScreen> {
   final Color primaryGreen = const Color(0xFF7C9C84);
   final Color backgroundColor = const Color(0xFFF2F1EC);
   final Color textColorMain = const Color(0xFF333333);
+  final Color textColorSub = const Color(0xFF888888);
 
   IconData _getRelationshipIcon(String? relationship) {
     final rel = relationship?.toUpperCase() ?? 'OTHER';
@@ -120,7 +125,8 @@ class _EntrySummaryScreenState extends State<EntrySummaryScreen> {
     try {
       final doc = await FirebaseFirestore.instance.collection('users').doc(_currentUser.uid).get();
       if (doc.exists && doc.data()?['trustedContacts'] != null) {
-        final list = List<Map<String, dynamic>>.from(doc.data()?['trustedContacts']);
+        final rawList = doc.data()?['trustedContacts'] as List<dynamic>? ?? [];
+        final list = rawList.map((e) => Map<String, dynamic>.from(e as Map)).toList();
         
         bool needsUpdateInDb = false;
         final updatedList = <Map<String, dynamic>>[];
@@ -156,6 +162,23 @@ class _EntrySummaryScreenState extends State<EntrySummaryScreen> {
             'trustedContacts': updatedList,
             'trustedContactUids': trustedContactUids,
           });
+        }
+        
+        // Fetch profile pictures for contacts that have UIDs
+        final List<String> validUids = updatedList
+            .map((c) => c['uid'] as String?)
+            .where((uid) => uid != null && uid.isNotEmpty)
+            .cast<String>()
+            .toList();
+            
+        if (validUids.isNotEmpty) {
+          final profiles = await FriendsService.getProfiles(validUids);
+          final profileMap = {for (var p in profiles) p.uid: p.profileImageUrl};
+          for (var contact in updatedList) {
+            if (contact['uid'] != null && profileMap[contact['uid']] != null) {
+              contact['profileImageUrl'] = profileMap[contact['uid']];
+            }
+          }
         }
 
         if (mounted) {
@@ -247,13 +270,16 @@ class _EntrySummaryScreenState extends State<EntrySummaryScreen> {
 
         _emotion           = data['emotion']    ?? 'neutral';
         _secondaryEmotion  = data['secondary_emotion'];
-        _detectedMoodTitle = data['title']      ?? 'Reflection Captured';
+        _detectedMoodTitle = widget.entryTitle;
         _summary           = data['summary']    ?? 'Your thoughts have been securely logged.';
         _confidence        = (data['confidence'] as num?)?.toDouble() ?? 0.0;
         _isCrisis          = data['is_crisis']  ?? false;
-        _tags              = List<Map<String, dynamic>>.from(
+        _emotionPercentages = data['emotion_percentages'] ?? [];
+        
+        _tags = List<Map<String, dynamic>>.from(
           _emotionTags[_emotion] ?? _emotionTags['neutral']!,
         );
+        
         _apiError = false;
         success = true;
       }
@@ -342,7 +368,7 @@ class _EntrySummaryScreenState extends State<EntrySummaryScreen> {
       if (pKey == 'joy_sadness') mixedTitle = 'Bittersweet Reflections';
       if (pKey == 'calm_sadness') mixedTitle = 'Pensive Melancholy';
       if (pKey == 'anxiety_calm') mixedTitle = 'Quiet Concern';
-      if (pKey == 'anxiety_sadness') mixedTitle = 'Heavy & Anxious';
+      if (pKey == 'anxiety_sadness') mixedTitle = 'Heavy and Anxious';
 
       _detectedMoodTitle = mixedTitle;
 
@@ -494,167 +520,181 @@ class _EntrySummaryScreenState extends State<EntrySummaryScreen> {
 
             // ── Summary Card ─────────────────────────────────────
             Container(
+              padding: const EdgeInsets.all(28),
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(32),
+                borderRadius: BorderRadius.circular(28),
+                border: Border.all(color: const Color(0xFFEBEBE6)),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.03),
-                    blurRadius: 20,
-                    offset: const Offset(0, 10),
+                    color: Colors.black.withOpacity(0.04),
+                    blurRadius: 24,
+                    offset: const Offset(0, 8),
                   ),
                 ],
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Image / placeholder
-                  ClipRRect(
-                    borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
-                    child: widget.imageUrl != null
-                        ? Image.network(widget.imageUrl!, height: 220, width: double.infinity, fit: BoxFit.cover)
-                        : Container(
-                            height: 220,
-                            width: double.infinity,
-                            color: Colors.grey[200],
-                            child: const Icon(Icons.park_outlined, size: 80, color: Colors.grey),
-                          ),
-                  ),
 
-                  Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
+                  
+                  if (_secondaryEmotion != null) ...[
+                    // Secondary Emotion Badge
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: _getEmotionBgColor(_secondaryEmotion!),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: _getEmotionColor(_secondaryEmotion!).withOpacity(0.15),
+                          width: 1,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            _getEmotionEmoji(_secondaryEmotion!),
+                            style: const TextStyle(fontSize: 14),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            "Secondary: ${_getEmotionDisplayName(_secondaryEmotion!)}",
+                            style: GoogleFonts.outfit(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: _getEmotionColor(_secondaryEmotion!),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 28),
+                  ],
+
+                  // Summary Quoted Block
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFAFAFA),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: const Color(0xFFF0F0F0)),
+                    ),
+                    child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Mood Title
-                        Text(
-                          _detectedMoodTitle,
-                          style: GoogleFonts.playfairDisplay(
-                            fontSize: 22,
-                            fontWeight: FontWeight.w600,
-                            color: textColorMain,
+
+                        Expanded(
+                          child: Text(
+                            _summary,
+                            style: GoogleFonts.outfit(
+                              fontSize: 15,
+                              color: const Color(0xFF555555),
+                              height: 1.6,
+                              fontWeight: FontWeight.w400,
+                            ),
                           ),
                         ),
-                        const SizedBox(height: 10),
-                        // Emotion Badge(s)
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
+                      ],
+                    ),
+                  ),
+
+                  if (_emotionPercentages.isNotEmpty) ...[
+                    const SizedBox(height: 28),
+                    Text(
+                      'EMOTION BREAKDOWN',
+                      style: GoogleFonts.outfit(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.5,
+                        color: const Color(0xFF999999),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    ..._emotionPercentages.map((ep) {
+                      final eName = ep['emotion'] ?? 'neutral';
+                      final conf = (ep['confidence'] as num?)?.toDouble() ?? 0.0;
+                      final cLabel = _getEmotionDisplayName(eName);
+                      final cColor = _getEmotionColor(eName);
+                      final emoji = _getEmotionEmoji(eName);
+                      
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12.0),
+                        child: Row(
                           children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: _getEmotionBgColor(_emotion),
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(
-                                  color: _getEmotionColor(_emotion).withOpacity(0.2),
-                                  width: 1,
-                                ),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
+                            SizedBox(width: 24, child: Text(emoji, style: const TextStyle(fontSize: 14))),
+                            SizedBox(
+                              width: 70, 
+                              child: Text(
+                                cLabel, 
+                                style: GoogleFonts.outfit(fontSize: 13, color: textColorMain, fontWeight: FontWeight.w500)
+                              )
+                            ),
+                            Expanded(
+                              child: Stack(
                                 children: [
-                                  Text(
-                                    _getEmotionEmoji(_emotion),
-                                    style: const TextStyle(fontSize: 14),
+                                  Container(
+                                    height: 6,
+                                    decoration: BoxDecoration(
+                                      color: cColor.withOpacity(0.1),
+                                      borderRadius: BorderRadius.circular(3),
+                                    ),
                                   ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    _getEmotionDisplayName(_emotion),
-                                    style: GoogleFonts.outfit(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
-                                      color: _getEmotionColor(_emotion),
+                                  FractionallySizedBox(
+                                    alignment: Alignment.centerLeft,
+                                    widthFactor: (conf / 100).clamp(0.0, 1.0),
+                                    child: Container(
+                                      height: 6,
+                                      decoration: BoxDecoration(
+                                        color: cColor,
+                                        borderRadius: BorderRadius.circular(3),
+                                      ),
                                     ),
                                   ),
                                 ],
                               ),
                             ),
-                            if (_secondaryEmotion != null)
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                decoration: BoxDecoration(
-                                  color: _getEmotionBgColor(_secondaryEmotion!),
-                                  borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(
-                                    color: _getEmotionColor(_secondaryEmotion!).withOpacity(0.2),
-                                    width: 1,
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text(
-                                      _getEmotionEmoji(_secondaryEmotion!),
-                                      style: const TextStyle(fontSize: 14),
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      _getEmotionDisplayName(_secondaryEmotion!),
-                                      style: GoogleFonts.outfit(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600,
-                                        color: _getEmotionColor(_secondaryEmotion!),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
+                            const SizedBox(width: 16),
+                            SizedBox(
+                              width: 40,
+                              child: Text(
+                                '${conf.toStringAsFixed(0)}%',
+                                style: GoogleFonts.outfit(fontSize: 12, color: textColorSub, fontWeight: FontWeight.w600),
+                                textAlign: TextAlign.right,
+                              )
+                            ),
                           ],
                         ),
+                      );
+                    }).toList(),
+                  ],
 
-                        const SizedBox(height: 12),
-
-                        // Confidence badge (only when model responded)
-                        if (!_apiError && _confidence > 0) ...[
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF1F3EE),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Text(
-                              'Confidence: ${(_confidence * 100).toStringAsFixed(0)}%',
-                              style: GoogleFonts.outfit(
-                                fontSize: 12,
-                                color: const Color(0xFF7C9C84),
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                        ],
-
-                        // Summary
-                        Text(
-                          _summary,
-                          style: GoogleFonts.outfit(
-                            fontSize: 15,
-                            color: const Color(0xFF888888),
-                            height: 1.5,
-                          ),
-                        ),
-
-                        const SizedBox(height: 20),
-                        const Divider(color: Color(0xFFEEEEEE)),
-                        const SizedBox(height: 16),
-
-                        // Tags Row (moved inside card for clean layout)
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: _tags
-                              .map((tag) => _buildTag(tag['label'], tag['icon'], tag['color']))
-                              .toList(),
-                        ),
-                      ],
+                  if (_tags.isNotEmpty) ...[
+                    const SizedBox(height: 24),
+                    const Divider(color: Color(0xFFF0F0F0)),
+                    const SizedBox(height: 20),
+                    Text(
+                      'THEMES',
+                      style: GoogleFonts.outfit(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.5,
+                        color: const Color(0xFF999999),
+                      ),
                     ),
-                  ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: _tags
+                          .map((tag) => _buildTag(tag['label'], tag['icon'], tag['color']))
+                          .toList(),
+                    ),
+                  ],
                 ],
               ),
             ),
-
-            const SizedBox(height: 32),
+            const SizedBox(height: 16),
 
             // Sharing Access Header
             Row(
@@ -693,6 +733,7 @@ class _EntrySummaryScreenState extends State<EntrySummaryScreen> {
                 final name = contact['name'] ?? contact['label'] ?? 'Unknown';
                 final shareKey = contact['uid'] ?? contact['email'] ?? contact['name'] ?? '';
                 final relation = contact['relationship'] ?? 'OTHER';
+                final profileImg = contact['profileImageUrl'];
                 final icon = _getRelationshipIcon(relation);
                 return _buildSharingContact(
                   name,
@@ -700,10 +741,11 @@ class _EntrySummaryScreenState extends State<EntrySummaryScreen> {
                   icon,
                   _sharingStates[shareKey] ?? false,
                   (val) => setState(() => _sharingStates[shareKey] = val),
+                  profileImageUrl: profileImg,
                 );
               }).toList(),
 
-            const SizedBox(height: 48),
+            const SizedBox(height: 24),
 
             // Confirm Button
             SizedBox(
@@ -740,6 +782,8 @@ class _EntrySummaryScreenState extends State<EntrySummaryScreen> {
                       _isCrisis,
                       _sharingStates,
                       secondaryCategory,
+                      _emotionPercentages,
+                      _tags.map((t) => t['label'].toString()).toList(),
                     );
                   } catch (e) {
                     debugPrint('Error saving diary: $e');
@@ -830,6 +874,7 @@ class _EntrySummaryScreenState extends State<EntrySummaryScreen> {
     IconData icon,
     bool isSwitched,
     Function(bool) onChanged,
+    {String? profileImageUrl}
   ) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -841,12 +886,27 @@ class _EntrySummaryScreenState extends State<EntrySummaryScreen> {
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(12),
-            decoration: const BoxDecoration(
-              color: Color(0xFFF2F1EC),
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: const Color(0xFFF2F1EC),
               shape: BoxShape.circle,
             ),
-            child: Icon(icon, color: Colors.grey[400], size: 24),
+            child: profileImageUrl != null && profileImageUrl.isNotEmpty
+                ? CircleAvatar(
+                    radius: 20,
+                    backgroundColor: const Color(0xFFE3E8E4),
+                    backgroundImage: profileImageUrl.startsWith('data:image')
+                        ? MemoryImage(base64Decode(profileImageUrl.split(',').last)) as ImageProvider
+                        : NetworkImage(profileImageUrl),
+                    onBackgroundImageError: (error, stackTrace) {},
+                  )
+                : Center(
+                    child: Text(
+                      name.isNotEmpty ? name[0].toUpperCase() : 'U',
+                      style: GoogleFonts.outfit(fontSize: 18, color: primaryGreen, fontWeight: FontWeight.bold),
+                    ),
+                  ),
           ),
           const SizedBox(width: 16),
           Expanded(

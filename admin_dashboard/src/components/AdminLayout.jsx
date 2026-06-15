@@ -18,8 +18,6 @@ const NAV = [
     label: 'Resource Control', icon: FileText, children: [
       { label: 'Article Content', path: '/content/articles', icon: FileText },
       { label: 'Meditation Guide', path: '/content/meditation', icon: Music },
-      { label: 'Community Pulse', path: '/monitoring/post-feeds', icon: MessageSquare },
-      { label: 'Community Rules', path: '/content/community-rules', icon: ShieldCheck },
       { label: 'Content Report', path: '/monitoring/content', icon: BarChart2 },
     ]
   },
@@ -46,14 +44,14 @@ const NAV = [
       { label: 'Reward System Settings', path: '/gamification/rewards', icon: Settings },
       { label: 'Gamification Metrics', path: '/monitoring/gamification', icon: BarChart2 },
     ]
-  },
+  }
 ];
 
 function SidebarGroup({ item, collapsed, setCollapsed }) {
   const [open, setOpen] = useState(true);
 
   if (item.type === 'divider') {
-    return <div className="h-px min-h-[1px] shrink-0 bg-[#E5E4E0] mx-4 my-3 opacity-60" />;
+    return <div className="h-px min-h-[1px] shrink-0 border-t border-cream-darker mx-4 my-3 opacity-60" />;
   }
 
   if (!item.children) {
@@ -90,14 +88,14 @@ function SidebarGroup({ item, collapsed, setCollapsed }) {
         {!collapsed && (open ? <ChevronDown size={17} className="shrink-0" /> : <ChevronRight size={17} className="shrink-0" />)}
       </button>
       {open && !collapsed && (
-        <div className="ml-4 border-l border-sage-100 flex flex-col gap-0.5">
+        <div className="ml-4 border-l border-primary/20 flex flex-col gap-0.5 mt-1">
           {item.children.map(c => (
             <NavLink 
               key={c.path} 
               to={c.path} 
-              className={({ isActive }) => `flex items-center gap-3 px-4 py-2 rounded-xl text-[13px] font-body cursor-pointer no-underline transition-all outline-none ${isActive ? 'bg-sage-100 text-primary font-semibold' : 'text-[#777] hover:bg-cream/50 font-normal'}`}
+              className={({ isActive }) => `ml-2 flex items-center gap-3 px-4 py-2 rounded-xl text-[13px] font-body cursor-pointer no-underline transition-all outline-none ${isActive ? 'bg-sage-100 text-primary font-semibold' : 'text-[#777] hover:bg-cream/50 font-normal'}`}
             >
-              <c.icon size={17} className="shrink-0 opacity-80" /> {c.label}
+              <c.icon size={17} className={`shrink-0 ${location.pathname === c.path ? 'text-primary' : 'text-[#999]'}`} /> {c.label}
             </NavLink>
           ))}
         </div>
@@ -139,7 +137,7 @@ export default function AdminLayout({ children, onLogout }) {
           setAdminUser({
             name: userData.name || userData.fullName || 'Admin User',
             role: userData.role === 'admin' ? 'System Administrator' : (userData.role || 'Admin'),
-            photo: userData.profileImageUrl || userData.photoUrl || null
+            photo: userData.counsellorImageUrl || userData.profileImageUrl || userData.photoUrl || u.photoURL || null
           });
         }
       } catch (e) { console.error(e); }
@@ -151,10 +149,33 @@ export default function AdminLayout({ children, onLogout }) {
     <div className="flex h-screen overflow-hidden bg-[#F6F5F2]">
       {/* Sidebar */}
       <aside className={`bg-white border-r border-cream-darker flex flex-col transition-[width] duration-200 ease-in-out overflow-hidden ${collapsed ? 'w-16 min-w-[64px]' : 'w-60 min-w-[240px]'}`}>
-        <div className={`py-7 flex mb-2.5 ${collapsed ? 'flex-col items-center justify-center gap-4 px-2 border-none' : 'items-center justify-between px-5 border-b border-cream-darker'}`}>
-          <div className={`flex items-center gap-2 ${collapsed ? 'justify-center' : 'justify-start'}`}>
-            <div className={`bg-white flex flex-col items-center justify-center shrink-0 border border-cream-darker rounded-full shadow-[0_10px_30px_rgba(124,156,132,0.08)] ${collapsed ? 'w-10 h-10' : 'w-12 h-12'}`}>
-              <img src={logo} alt="Logo" className={`${collapsed ? 'w-[27px] h-[27px]' : 'w-[33px] h-[33px]'}`} />
+        <div className={`py-7 flex mb-2.5 ${collapsed ? 'flex-col items-center justify-center px-2 border-none' : 'items-center justify-between px-5 border-b border-cream-darker'}`}>
+          <div 
+            onClick={() => { if (collapsed) setCollapsed(false); }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              justifyContent: collapsed ? 'center' : 'flex-start',
+              cursor: collapsed ? 'pointer' : 'default',
+              padding: '4px',
+              borderRadius: '8px'
+            }}
+          >
+            <div style={{
+              width: collapsed ? '40px' : '48px',
+              height: collapsed ? '40px' : '48px',
+              borderRadius: '50%',
+              backgroundColor: '#FFFFFF',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+              border: '1px solid var(--border-color)',
+              boxShadow: '0 10px 30px rgba(124,156,132,0.08)',
+              overflow: 'hidden'
+            }}>
+              <img src={logo} alt="Logo" style={{ width: '75%', height: '75%', objectFit: 'contain' }} />
             </div>
             {!collapsed && (
               <div>
@@ -164,28 +185,64 @@ export default function AdminLayout({ children, onLogout }) {
             )}
           </div>
 
-          <button
-            onClick={() => setCollapsed(!collapsed)}
-            className="bg-transparent border-none cursor-pointer p-1.5 text-charcoal flex items-center rounded-lg hover:bg-cream transition-colors"
-          >
-            <Menu size={20} />
-          </button>
+          {!collapsed && (
+            <button
+              onClick={() => setCollapsed(true)}
+              className="bg-transparent border-none cursor-pointer p-1.5 text-charcoal flex items-center rounded-lg hover:bg-primary/10 transition-colors"
+            >
+              <Menu size={20} />
+            </button>
+          )}
         </div>
-        <nav className="flex-1 overflow-y-auto px-2 py-3 flex flex-col gap-0.5 custom-scrollbar">
+        <nav className="flex-1 overflow-y-auto px-2 py-3 flex flex-col gap-0.5 hide-scrollbar">
           {NAV.map((item, index) => <SidebarGroup key={item.label || `divider-${index}`} item={item} collapsed={collapsed} setCollapsed={setCollapsed} />)}
         </nav>
-        <div className={`p-4 mt-auto flex-shrink-0 ${collapsed ? 'border-none flex justify-center' : 'border-t border-cream-darker'}`}>
-          <NavLink to="/account" className={`flex items-center no-underline text-inherit transition-all group ${collapsed ? 'justify-center p-0 rounded-xl w-10 h-10 min-w-[40px] min-h-[40px] aspect-square mx-auto hover:scale-105 border-2 border-primary/20 shadow-sm' : 'justify-start gap-3 p-3 rounded-2xl w-full bg-cream border border-cream-darker hover:bg-cream-darker'}`}>
-            <div className={`bg-primary flex items-center justify-center overflow-hidden shrink-0 ${collapsed ? 'rounded-xl w-full h-full' : 'rounded-full w-8 h-8 border border-cream-darker'}`}>
+        {/* Profile Footer Card in Sidebar */}
+        <div style={{ padding: '16px', borderTop: collapsed ? 'none' : `1px solid var(--border-color)`, display: collapsed ? 'flex' : 'block', justifyContent: collapsed ? 'center' : 'initial' }} className="border-t border-cream-darker">
+          <NavLink to="/account" style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: collapsed ? '0' : '12px',
+            textDecoration: 'none',
+            color: 'inherit',
+            background: collapsed ? 'transparent' : 'var(--bg-main)',
+            padding: collapsed ? '0' : '12px',
+            borderRadius: collapsed ? '16px' : '16px',
+            border: collapsed ? '2px solid var(--primary-light)' : `1px solid var(--border-color)`,
+            width: collapsed ? '40px' : '100%',
+            height: collapsed ? '40px' : 'auto',
+            justifyContent: collapsed ? 'center' : 'flex-start',
+            transition: 'all 0.2s',
+            boxShadow: collapsed ? '0 1px 3px rgba(0,0,0,0.05)' : 'none'
+          }} 
+          className="border border-cream-darker hover:border-cream-darker"
+          onMouseEnter={e => {
+            if (collapsed) { e.currentTarget.style.transform = 'scale(1.05)'; }
+            else { e.currentTarget.style.backgroundColor = 'var(--border-color)'; }
+          }} onMouseLeave={e => {
+            if (collapsed) { e.currentTarget.style.transform = 'none'; }
+            else { e.currentTarget.style.backgroundColor = 'var(--bg-main)'; }
+          }}>
+            <div style={{
+              width: '32px',
+              height: '32px',
+              borderRadius: '10px',
+              background: '#7C9C84',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              overflow: 'hidden', flexShrink: 0,
+              border: collapsed ? 'none' : `1px solid var(--border-color)`,
+            }}>
               {adminUser.photo ? (
-                <img src={adminUser.photo} alt="P" className="w-full h-full object-cover" />
+                <img src={adminUser.photo} alt="P" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               ) : (
-                <span className="text-white font-bold text-[13px]">{adminUser.name?.charAt(0)}</span>
+                <span style={{ color: 'white', fontWeight: 'bold', fontSize: '13px' }}>{adminUser.name?.charAt(0)}</span>
               )}
             </div>
             {!collapsed && (
-              <div className="flex-1 min-w-0 flex items-center">
-                <p className="m-0 text-[14px] font-bold text-charcoal truncate">{adminUser.name}</p>
+              <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                <span style={{ fontFamily: '"Playfair Display", serif', fontWeight: 700, fontSize: '14px', color: 'var(--text-darker)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {adminUser.name}
+                </span>
               </div>
             )}
           </NavLink>
@@ -213,6 +270,13 @@ export default function AdminLayout({ children, onLogout }) {
                 </div>
               )}
             </div>
+
+            <NavLink
+              to="/settings"
+              className={({ isActive }) => `p-2 border-none cursor-pointer rounded-xl transition-all flex items-center justify-center ${isActive ? 'bg-[#E8ECE9] text-primary' : 'bg-transparent text-muted hover:bg-cream-darker'}`}
+            >
+              <Settings size={18} />
+            </NavLink>
 
             <button
               onClick={onLogout}

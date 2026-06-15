@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'session_detail.dart';
+import '../widgets/notification_bell.dart';
 
 class CounsellorScheduleScreen extends StatefulWidget {
   const CounsellorScheduleScreen({super.key});
@@ -19,94 +20,21 @@ class _CounsellorScheduleScreenState extends State<CounsellorScheduleScreen> {
   final Color backgroundColor = const Color(0xFFF2F1EC);
   final Color textColorMain = const Color(0xFF333333);
   final Color textColorSub = const Color(0xFF888888);
+  final ScrollController _dateScrollController = ScrollController();
 
-  // Hardcoded mockup data for demo purposes
-  final List<Map<String, dynamic>> _mockSessions = [
-    {
-      'id': 'm0',
-      'patientName': 'Marcus Brown',
-      'userName': 'Marcus Brown',
-      'patientId': 'USR_000',
-      'counsellorId': 'CNS_001',
-      'startTime': Timestamp.fromMillisecondsSinceEpoch(DateTime.now().subtract(const Duration(hours: 3)).millisecondsSinceEpoch),
-      'date': DateFormat('dd MMM yyyy').format(DateTime.now()),
-      'timeRange': '07:30 AM',
-      'type': 'Follow-up Session',
-      'status': 'COMPLETED',
-      'icon': Icons.check_circle_outline_rounded,
-      'isPast': true,
-    },
-    {
-      'id': 'm1',
-      'patientName': 'Elena Rodriguez',
-      'userName': 'Elena Rodriguez',
-      'patientId': 'USR_001',
-      'counsellorId': 'CNS_001',
-      'startTime': Timestamp.fromDate(DateTime.now().copyWith(hour: 9, minute: 0)),
-      'date': DateFormat('dd MMM yyyy').format(DateTime.now()),
-      'timeRange': '09:00 AM',
-      'type': 'Video Call',
-      'status': 'CONFIRMED',
-      'icon': Icons.videocam_rounded,
-    },
-    {
-      'id': 'm2',
-      'patientName': 'Julian Thorne',
-      'userName': 'Julian Thorne',
-      'patientId': 'USR_002',
-      'counsellorId': 'CNS_001',
-      'startTime': Timestamp.fromDate(DateTime.now().copyWith(hour: 11, minute: 30)),
-      'date': DateFormat('dd MMM yyyy').format(DateTime.now()),
-      'timeRange': '11:30 AM',
-      'type': 'In-person Session',
-      'status': 'CONFIRMED',
-      'icon': Icons.person_rounded,
-      'isCurrent': true,
-      'location': 'Room 402, Studio A',
-    },
-    {
-      'id': 'm5',
-      'patientName': 'Oliver Twist',
-      'userName': 'Oliver Twist',
-      'patientId': 'USR_005',
-      'counsellorId': 'CNS_001',
-      'startTime': Timestamp.fromDate(DateTime(2026, 04, 05, 10, 0)),
-      'date': '05 Apr 2026',
-      'timeRange': '10:00 AM',
-      'type': 'Initial Consult',
-      'status': 'CONFIRMED',
-      'icon': Icons.person_rounded,
-    },
-    {
-      'id': 'm15',
-      'patientName': 'Zoe Quinn',
-      'userName': 'Zoe Quinn',
-      'patientId': 'USR_006',
-      'counsellorId': 'CNS_001',
-      'startTime': Timestamp.fromDate(DateTime(2026, 04, 15, 14, 0)),
-      'date': '15 Apr 2026',
-      'timeRange': '02:00 PM',
-      'type': 'Cognitive Therapy',
-      'status': 'CONFIRMED',
-      'icon': Icons.psychology_rounded,
-    },
-    {
-      'id': 'm20',
-      'patientName': 'Sarah Bell',
-      'userName': 'Sarah Bell',
-      'patientId': 'USR_007',
-      'counsellorId': 'CNS_001',
-      'startTime': Timestamp.fromDate(DateTime(2026, 04, 20, 15, 30)),
-      'date': '20 Apr 2026',
-      'timeRange': '03:30 PM',
-      'type': 'Consultation',
-      'status': 'PENDING',
-      'icon': Icons.access_time_rounded,
-    },
-  ];
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_dateScrollController.hasClients) {
+        double itemWidth = (MediaQuery.of(context).size.width - 32) / 5;
+        double offset = (30 * itemWidth) - (MediaQuery.of(context).size.width / 2) + (itemWidth / 2) + 16;
+        _dateScrollController.jumpTo(offset);
+      }
+    });
+  }
 
-  // Dates that have appointments (day only for simplicity in demo)
-  final List<int> _appointmentDates = [5, 15, 20, DateTime.now().day];
+  // Real data is fetched directly from Firestore in the builders.
 
   @override
   Widget build(BuildContext context) {
@@ -126,7 +54,7 @@ class _CounsellorScheduleScreenState extends State<CounsellorScheduleScreen> {
             // Date Header - Reduced Padding
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(24, 10, 24, 20),
+                padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -138,19 +66,18 @@ class _CounsellorScheduleScreenState extends State<CounsellorScheduleScreen> {
                           'Your Sessions',
                           style: GoogleFonts.playfairDisplay(
                             fontSize: 28,
-                            fontWeight: FontWeight.bold,
+                            fontWeight: FontWeight.w600,
                             color: textColorMain,
                           ),
                         ),
-                        Container(
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            shape: BoxShape.circle,
-                            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 10, offset: const Offset(0, 4))],
-                          ),
-                          child: IconButton(
-                            onPressed: () {},
-                            icon: const Icon(Icons.notifications_none_rounded, color: Color(0xFF333333), size: 22),
+                        // Wrap NotificationBell to counteract its internal 8px padding
+                        // so it aligns perfectly with the right edge like user/counsellor.dart
+                        Transform.translate(
+                          offset: const Offset(8, 0),
+                          child: const NotificationBell(
+                            iconColor: Color(0xFF7C9C84),
+                            iconSize: 24,
+                            hasBackground: true,
                           ),
                         ),
                       ],
@@ -160,29 +87,74 @@ class _CounsellorScheduleScreenState extends State<CounsellorScheduleScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        InkWell(
-                          onTap: () => setState(() => _isMonthlyView = true),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                            decoration: BoxDecoration(
-                                color: primaryGreen.withOpacity(0.12),
-                                borderRadius: BorderRadius.circular(12),
+                        Row(
+                          children: [
+                            InkWell(
+                              onTap: () => setState(() => _isMonthlyView = true),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                decoration: BoxDecoration(
+                                    color: primaryGreen.withOpacity(0.12),
+                                    borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Text(
+                                      'Monthly',
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        color: primaryGreen,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Icon(Icons.calendar_month_rounded, size: 14, color: primaryGreen),
+                                  ],
+                                ),
+                              ),
                             ),
-                            child: Row(
-                              children: [
-                                Text(
-                                  'Monthly',
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                    color: primaryGreen,
+                            Padding(
+                              padding: const EdgeInsets.only(left: 8),
+                              child: InkWell(
+                                onTap: () {
+                                  setState(() => _selectedDate = DateTime.now());
+                                  double itemWidth = (MediaQuery.of(context).size.width - 32) / 5;
+                                  double offset = (30 * itemWidth) - (MediaQuery.of(context).size.width / 2) + (itemWidth / 2) + 16;
+                                  _dateScrollController.animateTo(offset, duration: const Duration(milliseconds: 400), curve: Curves.easeInOut);
+                                },
+                                borderRadius: BorderRadius.circular(12),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                  decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(color: Colors.grey.withOpacity(0.2)),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withOpacity(0.02),
+                                          blurRadius: 4,
+                                          offset: const Offset(0, 2),
+                                        ),
+                                      ],
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.today_rounded, size: 14, color: textColorMain),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        'Today',
+                                        style: GoogleFonts.outfit(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                          color: textColorMain,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
-                                const SizedBox(width: 6),
-                                Icon(Icons.calendar_month_rounded, size: 14, color: primaryGreen),
-                              ],
+                              ),
                             ),
-                          ),
+                          ],
                         ),
                         Text(
                           DateFormat('MMMM yyyy').format(_selectedDate).toUpperCase(),
@@ -251,24 +223,52 @@ class _CounsellorScheduleScreenState extends State<CounsellorScheduleScreen> {
                             Text('Calendar', style: GoogleFonts.playfairDisplay(fontSize: 26, fontWeight: FontWeight.bold, color: textColorMain)),
                           ],
                         ),
-                        Container(
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            shape: BoxShape.circle,
-                            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10)]
-                          ),
-                          child: IconButton(
-                              onPressed: () => setState(() => _isMonthlyView = false),
-                              icon: const Icon(Icons.close_rounded, size: 20),
+                        GestureDetector(
+                          onTap: () => setState(() => _isMonthlyView = false),
+                          child: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              shape: BoxShape.circle,
+                              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4))],
+                            ),
+                            child: Icon(Icons.close_rounded, color: textColorMain, size: 24),
                           ),
                         ),
                     ],
                 ),
                 const SizedBox(height: 10),
                 Expanded(
-                  child: SingleChildScrollView(
-                    physics: const BouncingScrollPhysics(),
-                    child: Column(
+                  child: StreamBuilder<QuerySnapshot>(
+                    stream: FirebaseFirestore.instance
+                        .collection('counsellor_bookings')
+                        .where('counsellorId', isEqualTo: FirebaseAuth.instance.currentUser?.uid)
+                        .snapshots(),
+                    builder: (context, snapshot) {
+                      Set<int> futureApptDays = {};
+                      Set<int> pastApptDays = {};
+
+                      if (snapshot.hasData) {
+                        for (var doc in snapshot.data!.docs) {
+                          var data = doc.data() as Map<String, dynamic>;
+                          if ((data['status'] as String?)?.toLowerCase() == 'cancelled') continue;
+                          
+                          if (data['startTime'] != null) {
+                            DateTime st = (data['startTime'] as Timestamp).toDate();
+                            if (st.year == _selectedDate.year && st.month == _selectedDate.month) {
+                               if (st.add(const Duration(hours: 1)).isBefore(DateTime.now())) {
+                                  pastApptDays.add(st.day);
+                               } else {
+                                  futureApptDays.add(st.day);
+                               }
+                            }
+                          }
+                        }
+                      }
+
+                      return SingleChildScrollView(
+                        physics: const BouncingScrollPhysics(),
+                        child: Column(
                       children: [
                         Container(
                           padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
@@ -315,10 +315,35 @@ class _CounsellorScheduleScreenState extends State<CounsellorScheduleScreen> {
                                   if (index < offset) return const SizedBox.shrink();
                                   
                                   int day = index - offset + 1;
-                                  bool hasAppt = _appointmentDates.contains(day); 
+                                  bool hasFutureAppt = futureApptDays.contains(day); 
+                                  bool hasPastAppt = pastApptDays.contains(day);
                                   bool isSelected = day == _selectedDate.day;
                                   bool isToday = day == DateTime.now().day && _selectedDate.month == DateTime.now().month && _selectedDate.year == DateTime.now().year;
                                   
+                                  Color circleColor;
+                                  Color textColor;
+                                  Border? border;
+
+                                  if (isSelected) {
+                                      circleColor = primaryGreen;
+                                      textColor = Colors.white;
+                                  } else if (hasFutureAppt) {
+                                      circleColor = primaryGreen.withOpacity(0.15);
+                                      textColor = primaryGreen;
+                                      border = Border.all(color: primaryGreen.withOpacity(0.3), width: 1);
+                                  } else if (hasPastAppt) {
+                                      circleColor = Colors.grey.withOpacity(0.15);
+                                      textColor = Colors.grey[700]!;
+                                      border = Border.all(color: Colors.grey.withOpacity(0.3), width: 1);
+                                  } else if (isToday) {
+                                      circleColor = primaryGreen.withOpacity(0.05);
+                                      textColor = primaryGreen;
+                                      border = Border.all(color: primaryGreen, width: 1.5);
+                                  } else {
+                                      circleColor = Colors.transparent;
+                                      textColor = textColorMain;
+                                  }
+
                                   return GestureDetector(
                                     onTap: () => setState(() {
                                       _selectedDate = DateTime(_selectedDate.year, _selectedDate.month, day);
@@ -330,17 +355,17 @@ class _CounsellorScheduleScreenState extends State<CounsellorScheduleScreen> {
                                           width: 32,
                                           height: 32,
                                           decoration: BoxDecoration(
-                                            color: isSelected ? primaryGreen : (hasAppt ? primaryGreen.withOpacity(0.15) : (isToday ? primaryGreen.withOpacity(0.05) : Colors.transparent)),
+                                            color: circleColor,
                                             shape: BoxShape.circle,
-                                            border: (isToday && !isSelected) ? Border.all(color: primaryGreen, width: 1.5) : (hasAppt && !isSelected ? Border.all(color: primaryGreen.withOpacity(0.3), width: 1) : null),
+                                            border: border,
                                           ),
                                           child: Center(
                                             child: Text(
                                               day.toString(),
                                               style: GoogleFonts.outfit(
                                                 fontSize: 14, 
-                                                fontWeight: isSelected || hasAppt || isToday ? FontWeight.bold : FontWeight.normal,
-                                                color: isSelected ? Colors.white : (hasAppt || isToday ? primaryGreen : textColorMain),
+                                                fontWeight: isSelected || hasFutureAppt || hasPastAppt || isToday ? FontWeight.bold : FontWeight.normal,
+                                                color: textColor,
                                               ),
                                             ),
                                           ),
@@ -381,32 +406,39 @@ class _CounsellorScheduleScreenState extends State<CounsellorScheduleScreen> {
                         const SizedBox(height: 40),
                       ],
                     ),
-                  ),
+                  );
+                 },
                 ),
+              ),
             ],
         ),
     );
   }
 
   Widget _buildWeekDaySelector() {
-    // Calculate the start of the week for the currently selected date
-    final startOfWeek = _selectedDate.subtract(Duration(days: _selectedDate.weekday - 1));
+    double itemWidth = (MediaQuery.of(context).size.width - 32) / 5;
 
     return SizedBox(
       height: 90,
       child: ListView.builder(
+        controller: _dateScrollController,
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16),
-        itemCount: 7,
+        itemCount: 61, // 30 days past, today, 30 days future
         itemBuilder: (context, index) {
-          final date = startOfWeek.add(Duration(days: index));
+          final date = DateTime.now().add(Duration(days: index - 30));
           bool isSelected = date.day == _selectedDate.day && date.month == _selectedDate.month && date.year == _selectedDate.year;
 
           return GestureDetector(
-            onTap: () => setState(() => _selectedDate = date),
+            onTap: () {
+               setState(() => _selectedDate = date);
+               // Smooth scroll to center the tapped date
+               double offset = (index * itemWidth) - (MediaQuery.of(context).size.width / 2) + (itemWidth / 2) + 16;
+               _dateScrollController.animateTo(offset, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+            },
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 200),
-              width: 55,
+              width: itemWidth - 16, // minus the horizontal margins
               margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
                 color: isSelected ? primaryGreen : Colors.white,
@@ -457,25 +489,63 @@ class _CounsellorScheduleScreenState extends State<CounsellorScheduleScreen> {
           .where('date', isEqualTo: selectedDateStr)
           .snapshots(),
       builder: (context, snapshot) {
-        bool useMock = !snapshot.hasData || snapshot.data!.docs.isEmpty;
-        if (selectedDateStr != DateFormat('dd MMM yyyy').format(DateTime.now())) {
-            useMock = snapshot.hasData ? snapshot.data!.docs.isEmpty : true;
+        if (!snapshot.hasData) {
+          return SliverToBoxAdapter(
+            child: Container(
+              padding: const EdgeInsets.all(40),
+              child: const Center(child: CircularProgressIndicator(color: Color(0xFF7C9C84))),
+            ),
+          );
         }
 
-        final List sessions = useMock ? _mockSessions.where((s) => s['date'] == selectedDateStr).toList() : snapshot.data!.docs.map((d) => {...(d.data() as Map<String, dynamic>), 'id': d.id}).toList();
+        final List sessions = snapshot.data!.docs.map((d) => {...(d.data() as Map<String, dynamic>), 'id': d.id}).toList();
+
+        // Filter out cancelled appointments
+        sessions.removeWhere((s) => (s['status'] as String?)?.toLowerCase() == 'cancelled');
+
+        // Organize based on timeline (sort by startTime)
+        sessions.sort((a, b) {
+           DateTime timeA = a['startTime'] != null ? (a['startTime'] as Timestamp).toDate() : DateTime.fromMillisecondsSinceEpoch(0);
+           DateTime timeB = b['startTime'] != null ? (b['startTime'] as Timestamp).toDate() : DateTime.fromMillisecondsSinceEpoch(0);
+           return timeA.compareTo(timeB);
+        });
 
         if (sessions.isEmpty) {
             return SliverToBoxAdapter(
                 child: Container(
-                    padding: const EdgeInsets.all(40),
-                    child: Center(
-                        child: Column(
-                            children: [
-                                Icon(Icons.calendar_today_outlined, size: 48, color: Colors.grey[200]),
-                                const SizedBox(height: 16),
-                                Text('Quiet day ahead.', style: GoogleFonts.outfit(color: textColorSub, fontStyle: FontStyle.italic)),
-                            ],
-                        )
+                    margin: const EdgeInsets.only(top: 20, bottom: 40),
+                    padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 48),
+                    child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                            Container(
+                              padding: const EdgeInsets.all(24),
+                              decoration: BoxDecoration(
+                                color: primaryGreen.withOpacity(0.1),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(Icons.self_improvement_rounded, size: 56, color: primaryGreen),
+                            ),
+                            const SizedBox(height: 24),
+                            Text(
+                              'Quiet Day Ahead',
+                              style: GoogleFonts.playfairDisplay(
+                                fontSize: 26,
+                                fontWeight: FontWeight.bold,
+                                color: textColorMain,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              'You have no sessions scheduled for this date. Take some time to recharge and focus on yourself.',
+                              textAlign: TextAlign.center,
+                              style: GoogleFonts.outfit(
+                                fontSize: 15,
+                                color: textColorSub,
+                                height: 1.5,
+                              ),
+                            ),
+                        ],
                     )
                 )
             );
@@ -498,6 +568,31 @@ class _CounsellorScheduleScreenState extends State<CounsellorScheduleScreen> {
     String pName = session['patientName'] ?? session['userName'] ?? 'Member';
     bool isPast = session['isPast'] ?? false;
     bool isCurrent = session['isCurrent'] ?? false;
+    
+    // Dynamically calculate timeline state
+    if (session['startTime'] != null) {
+      DateTime startTime = (session['startTime'] as Timestamp).toDate();
+      DateTime now = DateTime.now();
+      
+      // If the session ended (assuming 1 hour duration)
+      if (now.isAfter(startTime.add(const Duration(hours: 1)))) {
+        isPast = true;
+        isCurrent = false;
+      } 
+      // If the session is currently happening
+      else if (now.isAfter(startTime) && now.isBefore(startTime.add(const Duration(hours: 1)))) {
+        isPast = false;
+        isCurrent = true;
+      }
+    }
+    
+    String displayStatus = session['status']?.toString().toUpperCase() ?? 'PENDING';
+    if (isPast && displayStatus != 'COMPLETED') {
+        displayStatus = 'MISSED';
+    }
+    if (displayStatus == 'MISSED') {
+        isPast = true;
+    }
 
     return IntrinsicHeight(
       child: Row(
@@ -595,15 +690,15 @@ class _CounsellorScheduleScreenState extends State<CounsellorScheduleScreen> {
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                   decoration: BoxDecoration(
-                                    color: isPast ? Colors.grey.withOpacity(0.1) : primaryGreen.withOpacity(0.1),
+                                    color: displayStatus == 'MISSED' ? Colors.red.withOpacity(0.1) : (isPast ? Colors.grey.withOpacity(0.1) : primaryGreen.withOpacity(0.1)),
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: Text(
-                                    (session['status'] ?? 'UPCOMING').toString().toUpperCase(),
+                                    displayStatus,
                                     style: GoogleFonts.outfit(
                                       fontSize: 8,
                                       fontWeight: FontWeight.w900,
-                                      color: isPast ? Colors.grey[400] : primaryGreen,
+                                      color: displayStatus == 'MISSED' ? Colors.red : (isPast ? Colors.grey[400] : primaryGreen),
                                       letterSpacing: 0.5,
                                     ),
                                   ),
@@ -667,20 +762,40 @@ class _CounsellorScheduleScreenState extends State<CounsellorScheduleScreen> {
           .where('date', isEqualTo: selectedDateStr)
           .snapshots(),
       builder: (context, snapshot) {
-        bool useMock = !snapshot.hasData || snapshot.data!.docs.isEmpty;
-        final List sessions = useMock ? _mockSessions.where((s) => s['date'] == selectedDateStr).toList() : snapshot.data!.docs.map((d) => {...(d.data() as Map<String, dynamic>), 'id': d.id}).toList();
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator(color: Color(0xFF7C9C84)));
+        }
+
+        final List sessions = snapshot.data!.docs.map((d) => {...(d.data() as Map<String, dynamic>), 'id': d.id}).toList();
+
+        // Filter out cancelled appointments
+        sessions.removeWhere((s) => (s['status'] as String?)?.toLowerCase() == 'cancelled');
+
+        // Organize based on timeline (sort by startTime)
+        sessions.sort((a, b) {
+           DateTime timeA = a['startTime'] != null ? (a['startTime'] as Timestamp).toDate() : DateTime.fromMillisecondsSinceEpoch(0);
+           DateTime timeB = b['startTime'] != null ? (b['startTime'] as Timestamp).toDate() : DateTime.fromMillisecondsSinceEpoch(0);
+           return timeA.compareTo(timeB);
+        });
 
         if (sessions.isEmpty) {
           return Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 30),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.5),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Center(
-              child: Text('No sessions on this day.', style: GoogleFonts.outfit(color: textColorSub, fontStyle: FontStyle.italic)),
-            ),
+            padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.spa_rounded, size: 32, color: primaryGreen.withOpacity(0.5)),
+                const SizedBox(height: 12),
+                Text(
+                  'No sessions on this day.', 
+                  style: GoogleFonts.outfit(
+                    color: textColorMain.withOpacity(0.6), 
+                    fontWeight: FontWeight.w600,
+                  )
+                ),
+              ],
+            )
           );
         }
 

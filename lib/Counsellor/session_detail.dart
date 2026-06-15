@@ -1,8 +1,8 @@
-
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class SessionDetailScreen extends StatelessWidget {
   final Map<String, dynamic> bookingData;
@@ -21,6 +21,9 @@ class SessionDetailScreen extends StatelessWidget {
     final DateTime startTime = (rawStartTime is Timestamp) 
         ? rawStartTime.toDate() 
         : (rawStartTime is DateTime ? rawStartTime : DateTime.now());
+    
+    final now = DateTime.now();
+    final bool isSessionPassed = now.isAfter(startTime.add(const Duration(minutes: 60)));
 
     return Scaffold(
       backgroundColor: backgroundColor,
@@ -175,61 +178,157 @@ class SessionDetailScreen extends StatelessWidget {
             ),
             const SizedBox(height: 32),
 
-            // Primary Start Session Button
-            SizedBox(
-              width: double.infinity,
-              height: 60,
-              child: ElevatedButton(
-                onPressed: () {
-                  // Navigator to Video Call logic here
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: primaryGreen,
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.play_arrow_rounded, size: 24),
-                    const SizedBox(width: 12),
-                    Text(
-                      'START VIDEO SESSION',
-                      style: GoogleFonts.outfit(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1.0,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
+            if (!isSessionPassed) ...[
+              // Primary Start Session Button
+              SizedBox(
+                width: double.infinity,
+                height: 60,
+                child: ElevatedButton(
+                  onPressed: () async {
+                    final allowJoinTime = startTime.subtract(const Duration(minutes: 10));
+                    if (DateTime.now().isBefore(allowJoinTime)) {
+                      _showEarlyMessage(context, startTime);
+                      return;
+                    }
 
-            // Reschedule Button (Counselor Side)
-            SizedBox(
-              width: double.infinity,
-              height: 60,
-              child: OutlinedButton(
-                onPressed: () => _handleReschedule(context),
-                style: OutlinedButton.styleFrom(
-                  side: BorderSide(color: primaryGreen.withOpacity(0.3)),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                ),
-                child: Text(
-                  'RESCHEDULE APPOINTMENT',
-                  style: GoogleFonts.outfit(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: primaryGreen,
-                    letterSpacing: 1.0,
+                    final Uri jitsiUrl = Uri.parse("https://meet.jit.si/eunoia_$bookingId");
+                    try {
+                      if (await canLaunchUrl(jitsiUrl)) {
+                        await launchUrl(jitsiUrl, mode: LaunchMode.externalApplication);
+                        
+                        await FirebaseFirestore.instance
+                            .collection('counsellor_bookings')
+                            .doc(bookingId)
+                            .update({'status': 'ongoing'});
+                      } else {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Could not open video call link.'), backgroundColor: Colors.redAccent),
+                          );
+                        }
+                      }
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.redAccent),
+                        );
+                      }
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: primaryGreen,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.play_arrow_rounded, size: 24),
+                      const SizedBox(width: 12),
+                      Text(
+                        'START VIDEO SESSION',
+                        style: GoogleFonts.outfit(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1.0,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
-            ),
+              const SizedBox(height: 16),
+
+              // Reschedule Button (Counselor Side)
+              SizedBox(
+                width: double.infinity,
+                height: 60,
+                child: OutlinedButton(
+                  onPressed: () => _handleReschedule(context),
+                  style: OutlinedButton.styleFrom(
+                    side: BorderSide(color: primaryGreen.withOpacity(0.3)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                  ),
+                  child: Text(
+                    'RESCHEDULE APPOINTMENT',
+                    style: GoogleFonts.outfit(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: primaryGreen,
+                      letterSpacing: 1.0,
+                    ),
+                  ),
+                ),
+              ),
+            ] else ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 20),
+                decoration: BoxDecoration(
+                  color: Colors.grey.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Center(
+                  child: Text(
+                    'This session has ended.',
+                    style: GoogleFonts.outfit(
+                      color: Colors.grey[600],
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 48),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showEarlyMessage(BuildContext context, DateTime startTime) {
+    final format = DateFormat('hh:mm a');
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(32)),
+        contentPadding: const EdgeInsets.all(32),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: const BoxDecoration(
+                color: Color(0xFFF1F5F2),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.access_time_rounded, color: Color(0xFF7C9C84), size: 48),
+            ),
+            const SizedBox(height: 24),
+            Text('Too Early', textAlign: TextAlign.center, style: GoogleFonts.playfairDisplay(fontSize: 24, fontWeight: FontWeight.bold, color: const Color(0xFF333333))),
+            const SizedBox(height: 16),
+            Text(
+              'Your session is scheduled for ${format.format(startTime)}. You can join the call 10 minutes before the start time.',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.outfit(color: Colors.grey[600], height: 1.5),
+            ),
+            const SizedBox(height: 32),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () => Navigator.pop(context),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF7C9C84),
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                ),
+                child: Text('Got It', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+              ),
+            ),
           ],
         ),
       ),
@@ -487,42 +586,77 @@ class SessionDetailScreen extends StatelessWidget {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-        title: Text('Confirm Changes', style: GoogleFonts.playfairDisplay(fontWeight: FontWeight.bold)),
-        content: Text(
-          'Move this session for ${bookingData['patientName'] ?? 'this member'} to ${DateFormat('EEEE, MMM dd').format(finalDateTime)} at ${DateFormat('hh:mm a').format(finalDateTime)}?',
-          style: GoogleFonts.outfit(fontSize: 14, height: 1.5),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: Text('CANCEL', style: GoogleFonts.outfit(color: Colors.grey))),
-          TextButton(
-            onPressed: () async {
-              Navigator.pop(context); // Pop dialog
-              try {
-                await FirebaseFirestore.instance.collection('counsellor_bookings').doc(bookingId).update({
-                  'startTime': Timestamp.fromDate(finalDateTime),
-                  'date': DateFormat('dd MMM yyyy').format(finalDateTime),
-                  'status': 'RESCHEDULED',
-                  'rescheduledBy': 'counsellor',
-                  'lastModified': FieldValue.serverTimestamp(),
-                });
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(32)),
+        contentPadding: const EdgeInsets.all(32),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: const BoxDecoration(
+                color: Color(0xFFF1F5F2),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.edit_calendar_rounded, color: Color(0xFF7C9C84), size: 48),
+            ),
+            const SizedBox(height: 24),
+            Text('Confirm Changes', textAlign: TextAlign.center, style: GoogleFonts.playfairDisplay(fontSize: 24, fontWeight: FontWeight.bold, color: const Color(0xFF333333))),
+            const SizedBox(height: 16),
+            Text(
+              'Move this session for ${bookingData['patientName'] ?? 'this member'} to ${DateFormat('EEEE, MMM dd').format(finalDateTime)} at ${DateFormat('hh:mm a').format(finalDateTime)}?',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.outfit(color: Colors.grey[600], height: 1.5),
+            ),
+            const SizedBox(height: 32),
+            Row(
+              children: [
+                Expanded(
+                  child: TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: Text('Cancel', style: GoogleFonts.outfit(color: Colors.grey[600], fontWeight: FontWeight.bold)),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () async {
+                      Navigator.pop(context); // Pop dialog
+                      try {
+                        await FirebaseFirestore.instance.collection('counsellor_bookings').doc(bookingId).update({
+                          'startTime': Timestamp.fromDate(finalDateTime),
+                          'date': DateFormat('dd MMM yyyy').format(finalDateTime),
+                          'status': 'RESCHEDULED',
+                          'rescheduledBy': 'counsellor',
+                          'lastModified': FieldValue.serverTimestamp(),
+                        });
 
-                if (context.mounted) {
-                  Navigator.pop(context); // Pop reschedule modal
-                  Navigator.pop(context); // Pop detail screen
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Session rescheduled successfully.'), backgroundColor: primaryGreen),
-                  );
-                }
-              } catch (e) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to reschedule.')));
-                }
-              }
-            },
-            child: Text('CONFIRM', style: GoogleFonts.outfit(color: primaryGreen, fontWeight: FontWeight.bold)),
-          ),
-        ],
+                        if (context.mounted) {
+                          Navigator.pop(context); // Pop reschedule modal
+                          Navigator.pop(context); // Pop detail screen
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Session rescheduled successfully.'), backgroundColor: primaryGreen),
+                          );
+                        }
+                      } catch (e) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to reschedule.')));
+                        }
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: primaryGreen,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                    ),
+                    child: Text('Confirm', style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

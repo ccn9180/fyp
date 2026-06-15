@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { doc, deleteDoc, addDoc, updateDoc, collection, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../../firebase';
@@ -27,6 +27,8 @@ const badge = (type) => ({ display: 'inline-flex', padding: '3px 10px', borderRa
 export default function Meditation() {
   const { data: guides, loading } = useMeditationGuides();
   const [search, setSearch] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [deleting, setDeleting] = useState(null);
   const [viewingGuide, setViewingGuide] = useState(null);
   const [preloading, setPreloading] = useState(null);
@@ -59,6 +61,16 @@ export default function Meditation() {
     const file = e.target.files[0];
     if (!file) return;
 
+    if (targetField === 'audioUrl') {
+      const audio = new Audio();
+      audio.src = URL.createObjectURL(file);
+      audio.onloadedmetadata = () => {
+        const minutes = Math.ceil(audio.duration / 60);
+        setFormData(prev => ({ ...prev, duration: `${minutes} min` }));
+        URL.revokeObjectURL(audio.src);
+      };
+    }
+
     setIsUploading(prev => ({ ...prev, [targetField]: true }));
     const storageRef = ref(storage, `meditations/${targetField}/${Date.now()}_${file.name}`);
     const uploadTask = uploadBytesResumable(storageRef, file);
@@ -76,18 +88,6 @@ export default function Meditation() {
       () => {
         getDownloadURL(uploadTask.snapshot.ref).then((downloadURL) => {
           setFormData(prev => ({ ...prev, [targetField]: downloadURL }));
-          
-          // Auto-calculate duration if it's an audio file
-          if (targetField === 'audioUrl') {
-            const audio = new Audio();
-            audio.src = URL.createObjectURL(file);
-            audio.onloadedmetadata = () => {
-              const minutes = Math.ceil(audio.duration / 60);
-              setFormData(prev => ({ ...prev, duration: `${minutes} min` }));
-              URL.revokeObjectURL(audio.src);
-            };
-          }
-
           setIsUploading(prev => ({ ...prev, [targetField]: false }));
           setUploadProgress(prev => ({ ...prev, [targetField]: 0 }));
         });
@@ -108,9 +108,14 @@ export default function Meditation() {
     status: 'draft'
   });
 
-  const filtered = (guides || []).filter(m =>
-    (m.category || '').toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = (guides || []).filter(m => {
+    const matchesSearch = (m.title || '').toLowerCase().includes(search.toLowerCase()) || 
+                          (m.category || '').toLowerCase().includes(search.toLowerCase());
+    const matchesCategory = categoryFilter === 'all' || (m.category || '').toLowerCase() === categoryFilter.toLowerCase();
+    const matchesStatus = statusFilter === 'all' || (m.status || 'draft').toLowerCase() === statusFilter.toLowerCase();
+    
+    return matchesSearch && matchesCategory && matchesStatus;
+  });
 
   const totalPages = Math.ceil(filtered.length / itemsPerPage);
   const paginatedItems = filtered.slice(
@@ -132,18 +137,27 @@ export default function Meditation() {
       });
     } else {
       setEditingGuide(null);
-      setFormData({
-        title: '',
-        subtitle: '',
-        category: '',
-        duration: '',
-        imageUrl: '',
-        audioUrl: '',
-        status: 'draft'
-      });
+      const savedDraft = localStorage.getItem('meditation_draft');
+      if (savedDraft) {
+        try {
+          setFormData(JSON.parse(savedDraft));
+        } catch (e) {
+          setFormData({ title: '', subtitle: '', category: '', duration: '', imageUrl: '', audioUrl: '', status: 'draft' });
+        }
+      } else {
+        setFormData({
+          title: '', subtitle: '', category: '', duration: '', imageUrl: '', audioUrl: '', status: 'draft'
+        });
+      }
     }
     setIsEditorOpen(true);
   };
+
+  useEffect(() => {
+    if (isEditorOpen && !editingGuide) {
+      localStorage.setItem('meditation_draft', JSON.stringify(formData));
+    }
+  }, [formData, isEditorOpen, editingGuide]);
 
   const handleCloseEditor = () => {
     setIsEditorOpen(false);
@@ -159,26 +173,52 @@ export default function Meditation() {
       return;
     }
 
+    // Duration Formatting & Validation
+    let finalDuration = formData.duration.toString().trim();
+    if (/^\d+$/.test(finalDuration)) {
+      finalDuration += ' min';
+    } else if (/^\d+\s*m(in)?(s)?$/i.test(finalDuration)) {
+      finalDuration = finalDuration.replace(/\s*m(in)?(s)?$/i, ' min');
+    }
+
+    if (!/^\d+\s*min$/.test(finalDuration)) {
+      await customAlert("Duration must be a number (e.g., '10').", "Invalid Duration");
+      return;
+    }
+
+    const submissionData = { ...formData, duration: finalDuration };
+
+    // URL Validation
+    if (submissionData.imageUrl && !/^https?:\/\//.test(submissionData.imageUrl) && !submissionData.imageUrl.startsWith('blob:') && !submissionData.imageUrl.startsWith('/')) {
+        await customAlert("Please provide a valid URL for the Cover Image.", "Invalid URL");
+        return;
+    }
+    if (formData.audioUrl && !/^https?:\/\//.test(formData.audioUrl) && !formData.audioUrl.startsWith('blob:') && !formData.audioUrl.startsWith('/')) {
+        await customAlert("Please provide a valid URL for the Audio Track.", "Invalid URL");
+        return;
+    }
+
     try {
       if (editingGuide) {
         // Update existing guide
         const docRef = doc(db, 'meditation_guides', editingGuide.id);
         await updateDoc(docRef, {
-          ...formData,
+          ...submissionData,
           updatedAt: serverTimestamp()
         });
       } else {
         // Add new guide
         await addDoc(collection(db, 'meditation_guides'), {
-          ...formData,
+          ...submissionData,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
           clicks: 0,
-          views: 0,
           plays: 0
         });
+        localStorage.removeItem('meditation_draft');
       }
       handleCloseEditor();
+      await customAlert("Meditation guide saved successfully!", "Success");
     } catch (error) {
       console.error("Error saving meditation guide: ", error);
       await customAlert("Failed to save guide. View console for details.", "Error");
@@ -220,6 +260,50 @@ export default function Meditation() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', position: 'relative' }}>
+      <style>
+        {`
+          @keyframes slideIn {
+            from { transform: translateX(100%); }
+            to { transform: translateX(0); }
+          }
+          .form-group { margin-bottom: 20px; }
+          .form-label { display: flex; align-items: center; gap: 6px; font-family: 'Outfit', sans-serif; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: ${C.muted}; margin-bottom: 8px; }
+          .form-input { width: 100%; background: ${C.cream}; border: 1px solid ${C.creamDarker}; border-radius: 12px; padding: 10px 14px; height: 42px; font-family: 'Outfit', sans-serif; font-size: 14px; color: ${C.charcoal}; outline: none; box-sizing: border-box; transition: all 0.2s ease; }
+          .form-input:hover { border-color: ${C.primaryLight}; }
+          .form-input:focus { border-color: ${C.primary}; box-shadow: 0 0 0 3px ${C.sage100}; background: white; }
+          select.form-input { cursor: pointer; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%234F796B' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 14px center; padding-right: 40px; }
+          
+          .custom-dropdown {
+            padding: 10px 32px 10px 14px;
+            border-radius: 12px;
+            border: 1px solid ${C.creamDarker};
+            background-color: ${C.cream};
+            font-family: 'Outfit', sans-serif;
+            font-size: 13px;
+            color: ${C.charcoal};
+            cursor: pointer;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%234F796B' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            min-width: 140px;
+            transition: all 0.2s ease;
+            outline: none;
+          }
+          .custom-dropdown:hover {
+            background-color: #f8faf9;
+            border-color: ${C.primaryLight};
+          }
+          .custom-dropdown:focus {
+            background-color: white;
+            border-color: ${C.primary};
+            box-shadow: 0 0 0 3px ${C.sage100};
+          }
+          .editor-header { padding: 24px; border-bottom: 1px solid ${C.creamDarker}; display: flex; align-items: center; justify-content: space-between; }
+          .editor-content { flex: 1; overflow-y: auto; padding: 24px; }
+          .editor-footer { padding: 20px 24px; border-top: 1px solid ${C.creamDarker}; display: flex; justify-content: flex-end; gap: 12px; }
+        `}
+      </style>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
           <span style={{ ...sLabel, display: 'block', marginBottom: '4px' }}>Content Management</span>
@@ -236,14 +320,39 @@ export default function Meditation() {
       </div>
 
       <div style={card}>
-        <div style={{ position: 'relative', maxWidth: '280px', marginBottom: '20px' }}>
-          <Search size={14} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: C.muted }} />
-          <input
-            style={{ width: '100%', background: C.cream, border: `1px solid ${C.creamDarker}`, borderRadius: '12px', padding: '10px 12px 10px 36px', fontFamily: 'Outfit', fontSize: '13px', color: C.charcoal, outline: 'none', boxSizing: 'border-box' }}
-            placeholder="Search guides…"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
+        <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', flexWrap: 'wrap' }}>
+          <div style={{ position: 'relative', flex: '1', minWidth: '220px' }}>
+            <Search size={14} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: C.muted }} />
+            <input
+              style={{ width: '100%', background: C.cream, border: `1px solid ${C.creamDarker}`, borderRadius: '12px', padding: '10px 12px 10px 36px', fontFamily: 'Outfit', fontSize: '13px', color: C.charcoal, outline: 'none', boxSizing: 'border-box' }}
+              placeholder="Search by title or category…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+          </div>
+          <select 
+            className="custom-dropdown"
+            value={categoryFilter}
+            onChange={e => setCategoryFilter(e.target.value)}
+          >
+            <option value="all">All Categories</option>
+            <option value="Stress">Stress</option>
+            <option value="Sleep">Sleep</option>
+            <option value="Focus">Focus</option>
+            <option value="Breathing">Breathing</option>
+            <option value="Mindfulness">Mindfulness</option>
+            <option value="Guided">Guided</option>
+          </select>
+          <select 
+            className="custom-dropdown"
+            value={statusFilter}
+            onChange={e => setStatusFilter(e.target.value)}
+          >
+            <option value="all">All Status</option>
+            <option value="published">Published</option>
+            <option value="draft">Draft</option>
+            <option value="archived">Archived</option>
+          </select>
         </div>
 
         {loading ? (
@@ -325,7 +434,6 @@ export default function Meditation() {
                     <td style={{ padding: '12px 0' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
                         <span style={{ fontSize: '11px', color: C.charcoalMuted, fontWeight: 600 }}>{(m.plays || 0).toLocaleString()} <span style={{ color: C.muted, fontWeight: 400 }}>plays</span></span>
-                        <span style={{ fontSize: '11px', color: C.muted }}>{(m.views || 0).toLocaleString()} views</span>
                         <span style={{ fontSize: '11px', color: '#eab308' }}>★ {m.rating?.toFixed(1) || '0.0'}</span>
                       </div>
                     </td>
@@ -422,7 +530,7 @@ export default function Meditation() {
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '32px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '32px' }}>
                   <div style={{ background: C.cream, padding: '16px', borderRadius: '20px', textAlign: 'center' }}>
                     <p style={{ margin: 0, fontSize: '10px', fontWeight: 700, color: C.muted, textTransform: 'uppercase' }}>Duration</p>
                     <p style={{ margin: '4px 0 0 0', fontSize: '15px', fontWeight: 600 }}>{viewingGuide.duration}</p>
@@ -430,10 +538,6 @@ export default function Meditation() {
                   <div style={{ background: C.cream, padding: '16px', borderRadius: '20px', textAlign: 'center' }}>
                     <p style={{ margin: 0, fontSize: '10px', fontWeight: 700, color: C.muted, textTransform: 'uppercase' }}>Plays</p>
                     <p style={{ margin: '4px 0 0 0', fontSize: '15px', fontWeight: 600 }}>{viewingGuide.plays || 0}</p>
-                  </div>
-                  <div style={{ background: C.cream, padding: '16px', borderRadius: '20px', textAlign: 'center' }}>
-                    <p style={{ margin: 0, fontSize: '10px', fontWeight: 700, color: C.muted, textTransform: 'uppercase' }}>Views</p>
-                    <p style={{ margin: '4px 0 0 0', fontSize: '15px', fontWeight: 600 }}>{viewingGuide.views || 0}</p>
                   </div>
                   <div style={{ background: C.cream, padding: '16px', borderRadius: '20px', textAlign: 'center' }}>
                     <p style={{ margin: 0, fontSize: '10px', fontWeight: 700, color: C.muted, textTransform: 'uppercase' }}>Rating</p>
@@ -476,23 +580,6 @@ export default function Meditation() {
               animation: 'slideIn 0.3s ease-out'
             }}
           >
-            <style>
-              {`
-                @keyframes slideIn {
-                  from { transform: translateX(100%); }
-                  to { transform: translateX(0); }
-                }
-                .form-group { margin-bottom: 20px; }
-                .form-label { display: flex; align-items: center; gap: 6px; font-family: 'Outfit', sans-serif; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: ${C.muted}; margin-bottom: 8px; }
-                .form-input { width: 100%; background: ${C.cream}; border: 1px solid ${C.creamDarker}; border-radius: 12px; padding: 10px 14px; height: 42px; font-family: 'Outfit', sans-serif; font-size: 14px; color: ${C.charcoal}; outline: none; box-sizing: border-box; transition: all 0.2s ease; }
-                .form-input:focus { border-color: ${C.primary}; box-shadow: 0 0 0 3px ${C.sage100}; }
-                select.form-input { cursor: pointer; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 14px center; padding-right: 40px; }
-                .editor-header { padding: 24px; border-bottom: 1px solid ${C.creamDarker}; display: flex; align-items: center; justify-content: space-between; }
-                .editor-content { flex: 1; overflow-y: auto; padding: 24px; }
-                .editor-footer { padding: 20px 24px; border-top: 1px solid ${C.creamDarker}; display: flex; justify-content: flex-end; gap: 12px; }
-              `}
-            </style>
-
             <div className="editor-header">
               <div>
                 <span style={sLabel}>{editingGuide ? 'Editing Guide' : 'Creation'}</span>
@@ -513,6 +600,10 @@ export default function Meditation() {
                   className="form-input"
                   value={formData.title}
                   onChange={e => setFormData({ ...formData, title: e.target.value })}
+                  onBlur={e => {
+                    const toTitleCase = (str) => str.replace(/\w\S*/g, (txt) => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase());
+                    setFormData({ ...formData, title: toTitleCase(e.target.value) });
+                  }}
                   placeholder="e.g., Forest Breathing"
                   required
                 />
@@ -569,6 +660,15 @@ export default function Meditation() {
                 />
                 <div 
                   onClick={() => !isUploading.imageUrl && fileInputRef.current.click()}
+                  onDragOver={(e) => { e.preventDefault(); e.currentTarget.style.borderColor = C.primary; }}
+                  onDragLeave={(e) => { e.preventDefault(); e.currentTarget.style.borderColor = formData.imageUrl ? 'none' : `2px dashed ${C.primaryLight}`; }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    e.currentTarget.style.borderColor = formData.imageUrl ? 'none' : `2px dashed ${C.primaryLight}`;
+                    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                      handleFileUpload({ target: { files: e.dataTransfer.files } }, 'imageUrl');
+                    }
+                  }}
                   style={{
                     width: '100%',
                     height: '200px',
@@ -620,13 +720,24 @@ export default function Meditation() {
 
               <div className="form-group">
                 <label className="form-label"><PlayCircle size={12} /> Audio Track</label>
-                <div style={{ display: 'flex', gap: '8px' }}>
+                <div 
+                  style={{ display: 'flex', gap: '8px', padding: '10px', border: `2px dashed ${isUploading.audioUrl ? 'transparent' : C.primaryLight}`, borderRadius: '12px', background: isUploading.audioUrl ? 'transparent' : '#f8faf9', transition: 'all 0.2s', position: 'relative' }}
+                  onDragOver={(e) => { e.preventDefault(); e.currentTarget.style.borderColor = C.primary; }}
+                  onDragLeave={(e) => { e.preventDefault(); e.currentTarget.style.borderColor = `2px dashed ${C.primaryLight}`; }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    e.currentTarget.style.borderColor = `2px dashed ${C.primaryLight}`;
+                    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                      handleFileUpload({ target: { files: e.dataTransfer.files } }, 'audioUrl');
+                    }
+                  }}
+                >
                   <input
                     className="form-input"
                     value={formData.audioUrl}
                     onChange={e => setFormData({ ...formData, audioUrl: e.target.value })}
-                    placeholder="Enter audio URL or upload..."
-                    style={{ flex: 1 }}
+                    placeholder="Enter audio URL or drop file here..."
+                    style={{ flex: 1, border: 'none', background: 'transparent', padding: '0 4px', height: 'auto' }}
                   />
                   <input 
                     type="file" 
@@ -639,12 +750,16 @@ export default function Meditation() {
                     type="button"
                     onClick={() => audioInputRef.current.click()}
                     disabled={isUploading.audioUrl}
-                    style={{ padding: '0 15px', borderRadius: '12px', border: `1px solid ${C.creamDarker}`, background: '#f8faf9', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                    style={{ padding: '8px 16px', borderRadius: '8px', border: `1px solid ${C.creamDarker}`, background: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600, color: C.charcoal }}
                   >
-                    {isUploading.audioUrl ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+                    {isUploading.audioUrl ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />} Upload
                   </button>
                 </div>
                 {uploadProgress.audioUrl > 0 && <div style={{ height: '4px', background: C.sage100, borderRadius: '2px', marginTop: '4px' }}><div style={{ height: '100%', width: `${uploadProgress.audioUrl}%`, background: C.primary, borderRadius: '2px', transition: 'width 0.3s' }}></div></div>}
+                
+                {formData.audioUrl && !isUploading.audioUrl && (
+                  <audio controls src={formData.audioUrl} style={{ width: '100%', marginTop: '12px', height: '40px', outline: 'none' }} />
+                )}
               </div>
 
               <div className="form-group">

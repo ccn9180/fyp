@@ -64,7 +64,15 @@ class _BookSessionScreenState extends State<BookSessionScreen> {
           .get();
       
       setState(() {
-        _allAvailability = availabilitySnapshot.docs.map((d) => d.data()).toList();
+        var availabilityDocs = availabilitySnapshot.docs.map((d) => d.data()).toList();
+        availabilityDocs.sort((a, b) {
+          final aTs = a['sortTimestamp'] as Timestamp?;
+          final bTs = b['sortTimestamp'] as Timestamp?;
+          if (aTs == null || bTs == null) return 0;
+          return aTs.compareTo(bTs);
+        });
+        _allAvailability = availabilityDocs;
+        
         _activeBookings = bookingsSnapshot.docs
             .map((d) => d.data() as Map<String, dynamic>)
             .where((booking) {

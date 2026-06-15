@@ -81,7 +81,12 @@ class _CommunityScreenState extends State<CommunityScreen> with AutomaticKeepAli
     final userDoc = await FirebaseFirestore.instance.collection('users').doc(currentUser!.uid).get();
     if (userDoc.exists) {
       final userData = userDoc.data() as Map<String, dynamic>;
-      authorName = userData['fullName'] ?? currentUser!.displayName ?? 'User';
+      final String? nickname = userData['nickname'] as String?;
+      if (nickname != null && nickname.trim().isNotEmpty) {
+        authorName = nickname;
+      } else {
+        authorName = userData['fullName'] ?? currentUser!.displayName ?? 'User';
+      }
       profileImageUrl = userData['profileImageUrl'];
     }
 
@@ -205,6 +210,19 @@ class _CommunityScreenState extends State<CommunityScreen> with AutomaticKeepAli
         ),
       ),
     );
+  }
+
+  Future<void> _toggleSave(String postId, bool isCurrentlySaved) async {
+    if (currentUser == null) return;
+    final savedPostRef = FirebaseFirestore.instance.collection('users').doc(currentUser!.uid).collection('saved_posts').doc(postId);
+    
+    if (isCurrentlySaved) {
+      await savedPostRef.delete();
+    } else {
+      await savedPostRef.set({
+        'savedAt': FieldValue.serverTimestamp(),
+      });
+    }
   }
 
   Future<void> _toggleLike(String postId, List<String> currentLikes) async {
@@ -737,15 +755,34 @@ class _CommunityScreenState extends State<CommunityScreen> with AutomaticKeepAli
                           ),
                           child: TextField(
                             controller: _searchController,
+                            onTap: () {
+                              // Auto-scroll so search bar is at top when keyboard opens
+                              if (_scrollController.hasClients) {
+                                _scrollController.animateTo(
+                                  72,
+                                  duration: const Duration(milliseconds: 350),
+                                  curve: Curves.easeInOut,
+                                );
+                              }
+                            },
                             onChanged: (value) {
                               setState(() {
-                                _searchQuery = value.toLowerCase();
+                                _searchQuery = value.toLowerCase().trim();
                               });
                             },
                             decoration: InputDecoration(
                               hintText: 'Search posts, moods, or topics...',
                               hintStyle: GoogleFonts.outfit(color: const Color(0xFFB3B3B3), fontSize: 14),
                               prefixIcon: const Icon(Icons.search, color: Color(0xFFB3B3B3), size: 20),
+                              suffixIcon: _searchQuery.isNotEmpty
+                                  ? IconButton(
+                                      icon: const Icon(Icons.clear, size: 18, color: Color(0xFFB3B3B3)),
+                                      onPressed: () {
+                                        _searchController.clear();
+                                        setState(() => _searchQuery = '');
+                                      },
+                                    )
+                                  : null,
                               border: InputBorder.none,
                               contentPadding: const EdgeInsets.symmetric(vertical: 16),
                             ),
@@ -754,116 +791,117 @@ class _CommunityScreenState extends State<CommunityScreen> with AutomaticKeepAli
                       ),
                     ),
                     const SliverToBoxAdapter(child: SizedBox(height: 16)),
-
-                    // Create Post Input Card
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                        child: Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(24),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.02),
-                                blurRadius: 10,
-                                offset: const Offset(0, 4),
-                              )
-                            ],
-                          ),
-                          child: Column(
-                            children: [
-                              Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  CircleAvatar(
-                                    radius: 18,
-                                    backgroundColor: const Color(0xFFEAEAEA),
-                                    child: Icon(Icons.person, color: Colors.grey.shade400, size: 20),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: TextField(
-                                      controller: _postController,
-                                      maxLines: 2,
-                                      decoration: InputDecoration(
-                                        hintText: 'Share your thoughts or\nfeelings...',
-                                        hintStyle: GoogleFonts.outfit(
-                                          color: const Color(0xFFBDBDBD),
-                                          fontSize: 15,
-                                          height: 1.4,
-                                        ),
-                                        border: InputBorder.none,
-                                        isDense: true,
-                                      ),
+                    if (_searchQuery.isEmpty) ...[
+                      // Create Post Input Card
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                          child: Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(24),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.02),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 4),
+                                )
+                              ],
+                            ),
+                            child: Column(
+                              children: [
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    CircleAvatar(
+                                      radius: 18,
+                                      backgroundColor: const Color(0xFFEAEAEA),
+                                      child: Icon(Icons.person, color: Colors.grey.shade400, size: 20),
                                     ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 12),
-                              const Divider(color: Color(0xFFF0F0F0), thickness: 1),
-                              const SizedBox(height: 8),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Row(
-                                    children: [
-                                      IconButton(
-                                        icon: Icon(Icons.sentiment_satisfied_alt, color: primaryGreen, size: 22),
-                                        onPressed: _showMoodPicker,
-                                        constraints: const BoxConstraints(),
-                                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                                      ),
-                                      IconButton(
-                                        icon: Icon(Icons.image_outlined, color: primaryGreen, size: 22),
-                                        onPressed: _pickPostImage,
-                                        constraints: const BoxConstraints(),
-                                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                                      ),
-
-                                      IconButton(
-                                        icon: Icon(
-                                            _isAnonymous ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                                            color: _isAnonymous ? Colors.orange : primaryGreen,
-                                            size: 22
-                                        ),
-                                        onPressed: () {
-                                          setState(() {
-                                            _isAnonymous = !_isAnonymous;
-                                          });
-                                        },
-                                        constraints: const BoxConstraints(),
-                                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                                      ),
-                                    ],
-                                  ),
-                                  GestureDetector(
-                                    onTap: _handlePost,
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                                      decoration: BoxDecoration(
-                                        color: primaryGreen,
-                                        borderRadius: BorderRadius.circular(20),
-                                      ),
-                                      child: Text(
-                                        'Post',
-                                        style: GoogleFonts.outfit(
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 13,
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: TextField(
+                                        controller: _postController,
+                                        maxLines: 2,
+                                        decoration: InputDecoration(
+                                          hintText: 'Share your thoughts or\nfeelings...',
+                                          hintStyle: GoogleFonts.outfit(
+                                            color: const Color(0xFFBDBDBD),
+                                            fontSize: 15,
+                                            height: 1.4,
+                                          ),
+                                          border: InputBorder.none,
+                                          isDense: true,
                                         ),
                                       ),
                                     ),
-                                  ),
-                                ],
-                              )
-                            ],
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                const Divider(color: Color(0xFFF0F0F0), thickness: 1),
+                                const SizedBox(height: 8),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        IconButton(
+                                          icon: Icon(Icons.sentiment_satisfied_alt, color: primaryGreen, size: 22),
+                                          onPressed: _showMoodPicker,
+                                          constraints: const BoxConstraints(),
+                                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                                        ),
+                                        IconButton(
+                                          icon: Icon(Icons.image_outlined, color: primaryGreen, size: 22),
+                                          onPressed: _pickPostImage,
+                                          constraints: const BoxConstraints(),
+                                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                                        ),
+
+                                        IconButton(
+                                          icon: Icon(
+                                              _isAnonymous ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                                              color: _isAnonymous ? Colors.orange : primaryGreen,
+                                              size: 22
+                                          ),
+                                          onPressed: () {
+                                            setState(() {
+                                              _isAnonymous = !_isAnonymous;
+                                            });
+                                          },
+                                          constraints: const BoxConstraints(),
+                                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                                        ),
+                                      ],
+                                    ),
+                                    GestureDetector(
+                                      onTap: _handlePost,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                                        decoration: BoxDecoration(
+                                          color: primaryGreen,
+                                          borderRadius: BorderRadius.circular(20),
+                                        ),
+                                        child: Text(
+                                          'Post',
+                                          style: GoogleFonts.outfit(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 13,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                )
+                              ],
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                    const SliverToBoxAdapter(child: SizedBox(height: 20)),
+                      const SliverToBoxAdapter(child: SizedBox(height: 20)),
+                    ],
 
                     // Horizontal Filter Chips
                     SliverToBoxAdapter(
@@ -875,6 +913,8 @@ class _CommunityScreenState extends State<CommunityScreen> with AutomaticKeepAli
                             _buildFilterChip('All', _activeFilter == 'All'),
                             const SizedBox(width: 12),
                             _buildMyPostsChip(_activeFilter == 'MyPosts'),
+                            const SizedBox(width: 12),
+                            _buildFilterChip('Saved', _activeFilter == 'Saved'),
                             const SizedBox(width: 12),
                             _buildFilterChip('Self-Love', _activeFilter == 'Self-Love'),
                             const SizedBox(width: 12),
@@ -889,64 +929,120 @@ class _CommunityScreenState extends State<CommunityScreen> with AutomaticKeepAli
 
                     // Post Cards
                     StreamBuilder<QuerySnapshot>(
-                      stream: _postsStream,
-                      builder: (context, snapshot) {
-                        if (snapshot.hasError) {
-                          return SliverToBoxAdapter(
-                            child: Padding(
-                              padding: const EdgeInsets.all(24.0),
-                              child: Center(child: Text('Error loading posts: ${snapshot.error}')),
-                            ),
-                          );
+                      stream: currentUser != null ? FirebaseFirestore.instance.collection('users').doc(currentUser!.uid).collection('saved_posts').snapshots() : const Stream.empty(),
+                      builder: (context, savedSnapshot) {
+                        List<String> savedPostIds = [];
+                        if (savedSnapshot.hasData) {
+                          savedPostIds = savedSnapshot.data!.docs.map((doc) => doc.id).toList();
                         }
+                        
+                        return StreamBuilder<QuerySnapshot>(
+                          stream: _postsStream,
+                          builder: (context, snapshot) {
+                            if (snapshot.hasError) {
+                              return SliverToBoxAdapter(
+                                child: Padding(
+                                  padding: const EdgeInsets.all(24.0),
+                                  child: Center(child: Text('Error loading posts: ${snapshot.error}')),
+                                ),
+                              );
+                            }
 
-                        if (snapshot.connectionState == ConnectionState.waiting) {
-                          return const SliverToBoxAdapter(
-                            child: Padding(
-                              padding: EdgeInsets.all(24.0),
-                              child: Center(child: CircularProgressIndicator(color: Color(0xFF7C9C84))),
-                            ),
-                          );
-                        }
+                            if (snapshot.connectionState == ConnectionState.waiting) {
+                              return const SliverToBoxAdapter(
+                                child: Padding(
+                                  padding: EdgeInsets.all(24.0),
+                                  child: Center(child: CircularProgressIndicator(color: Color(0xFF7C9C84))),
+                                ),
+                              );
+                            }
 
-                        final posts = snapshot.data!.docs.map((doc) => Post.fromFirestore(doc)).toList();
+                            final posts = snapshot.data!.docs.map((doc) => Post.fromFirestore(doc)).toList();
 
-                        // Filter by selected topic and search query
-                        final filteredPosts = posts.where((post) {
+                         // Filter by selected topic and search query
+                         final filteredPosts = posts.where((post) {
                           if (_activeFilter != 'MyPosts' && post.isArchived) return false;
 
                           final matchesAuthor = _activeFilter == 'MyPosts'
                               ? (currentUser != null && post.authorId == currentUser!.uid)
                               : true;
-                          final matchesTopic = (_activeFilter == 'All' || _activeFilter == 'MyPosts')
+                          final matchesSaved = _activeFilter == 'Saved'
+                              ? savedPostIds.contains(post.id)
+                              : true;
+                          final matchesTopic = (_activeFilter == 'All' || _activeFilter == 'MyPosts' || _activeFilter == 'Saved')
                               ? true
                               : post.topic == _activeFilter;
 
-                          final query = _searchQuery.toLowerCase();
-                          final matchesSearch = query.isEmpty ||
-                              post.content.toLowerCase().contains(query) ||
-                              post.authorName.toLowerCase().contains(query) ||
-                              post.topic.toLowerCase().contains(query);
-                          return matchesAuthor && matchesTopic && matchesSearch;
+                          final q = _searchQuery.trim();
+                          final matchesSearch = q.isEmpty ||
+                              post.content.toLowerCase().contains(q) ||
+                              post.authorName.toLowerCase().contains(q) ||
+                              post.topic.toLowerCase().contains(q);
+                          return matchesAuthor && matchesSaved && matchesTopic && matchesSearch;
                         }).toList();
+
+                        // Relevance sorting — best matches float to top when searching
+                        if (_searchQuery.trim().isNotEmpty) {
+                          final q = _searchQuery.trim();
+                          int postRelevance(Post post) {
+                            final content = post.content.toLowerCase();
+                            final topic = post.topic.toLowerCase();
+                            final author = post.authorName.toLowerCase();
+                            if (content.startsWith(q)) return 0;
+                            if (content.contains(q) && topic.contains(q)) return 1;
+                            if (content.contains(q)) return 2;
+                            if (topic.contains(q)) return 3;
+                            if (author.contains(q)) return 4;
+                            return 5;
+                          }
+                          filteredPosts.sort((a, b) => postRelevance(a).compareTo(postRelevance(b)));
+                        }
 
                         if (filteredPosts.isEmpty) {
                           String emptyMessage = _searchQuery.isEmpty
-                              ? (_activeFilter == 'All' || _activeFilter == 'MyPosts' ? 'No posts found.' : 'No posts in $_activeFilter category yet.')
-                              : 'No posts found matching "$_searchQuery"';
-                          return SliverToBoxAdapter(
-                            child: Padding(
-                              padding: const EdgeInsets.all(32.0),
-                              child: Column(
-                                children: [
-                                  Icon(Icons.search_off_rounded, size: 48, color: Colors.grey.withOpacity(0.5)),
-                                  const SizedBox(height: 16),
-                                  Text(
-                                    emptyMessage,
-                                    textAlign: TextAlign.center,
-                                    style: GoogleFonts.outfit(color: textColorSub, fontSize: 14),
-                                  ),
-                                ],
+                              ? (_activeFilter == 'All' || _activeFilter == 'MyPosts' ? 'Be the first to share your thoughts.' : 'No posts in this category yet.')
+                              : 'Try adjusting your search terms or filters.';
+                          return SliverFillRemaining(
+                            hasScrollBody: false,
+                            child: Center(
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 40.0, horizontal: 24.0),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(16),
+                                      decoration: BoxDecoration(
+                                        color: primaryGreen.withOpacity(0.08),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: Icon(
+                                        Icons.search_off_rounded,
+                                        color: primaryGreen,
+                                        size: 32,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 16),
+                                    Text(
+                                      "No results found",
+                                      style: GoogleFonts.playfairDisplay(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                        color: textColorMain,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      emptyMessage,
+                                      textAlign: TextAlign.center,
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 13,
+                                        color: textColorSub,
+                                        height: 1.5,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                           );
@@ -962,6 +1058,7 @@ class _CommunityScreenState extends State<CommunityScreen> with AutomaticKeepAli
                                   post,
                                   isFollowing: following.contains(post.authorId),
                                   isRequested: requestedUids.contains(post.authorId),
+                                  isSaved: savedPostIds.contains(post.id),
                                 ),
                               );
                             },
@@ -969,14 +1066,16 @@ class _CommunityScreenState extends State<CommunityScreen> with AutomaticKeepAli
                           ),
                         );
                       },
-                    ),
-                    const SliverToBoxAdapter(child: SizedBox(height: 80)),
-                  ],
+                    );
+                  },
                 ),
-              ),
-            );
-          },
+                const SliverToBoxAdapter(child: SizedBox(height: 32)),
+              ],
+            ),
+          ),
         );
+      },
+    );
       },
     );
   }
@@ -985,7 +1084,7 @@ class _CommunityScreenState extends State<CommunityScreen> with AutomaticKeepAli
     return GestureDetector(
       onTap: () {
         setState(() {
-          _activeFilter = label;
+          _activeFilter = isSelected ? 'All' : label;
         });
       },
       child: Container(
@@ -1018,7 +1117,7 @@ class _CommunityScreenState extends State<CommunityScreen> with AutomaticKeepAli
     return GestureDetector(
       onTap: () {
         setState(() {
-          _activeFilter = 'MyPosts';
+          _activeFilter = isSelected ? 'All' : 'MyPosts';
         });
       },
       child: Container(
@@ -1054,7 +1153,7 @@ class _CommunityScreenState extends State<CommunityScreen> with AutomaticKeepAli
     );
   }
 
-  Widget _buildPostCard(Post post, {bool isFollowing = false, bool isRequested = false}) {
+  Widget _buildPostCard(Post post, {bool isFollowing = false, bool isRequested = false, bool isSaved = false}) {
     bool isLiked = currentUser != null && post.likes.contains(currentUser!.uid);
     bool isOwner = currentUser != null && post.authorId == currentUser!.uid;
     String displayAuthor = isOwner ? 'You' : (post.isAnonymous ? 'Anonymous' : post.authorName);
@@ -1320,9 +1419,9 @@ class _CommunityScreenState extends State<CommunityScreen> with AutomaticKeepAli
                   child: Row(
                     children: [
                       Icon(
-                        isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded, // Changed from diff
+                        isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
                         color: isLiked ? Colors.red : const Color(0xFF9CA3AF),
-                        size: 20,
+                        size: 26,
                       ),
                       const SizedBox(width: 6),
                       Text(
@@ -1352,7 +1451,14 @@ class _CommunityScreenState extends State<CommunityScreen> with AutomaticKeepAli
                   ],
                 ),
                 const Spacer(),
-                const Icon(Icons.bookmark_border, color: Color(0xFF9CA3AF), size: 20),
+                GestureDetector(
+                  onTap: () => _toggleSave(post.id, isSaved),
+                  child: Icon(
+                    isSaved ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
+                    color: isSaved ? primaryGreen : const Color(0xFF9CA3AF),
+                    size: 20,
+                  ),
+                ),
               ],
             ),
           ],

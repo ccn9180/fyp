@@ -415,7 +415,7 @@ export default function ContentMonitoring() {
         </div>
       )}
       {/* --- HIDDEN FORMAL PAPER REPORT (PRINT-ONLY CAPTURE) --- */}
-      <div style={{ position: 'fixed', left: '-2000px', top: '0', width: '794px', pointerEvents: 'none', zIndex: -1 }}>
+      <div className="print-container" style={{ position: 'fixed', left: '-2000px', top: '0', width: '794px', pointerEvents: 'none', zIndex: -1 }}>
         <div ref={paperRef} style={{ background: 'white' }}>
           <ReportContent
             processedData={processedData}
@@ -424,6 +424,7 @@ export default function ContentMonitoring() {
             totalEngagement={totalEngagement}
             topPerformers={topPerformers}
             underPerformers={underPerformers}
+            isPreview={false}
           />
         </div>
       </div>
@@ -433,7 +434,7 @@ export default function ContentMonitoring() {
         onClose={() => setIsPreviewOpen(false)}
         onDownload={handleExportPDF}
         isExporting={isExporting}
-        title="Content Portfolio & Engagement Audit"
+        title="Content Performance Audit Report"
       >
         <ReportContent
           processedData={processedData}
@@ -442,13 +443,14 @@ export default function ContentMonitoring() {
           totalEngagement={totalEngagement}
           topPerformers={topPerformers}
           underPerformers={underPerformers}
+          isPreview={true}
         />
       </ReportPreview>
     </div>
   );
 }
 
-function ReportContent({ processedData, chartData, avgRating, totalEngagement, topPerformers, underPerformers }) {
+function ReportContent({ processedData, chartData, avgRating, totalEngagement, topPerformers, underPerformers, isPreview }) {
   const sectionStyle = { marginBottom: '35px' };
   const headingStyle = { fontSize: '14px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#111', marginBottom: '15px' };
   const textStyle = { fontSize: '11px', color: '#444', lineHeight: 1.6, marginBottom: '20px' };
@@ -539,7 +541,14 @@ function ReportContent({ processedData, chartData, avgRating, totalEngagement, t
         </div>
       </div>
 
-      <div style={{ height: '200px' }} />
+      {isPreview ? (
+        <div style={{ height: '200px', position: 'relative', display: 'flex', justifyContent: 'center', paddingTop: '40px' }}>
+          <div style={{ position: 'absolute', top: '45px', width: 'calc(100% + 192px)', left: '-96px', borderBottom: '2px dashed #BBCBC2' }}></div>
+          <span style={{ background: 'white', padding: '0 15px', color: '#BBCBC2', fontSize: '10px', fontWeight: 800, letterSpacing: '0.1em', zIndex: 1, position: 'relative', height: '14px', lineHeight: '14px' }}>PAGE BREAK</span>
+        </div>
+      ) : (
+        <div style={{ height: '200px' }} />
+      )}
 
       {/* 4. Low-Engagement Risk Analysis */}
       <div style={sectionStyle}>
@@ -629,7 +638,14 @@ function ReportContent({ processedData, chartData, avgRating, totalEngagement, t
         </div>
       </div>
 
-      <div style={{ height: '260px' }} />
+      {isPreview ? (
+        <div style={{ height: '260px', position: 'relative', display: 'flex', justifyContent: 'center', paddingTop: '40px' }}>
+          <div style={{ position: 'absolute', top: '45px', width: 'calc(100% + 192px)', left: '-96px', borderBottom: '2px dashed #BBCBC2' }}></div>
+          <span style={{ background: 'white', padding: '0 15px', color: '#BBCBC2', fontSize: '10px', fontWeight: 800, letterSpacing: '0.1em', zIndex: 1, position: 'relative', height: '14px', lineHeight: '14px' }}>PAGE BREAK</span>
+        </div>
+      ) : (
+        <div style={{ height: '260px' }} />
+      )}
 
       {/* 8. Conclusion */}
       <div style={sectionStyle}>

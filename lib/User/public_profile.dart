@@ -34,7 +34,13 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
       builder: (context, userSnapshot) {
         final userData = userSnapshot.data?.data() as Map<String, dynamic>?;
 
-        final String name = userData?['fullName'] ?? widget.initialData?['name'] ?? 'User';
+        final String name;
+        String? nickname = userData?['nickname'] as String?;
+        if (nickname != null && nickname.trim().isNotEmpty) {
+          name = nickname;
+        } else {
+          name = userData?['fullName'] ?? widget.initialData?['name'] ?? 'User';
+        }
         final String email = userData?['email'] ?? widget.initialData?['email'] ?? '';
         final String bio = userData?['bio'] ?? '';
         final String? profileImageUrl = userData?['profileImageUrl'] ?? widget.initialData?['profileImageUrl'];
@@ -186,15 +192,15 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
                                       name,
                                     ),
                                     style: ElevatedButton.styleFrom(
-                                      backgroundColor: isFollowing ? const Color(0xFFF1F3EE) : (isRequested ? const Color(0xFFF1F3EE) : primaryGreen),
-                                      foregroundColor: isFollowing || isRequested ? textColorMain : Colors.white,
+                                      backgroundColor: isFollowing ? const Color(0xFFE57373) : (isRequested ? const Color(0xFFFFF3E0) : primaryGreen),
+                                      foregroundColor: isFollowing ? Colors.white : (isRequested ? const Color(0xFFE65100) : Colors.white),
                                       elevation: isFollowing || isRequested ? 0 : 4,
                                       shadowColor: primaryGreen.withOpacity(0.3),
                                       padding: const EdgeInsets.symmetric(vertical: 18),
                                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                                     ),
                                     child: Text(
-                                      isFollowing ? 'CONNECTED' : (isRequested ? 'REQUESTED' : 'ADD FRIEND'),
+                                      isFollowing ? 'UNFRIEND' : (isRequested ? 'REQUESTED' : 'ADD FRIEND'),
                                       style: GoogleFonts.outfit(
                                         fontWeight: FontWeight.bold, 
                                         letterSpacing: 1.0,

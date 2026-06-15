@@ -7,7 +7,8 @@ import 'meditation_player.dart';
 import 'article_detail.dart';
 
 class DetailedHistoryScreen extends StatelessWidget {
-  const DetailedHistoryScreen({super.key});
+  final String? filterType;
+  const DetailedHistoryScreen({super.key, this.filterType});
 
   String _formatDateHeader(DateTime date) {
     final now = DateTime.now();
@@ -122,7 +123,14 @@ class DetailedHistoryScreen extends StatelessWidget {
             );
           }
 
-          final docs = snapshot.data!.docs.toList();
+          var docs = snapshot.data!.docs.toList();
+          if (filterType != null) {
+            docs = docs.where((doc) {
+              final data = doc.data() as Map<String, dynamic>;
+              return data['type'] == filterType;
+            }).toList();
+          }
+          
           docs.sort((a, b) {
             final tA = (a.data() as Map<String, dynamic>)['timestamp'] as Timestamp?;
             final tB = (b.data() as Map<String, dynamic>)['timestamp'] as Timestamp?;
@@ -154,7 +162,7 @@ class DetailedHistoryScreen extends StatelessWidget {
             itemCount: groupedData.length + 1,
             itemBuilder: (context, index) {
               if (index == 0) {
-                return _buildSummaryCard(docs.length);
+                return _buildSummaryCard(docs.length, filterType);
               }
 
               final dateKey = groupedData.keys.elementAt(index - 1);
@@ -403,7 +411,20 @@ class DetailedHistoryScreen extends StatelessWidget {
     }
   }
 
-  Widget _buildSummaryCard(int totalSessions) {
+  Widget _buildSummaryCard(int totalSessions, String? filterType) {
+    String subtitle = 'Your Journey So Far';
+    String unit = 'Sessions';
+    IconData icon = Icons.analytics_rounded;
+    if (filterType == 'meditation') {
+      subtitle = 'Your Meditation Journey';
+      unit = 'Meditations';
+      icon = Icons.self_improvement_rounded;
+    } else if (filterType == 'article') {
+      subtitle = 'Your Reading Journey';
+      unit = 'Articles Read';
+      icon = Icons.menu_book_rounded;
+    }
+
     return Container(
       margin: const EdgeInsets.only(bottom: 24),
       padding: const EdgeInsets.all(24),
@@ -430,7 +451,7 @@ class DetailedHistoryScreen extends StatelessWidget {
               color: Colors.white.withOpacity(0.2),
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.analytics_rounded, color: Colors.white, size: 32),
+            child: Icon(icon, color: Colors.white, size: 32),
           ),
           const SizedBox(width: 20),
           Expanded(
@@ -438,7 +459,7 @@ class DetailedHistoryScreen extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Your Journey So Far',
+                  subtitle,
                   style: GoogleFonts.outfit(
                     color: Colors.white.withOpacity(0.9),
                     fontSize: 14,
@@ -447,7 +468,7 @@ class DetailedHistoryScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '$totalSessions Sessions',
+                  '$totalSessions $unit',
                   style: GoogleFonts.playfairDisplay(
                     color: Colors.white,
                     fontSize: 28,

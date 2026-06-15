@@ -15,29 +15,8 @@ class _SharedReflectionsScreenState extends State<SharedReflectionsScreen> {
   final Color textColorMain = const Color(0xFF333333);
   final Color textColorSub = const Color(0xFF888888);
 
-  // Hardcoded Shared Entries
-  final List<Map<String, dynamic>> _sharedEntries = [
-    {
-      'id': 'shared_1',
-      'title': 'Mindful Morning Walk',
-      'content': 'The crisp air today really helped me clear my head. I felt a sense of peace I haven\'t felt in weeks. Nature has a way of grounding us that nothing else can match.',
-      'date': 'OCT 12, 2023',
-      'time': '08:30 AM',
-      'mood': 'Calm',
-      'aiMoodTitle': 'Reflective & Peace',
-      'sharedWith': ['Mom', 'Dr. Sarah'],
-    },
-    {
-      'id': 'shared_2',
-      'title': 'Dealing with Work Stress',
-      'content': 'Today was tough. The deadlines are piling up and I feel like I\'m drowning. I need to remember to breathe and take things one step at a time.',
-      'date': 'OCT 15, 2023',
-      'time': '06:45 PM',
-      'mood': 'Anxious',
-      'aiMoodTitle': 'Tense & Overwhelmed',
-      'sharedWith': ['Leo', 'Dr. Sarah'],
-    },
-  ];
+  // Empty list as this feature isn't implemented with a real backend yet
+  final List<Map<String, dynamic>> _sharedEntries = [];
 
   @override
   Widget build(BuildContext context) {

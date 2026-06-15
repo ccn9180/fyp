@@ -275,7 +275,7 @@ class _ChatHistoryScreenState extends State<ChatHistoryScreen> {
         scrolledUnderElevation: 0,
         surfaceTintColor: Colors.transparent,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF333333)),
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20, color: Color(0xFF333333)),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
@@ -474,22 +474,57 @@ class _ChatHistoryScreenState extends State<ChatHistoryScreen> {
                 }
 
                 if (filteredSessions.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.forum_outlined, size: 64, color: const Color(0xFFBBCBC2)),
-                        const SizedBox(height: 16),
-                        Text(
-                          'No conversations found',
-                          style: GoogleFonts.playfairDisplay(
-                            fontSize: 22,
-                            fontWeight: FontWeight.w600,
-                            color: textColorMain,
+                  final bool isSearching = _searchQuery.isNotEmpty;
+                  return LayoutBuilder(
+                    builder: (context, constraints) {
+                      return SingleChildScrollView(
+                        physics: const ClampingScrollPhysics(),
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                          child: Center(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 24.0, horizontal: 24.0),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(16),
+                                    decoration: BoxDecoration(
+                                      color: primaryGreen.withOpacity(0.08),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Icon(
+                                      isSearching ? Icons.search_off_rounded : Icons.forum_outlined,
+                                      color: primaryGreen,
+                                      size: 32,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    isSearching ? "No results found" : "No conversations found",
+                                    style: GoogleFonts.playfairDisplay(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                      color: textColorMain,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    isSearching ? 'Try adjusting your search terms or filters.' : 'Start your wellness conversation with Eunoia.',
+                                    textAlign: TextAlign.center,
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 13,
+                                      color: textColorSub,
+                                      height: 1.5,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
                         ),
-                      ],
-                    ),
+                      );
+                    },
                   );
                 }
 
@@ -560,31 +595,19 @@ class _ChatHistoryScreenState extends State<ChatHistoryScreen> {
           ),
         ],
       ),
-      floatingActionButton: Padding(
-        padding: const EdgeInsets.only(bottom: 16),
-        child: FloatingActionButton.extended(
-          onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const ActiveChatScreen()),
-            );
-          },
-          backgroundColor: primaryGreen,
-          elevation: 4,
-          icon: const Icon(Icons.add_rounded, color: Colors.white),
-          label: Text(
-            'Start Conversation',
-            style: GoogleFonts.outfit(
-              fontWeight: FontWeight.w600,
-              color: Colors.white,
-            ),
-          ),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-        ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const ActiveChatScreen()),
+          );
+        },
+        backgroundColor: primaryGreen,
+        elevation: 4,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+        child: const Icon(Icons.add_rounded, color: Colors.white, size: 28),
       ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }
 

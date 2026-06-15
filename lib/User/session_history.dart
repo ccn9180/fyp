@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'session_feedback.dart';
+import 'upcoming_session_detail.dart';
 
 class SessionHistoryScreen extends StatefulWidget {
   const SessionHistoryScreen({super.key});
@@ -74,10 +75,12 @@ class _SessionHistoryScreenState extends State<SessionHistoryScreen> {
 
               // Include if explicitly completed or the start time has already passed
               if (status == 'COMPLETED' || (startTime != null && startTime.isBefore(DateTime.now()))) {
+                final isMissed = status != 'COMPLETED';
                 completedSessions.add({
                   ...data,
                   'id': doc.id,
-                  'summary': data['summary'] ?? data['notes'] ?? 'General counseling session to check in and monitor wellness goals.',
+                  'isMissed': isMissed,
+                  'summary': data['summary'] ?? data['notes'] ?? (isMissed ? 'Session was missed or not attended.' : 'General counseling session to check in and monitor wellness goals.'),
                   'sessionDuration': data['sessionDuration'] ?? '60 mins',
                   'type': data['type'] ?? 'Video Call',
                 });
@@ -95,9 +98,29 @@ class _SessionHistoryScreenState extends State<SessionHistoryScreen> {
 
           if (listToShow.isEmpty) {
             return Center(
-              child: Text(
-                'No past sessions yet.',
-                style: GoogleFonts.outfit(color: textColorSub, fontSize: 16),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.history_rounded, size: 48, color: primaryGreen.withOpacity(0.5)),
+                  const SizedBox(height: 16),
+                  Text(
+                    'No past sessions yet.',
+                    style: GoogleFonts.playfairDisplay(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: textColorMain,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Your completed and missed sessions will appear here.',
+                    style: GoogleFonts.outfit(
+                      fontSize: 14,
+                      color: textColorSub,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
               ),
             );
           }
@@ -120,12 +143,21 @@ class _SessionHistoryScreenState extends State<SessionHistoryScreen> {
     
     return GestureDetector(
       onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => SessionFeedbackScreen(session: session),
-          ),
-        );
+        if (session['isMissed'] == true) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => UpcomingSessionDetailScreen(sessionData: session),
+            ),
+          );
+        } else {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => SessionFeedbackScreen(session: session),
+            ),
+          );
+        }
       },
       child: Container(
         margin: const EdgeInsets.only(bottom: 20),
@@ -195,31 +227,39 @@ class _SessionHistoryScreenState extends State<SessionHistoryScreen> {
                 ),
             ],
           ),
-          const SizedBox(height: 20),
-          Text(
-            'Session Focus:',
-            style: GoogleFonts.outfit(
-              fontSize: 11,
-              fontWeight: FontWeight.bold,
-              color: primaryGreen,
-              letterSpacing: 1.0,
+          if ((session['summary'] ?? '').toString().isNotEmpty) ...[
+            const SizedBox(height: 20),
+            Text(
+              'Session Focus:',
+              style: GoogleFonts.outfit(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: primaryGreen,
+                letterSpacing: 1.0,
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            session['summary'],
-            style: GoogleFonts.outfit(
-              fontSize: 14,
-              color: textColorMain.withOpacity(0.8),
-              height: 1.6,
+            const SizedBox(height: 8),
+            Text(
+              session['summary'],
+              style: GoogleFonts.outfit(
+                fontSize: 14,
+                color: textColorMain.withOpacity(0.8),
+                height: 1.6,
+              ),
             ),
-          ),
+          ],
           const SizedBox(height: 24),
           Row(
             children: [
               _buildMetricChip(Icons.access_time_rounded, session['sessionDuration']),
-              const SizedBox(width: 12),
+              const SizedBox(width: 8),
               _buildMetricChip(Icons.videocam_outlined, session['type']),
+              const SizedBox(width: 8),
+              _buildMetricChip(
+                session['isMissed'] == true ? Icons.cancel_outlined : Icons.check_circle_outline, 
+                session['isMissed'] == true ? 'Missed' : 'Completed',
+                color: session['isMissed'] == true ? Colors.red.shade400 : primaryGreen,
+              ),
               const Spacer(),
               Icon(Icons.arrow_forward_ios_rounded, size: 16, color: primaryGreen),
             ],
@@ -229,7 +269,8 @@ class _SessionHistoryScreenState extends State<SessionHistoryScreen> {
     ));
   }
 
-  Widget _buildMetricChip(IconData icon, String label) {
+  Widget _buildMetricChip(IconData icon, String label, {Color? color}) {
+    final effectiveColor = color ?? textColorSub;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
@@ -238,11 +279,11 @@ class _SessionHistoryScreenState extends State<SessionHistoryScreen> {
       ),
       child: Row(
         children: [
-          Icon(icon, size: 14, color: textColorSub),
+          Icon(icon, size: 14, color: effectiveColor),
           const SizedBox(width: 6),
           Text(
             label,
-            style: GoogleFonts.outfit(fontSize: 11, color: textColorSub),
+            style: GoogleFonts.outfit(fontSize: 11, color: effectiveColor, fontWeight: FontWeight.bold),
           ),
         ],
       ),

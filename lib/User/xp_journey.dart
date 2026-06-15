@@ -75,7 +75,7 @@ class _XPJourneyScreenState extends State<XPJourneyScreen> {
         setState(() {
           _xp = (data['xp'] ?? 0) as int;
           _level = (data['level'] ?? 1) as int;
-          _streak = (data['streak_days'] ?? 0) as int;
+          _streak = GamificationService.getRealStreak(data);
           _coins = (data['coins'] ?? 0) as int;
           _earnedBadgeIds = List<dynamic>.from(data['badges'] ?? []);
           _redeemedRewardIds = List<dynamic>.from(data['redeemed_rewards'] ?? []);
@@ -393,7 +393,7 @@ class _XPJourneyScreenState extends State<XPJourneyScreen> {
               Container(width: 1, height: 30, color: Colors.grey[200]),
               _buildStatItem('$streak🔥', 'Streak'),
               Container(width: 1, height: 30, color: Colors.grey[200]),
-              _buildStatItem('$coins🪙', 'Coins'),
+              _buildStatItem('$coins', 'Coins', icon: Icons.monetization_on_rounded, iconColor: const Color(0xFFB58A3D)),
             ],
           ),
         ],
@@ -401,16 +401,25 @@ class _XPJourneyScreenState extends State<XPJourneyScreen> {
     );
   }
 
-  Widget _buildStatItem(String val, String label) {
+  Widget _buildStatItem(String val, String label, {IconData? icon, Color? iconColor}) {
     return Column(
       children: [
-        Text(
-          val,
-          style: GoogleFonts.outfit(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-            color: const Color(0xFF333333),
-          ),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (icon != null) ...[
+              Icon(icon, color: iconColor ?? Colors.grey, size: 14),
+              const SizedBox(width: 2),
+            ],
+            Text(
+              val,
+              style: GoogleFonts.outfit(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: const Color(0xFF333333),
+              ),
+            ),
+          ]
         ),
         Text(
           label,
@@ -566,7 +575,10 @@ class _XPJourneyScreenState extends State<XPJourneyScreen> {
         : (isWeekly ? Colors.orange : primaryGreen);
 
     return InkWell(
-      onTap: () => _showTaskHistory(task),
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const DailyTasksScreen(initialTab: 0)),
+      ),
       borderRadius: BorderRadius.circular(16),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0),

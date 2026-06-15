@@ -2,6 +2,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class SessionHistoryScreen extends StatefulWidget {
   const SessionHistoryScreen({super.key});
@@ -19,96 +21,7 @@ class _SessionHistoryScreenState extends State<SessionHistoryScreen> {
   String _searchQuery = "";
   DateTimeRange? _dateRange;
 
-  // Mocked History Data
-  final List<Map<String, dynamic>> _mockHistory = [
-    {
-      'id': 'h1',
-      'patientName': 'Sarah Johnson',
-      'date': '20 Mar 2026',
-      'dateTime': DateTime(2026, 3, 20, 10, 0),
-      'timeRange': '10:00 AM - 11:00 AM',
-      'type': 'Deep Dive Session',
-      'status': 'Completed',
-      'notes': 'Sarah showed significant improvement in her mood tracking. We focused on cognitive reframing today.',
-      'feedback': {
-        'rating': 5,
-        'comment': 'I felt very heard and supported. The exercises we did together were really eye-opening. Best session so far!',
-        'date': '20 Mar 2026'
-      }
-    },
-    {
-      'id': 'h2',
-      'patientName': 'Michael Chen',
-      'date': '18 Mar 2026',
-      'dateTime': DateTime(2026, 3, 18, 14, 30),
-      'timeRange': '02:30 PM - 03:30 PM',
-      'type': 'Crisis Support',
-      'status': 'Completed',
-      'notes': 'Emergency session due to work-related stress. Developed a 48-hour safety and stabilization plan.',
-      'feedback': {
-        'rating': 4,
-        'comment': 'Thank you for squeezing me in. Feeling much more grounded now.',
-        'date': '18 Mar 2026'
-      }
-    },
-    {
-      'id': 'h3',
-      'patientName': 'Emily Davis',
-      'date': '15 Mar 2026',
-      'dateTime': DateTime(2026, 3, 15, 09, 0),
-      'timeRange': '09:00 AM - 10:00 AM',
-      'type': 'Routine Check-in',
-      'status': 'Completed',
-      'notes': 'Discussion on sleep hygiene and morning routines. Client is struggling slightly with consistency.',
-      'feedback': null, // No feedback yet
-    },
-    {
-      'id': 'h4',
-      'patientName': 'Sarah Johnson',
-      'date': '10 Mar 2026',
-      'dateTime': DateTime(2026, 3, 10, 10, 0),
-      'timeRange': '10:00 AM - 11:00 AM',
-      'type': 'Introductory Session',
-      'status': 'Completed',
-      'notes': 'Initial intake. Identified core goals around anxiety reduction and better communication at home.',
-      'feedback': {
-        'rating': 5,
-        'comment': 'Great first impression. Looking forward to our journey together.',
-        'date': '10 Mar 2026'
-      }
-    },
-    {
-      'id': 'h5',
-      'patientName': 'David Wilson',
-      'date': '05 Mar 2026',
-      'dateTime': DateTime(2026, 3, 5, 16, 0),
-      'timeRange': '04:00 PM - 05:00 PM',
-      'type': 'Grief Counseling',
-      'status': 'Completed',
-      'notes': 'Explored the "stages of grief" framework. Client shared a lot of personal memories today.',
-      'feedback': {
-        'rating': 5,
-        'comment': 'Very empathetic listener. Highly recommend.',
-        'date': '06 Mar 2026'
-      }
-    },
-  ];
-
-  List<Map<String, dynamic>> get _filteredHistory {
-    return _mockHistory.where((item) {
-      final matchesSearch = item['patientName'].toLowerCase().contains(_searchQuery.toLowerCase()) ||
-          item['type'].toLowerCase().contains(_searchQuery.toLowerCase());
-      
-      bool matchesDate = true;
-      if (_dateRange != null) {
-        matchesDate = item['dateTime'].isAfter(_dateRange!.start.subtract(const Duration(days: 1))) &&
-            item['dateTime'].isBefore(_dateRange!.end.add(const Duration(days: 1)));
-      }
-
-      return matchesSearch && matchesDate;
-    }).toList()
-      ..sort((a, b) => b['dateTime'].compareTo(a['dateTime']));
-  }
+  // Real data is fetched via StreamBuilder
 
   @override
   Widget build(BuildContext context) {
@@ -210,16 +123,94 @@ class _SessionHistoryScreenState extends State<SessionHistoryScreen> {
 
           // List of History Items
           Expanded(
-            child: _filteredHistory.isEmpty 
-              ? Center(child: Text('No history found.', style: GoogleFonts.outfit(color: textColorSub)))
-              : ListView.builder(
+            child: StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance
+                  .collection('counsellor_bookings')
+                  .where('counsellorId', isEqualTo: FirebaseAuth.instance.currentUser?.uid)
+                  .where('status', isEqualTo: 'completed')
+                  .snapshots(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator(color: Color(0xFF7C9C84)));
+                }
+
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  return _buildEmptyState();
+                }
+
+                List<Map<String, dynamic>> filteredHistory = snapshot.data!.docs.map((doc) {
+                  final data = doc.data() as Map<String, dynamic>;
+                  final startTime = data['startTime'] != null ? (data['startTime'] as Timestamp).toDate() : DateTime.now();
+                  
+                  return {
+                    'id': doc.id,
+                    'patientName': data['patientName'] ?? data['userName'] ?? 'Unknown Patient',
+                    'date': DateFormat('dd MMM yyyy').format(startTime),
+                    'dateTime': startTime,
+                    'timeRange': data['timeRange'] ?? DateFormat('hh:mm a').format(startTime),
+                    'type': data['type'] ?? 'Session',
+                    'status': data['status'] ?? 'Completed',
+                    'notes': data['notes'],
+                    'feedback': data['feedback'],
+                  };
+                }).where((item) {
+                  final matchesSearch = (item['patientName'] as String).toLowerCase().contains(_searchQuery.toLowerCase()) ||
+                      (item['type'] as String).toLowerCase().contains(_searchQuery.toLowerCase());
+                  
+                  bool matchesDate = true;
+                  if (_dateRange != null) {
+                    final dateTime = item['dateTime'] as DateTime;
+                    matchesDate = dateTime.isAfter(_dateRange!.start.subtract(const Duration(days: 1))) &&
+                        dateTime.isBefore(_dateRange!.end.add(const Duration(days: 1)));
+                  }
+
+                  return matchesSearch && matchesDate;
+                }).toList()
+                  ..sort((a, b) => (b['dateTime'] as DateTime).compareTo(a['dateTime'] as DateTime));
+
+                if (filteredHistory.isEmpty) {
+                  return _buildEmptyState();
+                }
+
+                return ListView.builder(
                   padding: const EdgeInsets.all(24),
-                  itemCount: _filteredHistory.length,
+                  itemCount: filteredHistory.length,
                   itemBuilder: (context, index) {
-                    final item = _filteredHistory[index];
+                    final item = filteredHistory[index];
                     return _buildHistoryCard(item);
                   },
-                ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.history_rounded, size: 48, color: primaryGreen.withOpacity(0.5)),
+          const SizedBox(height: 16),
+          Text(
+            'No history found.',
+            style: GoogleFonts.playfairDisplay(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: textColorMain,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Try adjusting your filters or date range.',
+            style: GoogleFonts.outfit(
+              fontSize: 14,
+              color: textColorSub,
+            ),
+            textAlign: TextAlign.center,
           ),
         ],
       ),

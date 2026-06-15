@@ -10,11 +10,13 @@ import 'edit_profile.dart';
 import 'settings.dart';
 import 'apply_counsellor.dart';
 import 'session_history.dart';
+import 'payment_history.dart';
 import 'detailed_history_screen.dart';
 import 'user_analytics.dart';
 import 'xp_journey.dart';
 import 'reward_store.dart';
 import '../services/gamification_service.dart';
+import 'mood_trend.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -121,7 +123,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                   if (snapshot.hasData && snapshot.data!.exists) {
                     final data = snapshot.data!.data() as Map<String, dynamic>? ?? {};
-                    name = data['fullName'] ?? currentUser?.displayName ?? currentUser?.email ?? 'User';
+                    String? nickname = data['nickname'] as String?;
+                    if (nickname != null && nickname.trim().isNotEmpty) {
+                      name = nickname;
+                    } else {
+                      name = data['fullName'] ?? currentUser?.displayName ?? currentUser?.email ?? 'User';
+                    }
                     profileImageUrl = data['profileImageUrl'];
                     followersList = List<String>.from(data['followers'] ?? []);
                     followingList = List<String>.from(data['following'] ?? []);
@@ -398,17 +405,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               child: Column(
                 children: [
-                   _buildListTile(Icons.calendar_month_outlined, 'Session History', 'View your past sessions', false, () {
+                  _buildListTile(Icons.calendar_month_outlined, 'Session History', 'View your past sessions', false, () {
                     Navigator.push(
                       context,
                       MaterialPageRoute(builder: (context) => const SessionHistoryScreen()),
                     );
                   }),
                   const Divider(height: 1, indent: 60),
-                  _buildListTile(Icons.history_rounded, 'Detailed Journey Timeline', 'Track all your activities', false, () {
+                  _buildListTile(Icons.receipt_long_outlined, 'Payment History', 'View your past transactions', false, () {
                     Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (context) => const DetailedHistoryScreen()),
+                      MaterialPageRoute(builder: (context) => const PaymentHistoryScreen()),
+                    );
+                  }),
+                  const Divider(height: 1, indent: 60),
+                  _buildListTile(Icons.auto_graph_rounded, 'Mood & Streak Calendar', 'Visualize your emotional trends', false, () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const MoodTrendScreen()),
                     );
                   }),
                 ],
@@ -513,7 +527,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               width: double.infinity,
               height: 56,
               child: OutlinedButton.icon(
-                onPressed: _isLoggingOut ? null : _signOut,
+                onPressed: _isLoggingOut ? null : () => _showLogoutDialog(context),
                 icon: const Icon(Icons.logout_rounded, color: Color(0xFFFF8A8A)),
                 label: Text(
                   'Log Out',
@@ -532,7 +546,59 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: 100),
+            const SizedBox(height: 32),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showLogoutDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(32)),
+        contentPadding: const EdgeInsets.all(32),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.logout_rounded, color: Color(0xFFFF8A8A), size: 64),
+            const SizedBox(height: 24),
+            Text('Log Out?', style: GoogleFonts.playfairDisplay(fontSize: 24, fontWeight: FontWeight.bold, color: const Color(0xFF333333))),
+            const SizedBox(height: 16),
+            Text(
+              'Are you sure you want to log out of your account?',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.outfit(color: Colors.grey[600], height: 1.5),
+            ),
+            const SizedBox(height: 32),
+            Row(
+              children: [
+                Expanded(
+                  child: TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: Text('Cancel', style: GoogleFonts.outfit(color: Colors.grey[600], fontWeight: FontWeight.bold)),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _signOut();
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFFF8A8A),
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                    ),
+                    child: Text('Log Out', style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       ),
@@ -638,12 +704,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _showVouchersBottomSheet(BuildContext context) {
-    final List<Map<String, dynamic>> vouchers = [
-      {'title': '10% Off Therapy', 'desc': 'Valid for any counseling session', 'expiry': 'Ends 12 May 2024', 'icon': Icons.local_offer_rounded, 'color': const Color(0xFF7C9C84)},
-      {'title': '1 Month Premium', 'desc': 'Unlock all meditation paths', 'expiry': 'Ends 20 Jun 2024', 'icon': Icons.star_rounded, 'color': const Color(0xFFFFA000)},
-      {'title': 'Free Intro Session', 'desc': 'Complimentary 15-min chat', 'expiry': 'Ends 30 Apr 2024', 'icon': Icons.hearing_rounded, 'color': const Color(0xFF9C4DCC)},
-    ];
-
+    if (currentUser == null) return;
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -662,50 +723,87 @@ class _ProfileScreenState extends State<ProfileScreen> {
             Text('MY VOUCHERS', style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 2, color: Colors.grey)),
             const SizedBox(height: 24),
             Expanded(
-              child: ListView.builder(
-                itemCount: vouchers.length,
-                itemBuilder: (context, index) {
-                  final v = vouchers[index];
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 20),
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(24),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(color: (v['color'] as Color).withOpacity(0.1), borderRadius: BorderRadius.circular(16)),
-                          child: Icon(v['icon'] as IconData, color: v['color'] as Color, size: 28),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(v['title'], style: GoogleFonts.playfairDisplay(fontSize: 18, fontWeight: FontWeight.bold)),
-                              Text(v['desc'], style: GoogleFonts.outfit(fontSize: 12, color: Colors.grey)),
-                              const SizedBox(height: 8),
-                              Text(v['expiry'], style: GoogleFonts.outfit(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey[400])),
-                            ],
+              child: StreamBuilder<DocumentSnapshot>(
+                stream: FirebaseFirestore.instance.collection('users').doc(currentUser!.uid).snapshots(),
+                builder: (context, userSnapshot) {
+                  if (userSnapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator(color: Color(0xFF7C9C84)));
+                  }
+                  final voucherIds = List<String>.from((userSnapshot.data?.data() as Map<String, dynamic>?)?['redeemed_rewards'] ?? []);
+                  
+                  if (voucherIds.isEmpty) {
+                    return Center(
+                      child: Text(
+                        'You have not claimed any vouchers yet.',
+                        style: GoogleFonts.outfit(color: Colors.grey[600]),
+                      ),
+                    );
+                  }
+
+                  return StreamBuilder<QuerySnapshot>(
+                    stream: FirebaseFirestore.instance
+                        .collection('rewards')
+                        .where(FieldPath.documentId, whereIn: voucherIds)
+                        .snapshots(),
+                    builder: (context, rewardsSnapshot) {
+                      if (rewardsSnapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator(color: Color(0xFF7C9C84)));
+                      }
+
+                      final vouchers = rewardsSnapshot.data?.docs.where((d) {
+                        final data = d.data() as Map<String, dynamic>;
+                        return data['category']?.toString().toLowerCase().contains('voucher') == true;
+                      }).toList() ?? [];
+
+                      if (vouchers.isEmpty) {
+                        return Center(
+                          child: Text(
+                            'No vouchers available.',
+                            style: GoogleFonts.outfit(color: Colors.grey[600]),
                           ),
-                        ),
-                        ElevatedButton(
-                          onPressed: () {},
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: v['color'] as Color,
-                            foregroundColor: Colors.white,
-                            elevation: 0,
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                            minimumSize: Size.zero,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                          child: Text('USE', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 12)),
-                        ),
-                      ],
-                    ),
+                        );
+                      }
+
+                      return ListView.builder(
+                        itemCount: vouchers.length,
+                        itemBuilder: (context, index) {
+                          final v = vouchers[index].data() as Map<String, dynamic>;
+                          final title = v['name'] ?? 'Discount Voucher';
+                          final desc = v['description'] ?? 'Valid for counseling sessions';
+                          
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 20),
+                            padding: const EdgeInsets.all(20),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(24),
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF7C9C84).withOpacity(0.1), 
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                  child: const Icon(Icons.local_offer_rounded, color: Color(0xFF7C9C84), size: 28),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(title, style: GoogleFonts.playfairDisplay(fontSize: 18, fontWeight: FontWeight.bold)),
+                                      Text(desc, style: GoogleFonts.outfit(fontSize: 12, color: Colors.grey)),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      );
+                    },
                   );
                 },
               ),
@@ -829,7 +927,10 @@ class _FollowListBottomSheetState extends State<_FollowListBottomSheet> {
                           return const SizedBox(height: 70, child: Center(child: CircularProgressIndicator(strokeWidth: 2)));
                         }
 
-                        final name = userData['fullName'] ?? 'User';
+                        final nickname = userData['nickname']?.toString().trim();
+                        final name = (nickname != null && nickname.isNotEmpty)
+                            ? nickname
+                            : (userData['fullName'] ?? 'User');
                         final email = userData['email'] ?? '';
                         final profileImageUrl = userData['profileImageUrl'];
                         final isFollowing = currentUserFollowing.contains(uid);
@@ -870,7 +971,6 @@ class _FollowListBottomSheetState extends State<_FollowListBottomSheet> {
 
         return GestureDetector(
           onTap: () {
-            Navigator.pop(context);
             Navigator.push(
               context,
               MaterialPageRoute(
@@ -924,7 +1024,21 @@ class _FollowListBottomSheetState extends State<_FollowListBottomSheet> {
                     ],
                   ),
                 ),
-                Icon(Icons.arrow_forward_ios_rounded, color: Colors.grey[300], size: 16),
+                if (isFollowing)
+                  IconButton(
+                    icon: const Icon(Icons.person_remove_rounded, color: Color(0xFFE57373), size: 20),
+                    onPressed: () {
+                      _handleRequestAction(
+                        context,
+                        FirebaseAuth.instance.currentUser!.uid,
+                        uid,
+                        isFollowing,
+                        isRequested,
+                      );
+                    },
+                  )
+                else
+                  Icon(Icons.arrow_forward_ios_rounded, color: Colors.grey[300], size: 16),
               ],
             ),
           ),

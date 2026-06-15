@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-
+import 'package:flutter_html/flutter_html.dart';
+import 'package:share_plus/share_plus.dart';
 class ArticleDetailScreen extends StatefulWidget {
   final String title;
   final String subtitle;
@@ -42,6 +43,7 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
   double _progress = 0.0;
   bool _isRecordDone = false;
   late bool _isFavorite;
+  int _userRating = 0;
 
   @override
   void initState() {
@@ -240,15 +242,30 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
                                     style: GoogleFonts.outfit(fontSize: 16, color: textColorSub, height: 1.5),
                                   ),
                                   const SizedBox(height: 32),
-                                  Text(
-                                    widget.content,
-                                    style: GoogleFonts.outfit(fontSize: 18, color: textColorMain, height: 1.8),
+                                  Html(
+                                    data: widget.content,
+                                    style: {
+                                      "body": Style(
+                                        fontFamily: 'Outfit',
+                                        fontSize: FontSize(18.0),
+                                        color: textColorMain,
+                                        lineHeight: LineHeight(1.8),
+                                        margin: Margins.zero,
+                                        padding: HtmlPaddings.zero,
+                                      ),
+                                      "h1": Style(fontSize: FontSize(26.0), fontWeight: FontWeight.bold),
+                                      "h2": Style(fontSize: FontSize(24.0), fontWeight: FontWeight.bold),
+                                      "h3": Style(fontSize: FontSize(20.0), fontWeight: FontWeight.bold, margin: Margins.only(top: 16, bottom: 8)),
+                                      "p": Style(margin: Margins.only(bottom: 12)),
+                                    },
                                   ),
                                 ],
                               ),
                             ),
 
                             const SizedBox(height: 48),
+                            _buildRatingSection(),
+                            const SizedBox(height: 32),
                             // Interaction Buttons
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -266,7 +283,9 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
                                   icon: Icons.share_outlined,
                                   label: 'SHARE',
                                   color: textColorMain,
-                                  onTap: () {},
+                                  onTap: () {
+                                    Share.share('Check out this article on Eunoia: ${widget.title}');
+                                  },
                                 ),
                               ],
                             ),
@@ -298,6 +317,50 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
           Text(label, style: GoogleFonts.outfit(fontSize: 10, fontWeight: FontWeight.bold, color: color)),
         ],
       ),
+    );
+  }
+
+  Widget _buildRatingSection() {
+    return Column(
+      children: [
+        Text(
+          'How was this article?',
+          style: GoogleFonts.outfit(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: const Color(0xFF333333),
+          ),
+        ),
+        const SizedBox(height: 16),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: List.generate(5, (index) {
+            return GestureDetector(
+              onTap: () {
+                setState(() {
+                  _userRating = index + 1;
+                });
+                
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Thank you for rating $_userRating stars!'),
+                    backgroundColor: const Color(0xFF7C9C84),
+                    duration: const Duration(seconds: 2),
+                  ),
+                );
+              },
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                child: Icon(
+                  index < _userRating ? Icons.star_rounded : Icons.star_border_rounded,
+                  color: const Color(0xFFEAB308), // Gold color
+                  size: 32,
+                ),
+              ),
+            );
+          }),
+        ),
+      ],
     );
   }
 }

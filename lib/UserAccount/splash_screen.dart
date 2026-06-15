@@ -90,9 +90,7 @@ class _SplashTransitionScreenState extends State<SplashTransitionScreen> with Si
               child: ScaleTransition(
                 scale: _scaleAnimation,
                 child: Container(
-                  padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
-                    color: Colors.white,
                     shape: BoxShape.circle,
                     boxShadow: [
                       BoxShadow(
@@ -102,10 +100,13 @@ class _SplashTransitionScreenState extends State<SplashTransitionScreen> with Si
                       ),
                     ],
                   ),
-                  child: const Icon(
-                    Icons.eco_rounded,
-                    size: 80,
-                    color: primaryGreen,
+                  child: ClipOval(
+                    child: Image.asset(
+                      'assets/leaf.png',
+                      width: 128,
+                      height: 128,
+                      fit: BoxFit.cover,
+                    ),
                   ),
                 ),
               ),

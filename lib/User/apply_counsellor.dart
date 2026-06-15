@@ -15,7 +15,7 @@ class ApplyCounsellorScreen extends StatefulWidget {
 
 class _ApplyCounsellorScreenState extends State<ApplyCounsellorScreen> {
   final Color primaryGreen = const Color(0xFF7C9C84);
-  final Color backgroundColor = const Color(0xFFF2F1EC);
+  final Color backgroundColor = const Color(0xFFFBFBF6);
   final Color textColorMain = const Color(0xFF333333);
 
   final _formKey = GlobalKey<FormState>();
@@ -24,30 +24,38 @@ class _ApplyCounsellorScreenState extends State<ApplyCounsellorScreen> {
   bool _isLoadingStatus = true;
   String? _statusError;
 
+  // Personal Information
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
+  File? _profilePhotoFile;
+
+  // Professional Information
   final List<String> _selectedSpecializations = [];
   final List<String> _selectedLanguages = [];
+  String? _selectedExperience;
+  final TextEditingController _bioController = TextEditingController();
+  final TextEditingController _priceController = TextEditingController();
+  bool _isFreeSession = false;
+
+  // Verification Documents
   File? _certificateFile;
-  final TextEditingController _experienceController = TextEditingController();
-  final TextEditingController _licenseController = TextEditingController();
-  final TextEditingController _motivationController = TextEditingController();
+
+  // Availability
+  final List<String> _selectedDays = [];
+  final List<String> _selectedTimeSlots = [];
 
   final List<String> _specializations = [
-    'Cognitive Behavioral Therapy (CBT)',
-    'Mindfulness & Meditation',
-    'Grief & Trauma Counseling',
-    'Stress & Anxiety Management',
-    'Relationship & Family Therapy',
-    'Life Coaching',
+    'Anxiety & Stress', 'Depression', 'Relationship Issues', 
+    'Trauma & PTSD', 'Career Counseling', 'Addiction Recovery',
+    'OCD', 'Grief & Loss', 'Eating Disorders'
   ];
 
-  final List<String> _languages = [
-    'English',
-    'Malay',
-    'Mandarin',
-    'Tamil',
-    'Cantonese',
-    'Hokkien',
-  ];
+  final List<String> _languageOptions = ['English', 'Malay', 'Mandarin', 'Cantonese', 'Tamil', 'Hokkien'];
+  final List<String> _experienceOptions = ['1-2 Years', '3-5 Years', '5-10 Years', '10+ Years', '15+ Years'];
+
+  final List<String> _daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+  final List<String> _shifts = ['Morning (9 AM - 12 PM)', 'Afternoon (1 PM - 5 PM)', 'Evening (6 PM - 9 PM)'];
 
   @override
   void initState() {
@@ -66,6 +74,9 @@ class _ApplyCounsellorScreenState extends State<ApplyCounsellorScreen> {
       }
       return;
     }
+
+    _nameController.text = user.displayName ?? '';
+    _emailController.text = user.email ?? '';
 
     try {
       final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
@@ -110,84 +121,118 @@ class _ApplyCounsellorScreenState extends State<ApplyCounsellorScreen> {
 
   @override
   void dispose() {
-    _experienceController.dispose();
-    _licenseController.dispose();
-    _motivationController.dispose();
+    _nameController.dispose();
+    _emailController.dispose();
+    _phoneController.dispose();
+    _bioController.dispose();
+    _priceController.dispose();
     super.dispose();
   }
 
-  Future<void> _pickCertificate() async {
+  Future<void> _pickFile(Function(File) onPicked) async {
     final ImagePicker picker = ImagePicker();
     final XFile? image = await picker.pickImage(source: ImageSource.gallery);
     if (image != null) {
-      setState(() => _certificateFile = File(image.path));
+      setState(() => onPicked(File(image.path)));
     }
   }
 
   bool _validateStep() {
     if (_activeStep == 0) {
-      if (_selectedSpecializations.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please select at least one specialization')),
-        );
-        return false;
-      }
-      if (_selectedLanguages.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please select at least one language preference')),
-        );
-        return false;
-      }
-      if (_experienceController.text.isEmpty || _licenseController.text.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please fill in all professional details')),
-        );
+      if (!_formKey.currentState!.validate()) return false;
+      if (_profilePhotoFile == null) {
+        _showError('Please upload a profile photo');
         return false;
       }
     } else if (_activeStep == 1) {
+      if (!_formKey.currentState!.validate()) return false;
+      if (_selectedSpecializations.isEmpty) {
+        _showError('Please select at least one specialization');
+        return false;
+      }
+      if (_selectedLanguages.isEmpty) {
+        _showError('Please select at least one language');
+        return false;
+      }
+      if (_selectedExperience == null) {
+        _showError('Please select your experience level');
+        return false;
+      }
+      if (!_isFreeSession && _priceController.text.trim().isEmpty) {
+        _showError('Please set your session price');
+        return false;
+      }
+    } else if (_activeStep == 2) {
       if (_certificateFile == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please upload your professional certificate')),
-        );
+        _showError('Please upload your professional certificate');
+        return false;
+      }
+    } else if (_activeStep == 3) {
+      if (_selectedDays.isEmpty) {
+        _showError('Please select available days');
+        return false;
+      }
+      if (_selectedTimeSlots.isEmpty) {
+        _showError('Please select available time slots');
         return false;
       }
     }
     return true;
   }
 
+  void _showError(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.error_outline, color: Colors.white),
+            const SizedBox(width: 12),
+            Expanded(child: Text(msg, style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.w500))),
+          ],
+        ),
+        backgroundColor: Colors.red[600],
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(20),
+      )
+    );
+  }
+
+  Future<String?> _uploadFile(File? file, String path) async {
+    if (file == null) return null;
+    final storageRef = FirebaseStorage.instance.ref().child(path);
+    final uploadTask = await storageRef.putFile(file);
+    return await uploadTask.ref.getDownloadURL();
+  }
+
   Future<void> _submitFinalApplication() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!_validateStep()) return;
     
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
-    if (_motivationController.text.length < 50) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please provide a more detailed motivation (min 50 chars)')),
-      );
-      return;
-    }
-
     setState(() => _isSubmitting = true);
 
     try {
-      final storageRef = FirebaseStorage.instance
-          .ref()
-          .child('counsellor_applications/certificates/${user.uid}_${DateTime.now().millisecondsSinceEpoch}.jpg');
-
-      final uploadTask = await storageRef.putFile(_certificateFile!);
-      final certificateUrl = await uploadTask.ref.getDownloadURL();
+      final String basePath = 'counsellor_applications/${user.uid}';
+      
+      final profileUrl = await _uploadFile(_profilePhotoFile, '$basePath/profile.jpg');
+      final certUrl = await _uploadFile(_certificateFile, '$basePath/certificate.jpg');
 
       await FirebaseFirestore.instance.collection('counsellor_applications').doc(user.uid).set({
         'uid': user.uid,
-        'name': user.displayName ?? 'Anonymous User',
-        'email': user.email,
+        'name': _nameController.text.trim(),
+        'email': _emailController.text.trim(),
+        'phone': _phoneController.text.trim(),
         'specializations': _selectedSpecializations,
         'languages': _selectedLanguages,
-        'experience': _experienceController.text.trim(),
-        'licenseNumber': _licenseController.text.trim(),
-        'certificateUrl': certificateUrl,
-        'motivation': _motivationController.text.trim(),
+        'experience': _selectedExperience,
+        'price': _isFreeSession ? 'Free' : _priceController.text.trim(),
+        'bio': _bioController.text.trim(),
+        'availableDays': _selectedDays,
+        'availableTimeSlots': _selectedTimeSlots,
+        'profilePhotoUrl': profileUrl,
+        'certificateUrl': certUrl,
         'status': 'pending',
         'submittedAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
@@ -195,18 +240,16 @@ class _ApplyCounsellorScreenState extends State<ApplyCounsellorScreen> {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Application submitted successfully!'),
-            backgroundColor: Color(0xFF7C9C84),
+          SnackBar(
+            content: const Text('Application submitted successfully!'),
+            backgroundColor: primaryGreen,
           ),
         );
         Navigator.pop(context);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Submission failed: $e')),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Submission failed: $e')));
       }
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
@@ -217,28 +260,34 @@ class _ApplyCounsellorScreenState extends State<ApplyCounsellorScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: backgroundColor,
-      body: _isLoadingStatus
-          ? Center(child: CircularProgressIndicator(color: primaryGreen))
-          : _statusError != null
-          ? _buildErrorPlaceholder()
-          : SafeArea(
+      body: SafeArea(
         child: Column(
           children: [
             _buildAppBar(),
-            _buildProgressIndicator(),
             Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(24),
-                child: Form(
-                  key: _formKey,
-                  child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 300),
-                    child: _buildCurrentStepView(),
-                  ),
-                ),
-              ),
+              child: _isLoadingStatus
+                  ? Center(child: CircularProgressIndicator(color: primaryGreen))
+                  : _statusError != null
+                      ? _buildErrorPlaceholder()
+                      : Column(
+                          children: [
+                            _buildProgressIndicator(),
+                            Expanded(
+                              child: SingleChildScrollView(
+                                padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+                                child: Form(
+                                  key: _formKey,
+                                  child: AnimatedSwitcher(
+                                    duration: const Duration(milliseconds: 300),
+                                    child: _buildCurrentStepView(),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            _buildBottomNav(),
+                          ],
+                        ),
             ),
-            _buildBottomNav(),
           ],
         ),
       ),
@@ -252,15 +301,22 @@ class _ApplyCounsellorScreenState extends State<ApplyCounsellorScreen> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           IconButton(
-            onPressed: () => Navigator.pop(context),
-            icon: const Icon(Icons.close_rounded, color: Color(0xFF333333)),
+            onPressed: () {
+              if (_activeStep > 0) {
+                setState(() => _activeStep--);
+              } else {
+                Navigator.pop(context);
+              }
+            },
+            icon: Icon(Icons.arrow_back, color: textColorMain),
           ),
           Text(
-            'Application Form',
+            'PROFESSIONAL REGISTRATION',
             style: GoogleFonts.outfit(
               color: textColorMain,
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1.2,
             ),
           ),
           const SizedBox(width: 48),
@@ -271,14 +327,16 @@ class _ApplyCounsellorScreenState extends State<ApplyCounsellorScreen> {
 
   Widget _buildProgressIndicator() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
       child: Row(
         children: [
-          _buildStepDot(0, 'Credentials'),
+          _buildStepDot(0, 'Personal'),
           _buildStepLine(0),
-          _buildStepDot(1, 'Verification'),
+          _buildStepDot(1, 'Professional'),
           _buildStepLine(1),
-          _buildStepDot(2, 'Motivation'),
+          _buildStepDot(2, 'Verification'),
+          _buildStepLine(2),
+          _buildStepDot(3, 'Availability'),
         ],
       ),
     );
@@ -322,7 +380,7 @@ class _ApplyCounsellorScreenState extends State<ApplyCounsellorScreen> {
   Widget _buildStepLine(int step) {
     bool isActive = _activeStep > step;
     return Container(
-      width: 30,
+      width: 15,
       height: 2,
       margin: const EdgeInsets.only(bottom: 18),
       color: isActive ? primaryGreen : Colors.grey[300],
@@ -331,36 +389,144 @@ class _ApplyCounsellorScreenState extends State<ApplyCounsellorScreen> {
 
   Widget _buildCurrentStepView() {
     switch (_activeStep) {
-      case 0:
-        return _buildCredentialsStep();
-      case 1:
-        return _buildVerificationStep();
-      case 2:
-        return _buildMotivationStep();
-      default:
-        return const SizedBox();
+      case 0: return _buildPersonalStep();
+      case 1: return _buildProfessionalStep();
+      case 2: return _buildVerificationStep();
+      case 3: return _buildAvailabilityStep();
+      default: return const SizedBox();
     }
   }
 
-  Widget _buildCredentialsStep() {
+  Widget _buildPersonalStep() {
     return Column(
       key: const ValueKey(0),
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildStepHeader('Clinical Specializations', 'Select your main areas of expertise.'),
-        const SizedBox(height: 16),
-        _buildChipGroup(_specializations, _selectedSpecializations),
-        const SizedBox(height: 32),
-        _buildStepHeader('Language Preferences', 'What languages can you conduct sessions in?'),
-        const SizedBox(height: 16),
-        _buildChipGroup(_languages, _selectedLanguages),
-        const SizedBox(height: 32),
-        _buildStepHeader('Work Experience', 'Your professional background.'),
-        const SizedBox(height: 16),
-        _buildTextField('Years of Practice', Icons.history_edu, _experienceController, keyboardType: TextInputType.number),
-        const SizedBox(height: 16),
-        _buildTextField('Clinical License / ID', Icons.badge_outlined, _licenseController),
+        _buildSectionCard('Personal Information', Icons.person_outline, Column(
+          children: [
+            Center(
+              child: GestureDetector(
+                onTap: () => _pickFile((file) => _profilePhotoFile = file),
+                child: CircleAvatar(
+                  radius: 50,
+                  backgroundColor: primaryGreen.withOpacity(0.1),
+                  backgroundImage: _profilePhotoFile != null ? FileImage(_profilePhotoFile!) : null,
+                  child: _profilePhotoFile == null
+                      ? Icon(Icons.camera_alt_outlined, color: primaryGreen, size: 30)
+                      : null,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Center(child: Text('Profile Photo', style: GoogleFonts.outfit(fontSize: 12, color: Colors.grey[600]))),
+            const SizedBox(height: 24),
+            _buildTextField('Full Name', Icons.badge_outlined, _nameController),
+            const SizedBox(height: 16),
+            _buildTextField('Email Address', Icons.email_outlined, _emailController),
+            const SizedBox(height: 16),
+            _buildTextField('Phone Number', Icons.phone_outlined, _phoneController, keyboardType: TextInputType.phone, prefixText: '+60 '),
+          ]
+        )),
       ],
+    );
+  }
+
+  Widget _buildProfessionalStep() {
+    return Column(
+      key: const ValueKey(1),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionCard('Specializations', Icons.psychology_alt, _buildChipGroup(_specializations, _selectedSpecializations), subtext: 'Select all that apply to your professional practice.'),
+        _buildSectionCard('Languages Spoken', Icons.language, _buildChipGroup(_languageOptions, _selectedLanguages), subtext: 'Select languages you are proficient in.'),
+        _buildSectionCard('Years of Experience', Icons.calendar_today, _buildSingleChoiceChipGroup(_experienceOptions, _selectedExperience, (val) => setState(() => _selectedExperience = val))),
+        _buildSectionCard('Session Price', Icons.payments_outlined, Column(
+          children: [
+            SwitchListTile(
+              title: Text('Offer Free Sessions', style: GoogleFonts.outfit(fontSize: 14, color: textColorMain)),
+              value: _isFreeSession,
+              activeColor: primaryGreen,
+              contentPadding: EdgeInsets.zero,
+              onChanged: (bool value) {
+                setState(() {
+                  _isFreeSession = value;
+                  if (value) {
+                    _priceController.text = 'Free';
+                  } else {
+                    _priceController.text = '100'; // Default to 100 when toggled off
+                  }
+                });
+              },
+            ),
+            if (!_isFreeSession)
+              Row(
+                children: [
+                  Text('RM ', style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: primaryGreen)),
+                  Expanded(
+                    child: _buildTextField('Session price', null, _priceController, keyboardType: TextInputType.number),
+                  ),
+                  Text(' / hour', style: GoogleFonts.outfit(fontSize: 14, color: Colors.grey[500])),
+                ],
+              ),
+          ],
+        )),
+        _buildSectionCard('Professional Biography', Icons.edit_note, _buildLargeTextField('Share your background and therapeutic approach...', _bioController)),
+      ],
+    );
+  }
+
+  Widget _buildVerificationStep() {
+    return Column(
+      key: const ValueKey(2),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionCard('Professional Certificate', Icons.verified_user_outlined, _buildFileUploadUI(_certificateFile, (file) => _certificateFile = file, 'Upload Certificate')),
+        const SizedBox(height: 8),
+        _buildSecurityNotice(),
+      ],
+    );
+  }
+
+  Widget _buildAvailabilityStep() {
+    return Column(
+      key: const ValueKey(3),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionCard('Available Days', Icons.calendar_month_outlined, _buildChipGroup(_daysOfWeek, _selectedDays), subtext: 'Select the days you are typically available.'),
+        _buildSectionCard('Available Time Slots', Icons.schedule, _buildChipGroup(_shifts, _selectedTimeSlots), subtext: 'Select your preferred working shifts.'),
+      ],
+    );
+  }
+
+  Widget _buildFileUploadUI(File? file, Function(File) onUpdate, String placeholder) {
+    return GestureDetector(
+      onTap: () => _pickFile(onUpdate),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: file == null ? Colors.grey[300]! : primaryGreen, width: 2),
+        ),
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(color: primaryGreen.withOpacity(0.1), shape: BoxShape.circle),
+              child: Icon(file == null ? Icons.upload_file_rounded : Icons.file_copy_rounded, color: primaryGreen, size: 24),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              file == null ? placeholder : 'Document Selected',
+              style: GoogleFonts.outfit(fontSize: 14, color: Colors.grey[700]),
+            ),
+            if (file != null) ...[
+              const SizedBox(height: 8),
+              Text(file.path.split('/').last, style: GoogleFonts.outfit(fontSize: 11, color: Colors.grey), textAlign: TextAlign.center),
+            ]
+          ],
+        ),
+      ),
     );
   }
 
@@ -380,149 +546,99 @@ class _ApplyCounsellorScreenState extends State<ApplyCounsellorScreen> {
             });
           },
           backgroundColor: Colors.white,
-          selectedColor: primaryGreen.withOpacity(0.1),
+          selectedColor: Colors.white,
           checkmarkColor: primaryGreen,
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           labelStyle: GoogleFonts.outfit(
             fontSize: 13,
-            color: isSelected ? primaryGreen : textColorMain,
+            color: isSelected ? primaryGreen : Colors.grey[800],
             fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
           ),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-            side: BorderSide(color: isSelected ? primaryGreen : Colors.grey[200]!),
+            borderRadius: BorderRadius.circular(20),
+            side: BorderSide(color: isSelected ? primaryGreen : Colors.grey[300]!, width: isSelected ? 1.5 : 1),
           ),
         );
       }).toList(),
     );
   }
 
-  Widget _buildVerificationStep() {
-    return Column(
-      key: const ValueKey(1),
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildStepHeader('Document Verification', 'Upload proof of your clinical qualifications.'),
-        const SizedBox(height: 24),
-        GestureDetector(
-          onTap: _pickCertificate,
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: _certificateFile == null ? Colors.grey[200]! : primaryGreen.withOpacity(0.5), width: 2),
-            ),
-            child: Column(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(color: primaryGreen.withOpacity(0.1), shape: BoxShape.circle),
-                  child: Icon(_certificateFile == null ? Icons.cloud_upload_outlined : Icons.file_copy_rounded, color: primaryGreen, size: 32),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  _certificateFile == null ? 'Click to upload Certificate' : 'Certificate Selected',
-                  style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w600, color: textColorMain),
-                ),
-                if (_certificateFile != null) ...[
-                  const SizedBox(height: 8),
-                  Text(_certificateFile!.path.split('/').last, style: GoogleFonts.outfit(fontSize: 12, color: Colors.grey), textAlign: TextAlign.center),
-                ],
-              ],
-            ),
+  Widget _buildSingleChoiceChipGroup(List<String> options, String? selectedValue, Function(String) onSelected) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 10,
+      children: options.map((item) {
+        final isSelected = item == selectedValue;
+        return FilterChip(
+          label: Text(item),
+          selected: isSelected,
+          onSelected: (_) => onSelected(item),
+          backgroundColor: Colors.white,
+          selectedColor: Colors.white,
+          checkmarkColor: primaryGreen,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          labelStyle: GoogleFonts.outfit(
+            fontSize: 13,
+            color: isSelected ? primaryGreen : Colors.grey[800],
+            fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
           ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildMotivationStep() {
-    return Column(
-      key: const ValueKey(2),
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildStepHeader('Personal Statement', 'Tell our medical board about your vision and clinical approach.'),
-        const SizedBox(height: 20),
-        TextFormField(
-          controller: _motivationController,
-          maxLines: 8,
-          style: GoogleFonts.outfit(fontSize: 14),
-          decoration: InputDecoration(
-            hintText: 'Share your journey as a therapist...',
-            filled: true,
-            fillColor: Colors.white,
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none),
-            contentPadding: const EdgeInsets.all(24),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+            side: BorderSide(color: isSelected ? primaryGreen : Colors.grey[300]!, width: isSelected ? 1.5 : 1),
           ),
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Icon(Icons.info_outline, size: 14, color: Colors.grey[400]),
-            const SizedBox(width: 8),
-            Text('Minimum 50 characters required for clinical review.', style: GoogleFonts.outfit(fontSize: 11, color: Colors.grey[500])),
-          ],
-        ),
-      ],
+        );
+      }).toList(),
     );
   }
 
-  Widget _buildStepHeader(String title, String subtitle) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(title, style: GoogleFonts.playfairDisplay(fontSize: 24, fontWeight: FontWeight.bold, color: textColorMain)),
-        const SizedBox(height: 4),
-        Text(subtitle, style: GoogleFonts.outfit(fontSize: 14, color: Colors.grey[600])),
-      ],
-    );
-  }
-
-  Widget _buildBottomNav() {
+  Widget _buildSectionCard(String title, IconData icon, Widget child, {String? subtext}) {
     return Container(
-      padding: const EdgeInsets.all(24),
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 20, offset: const Offset(0, -5))],
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey[200]!),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: primaryGreen, size: 20),
+              const SizedBox(width: 10),
+              Text(title, style: GoogleFonts.playfairDisplay(fontSize: 20, fontWeight: FontWeight.w600, color: primaryGreen)),
+            ],
+          ),
+          const SizedBox(height: 20),
+          child,
+          if (subtext != null) ...[
+            const SizedBox(height: 16),
+            Text(subtext, style: GoogleFonts.outfit(fontSize: 11, color: Colors.grey[600])),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSecurityNotice() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: primaryGreen.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: primaryGreen.withOpacity(0.2)),
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (_activeStep > 0) ...[
-            Expanded(
-              flex: 1,
-              child: OutlinedButton(
-                onPressed: () => setState(() => _activeStep--),
-                style: OutlinedButton.styleFrom(
-                  side: BorderSide(color: Colors.grey[300]!),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                ),
-                child: Text('Previous', style: GoogleFonts.outfit(color: textColorMain, fontWeight: FontWeight.bold)),
-              ),
-            ),
-            const SizedBox(width: 16),
-          ],
+          Icon(Icons.shield_outlined, color: primaryGreen, size: 20),
+          const SizedBox(width: 12),
           Expanded(
-            flex: 2,
-            child: ElevatedButton(
-              onPressed: _isSubmitting ? null : () {
-                if (_activeStep < 2) {
-                  if (_validateStep()) setState(() => _activeStep++);
-                } else {
-                  _submitFinalApplication();
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: primaryGreen,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                elevation: 0,
-              ),
-              child: _isSubmitting
-                  ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                  : Text(_activeStep == 2 ? 'Submit Application' : 'Continue', style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold)),
+            child: Text(
+              'YOUR CREDENTIALS ARE ENCRYPTED AND STRICTLY USED FOR VERIFICATION PURPOSES. WE ADHERE TO HIPAA-COMPLIANT DATA HANDLING STANDARDS.',
+              style: GoogleFonts.outfit(fontSize: 10, fontWeight: FontWeight.bold, color: primaryGreen, letterSpacing: 0.5),
             ),
           ),
         ],
@@ -530,31 +646,171 @@ class _ApplyCounsellorScreenState extends State<ApplyCounsellorScreen> {
     );
   }
 
+  Widget _buildLargeTextField(String hint, TextEditingController controller) {
+    return TextFormField(
+      controller: controller,
+      maxLines: 5,
+      style: GoogleFonts.outfit(fontSize: 14),
+      validator: (value) => value == null || value.trim().length < 20 ? 'Minimum 20 characters required' : null,
+      decoration: InputDecoration(
+        hintText: hint,
+        hintStyle: GoogleFonts.outfit(color: Colors.grey[400], fontSize: 14),
+        filled: true,
+        fillColor: Colors.white,
+        errorStyle: GoogleFonts.outfit(color: Colors.red[400], fontWeight: FontWeight.w500),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: Colors.grey[200]!)),
+        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: Colors.grey[200]!)),
+        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: primaryGreen, width: 2)),
+        errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: Colors.red[300]!, width: 1.5)),
+        focusedErrorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: Colors.red[400]!, width: 2)),
+        contentPadding: const EdgeInsets.all(20),
+      ),
+    );
+  }
+
+  Widget _buildTextField(String label, IconData? icon, TextEditingController controller, {TextInputType? keyboardType, bool isOptional = false, String? prefixText}) {
+    return TextFormField(
+      controller: controller,
+      keyboardType: keyboardType,
+      style: GoogleFonts.outfit(fontSize: 14),
+      validator: (value) {
+        if (!isOptional && (value == null || value.trim().isEmpty)) return 'Required';
+        
+        if (value != null && value.trim().isNotEmpty) {
+          if (keyboardType == TextInputType.number) {
+            final number = int.tryParse(value.trim());
+            if (number == null || number < 0 || number > 60) return 'Invalid (0-60)';
+          }
+          if (keyboardType == TextInputType.phone) {
+            final phoneRegExp = RegExp(r'^[0-9]{9,10}$');
+            if (!phoneRegExp.hasMatch(value.trim())) return 'Invalid format';
+          }
+        }
+        return null;
+      },
+      decoration: InputDecoration(
+        labelText: icon != null ? (isOptional ? '$label (Optional)' : label) : null,
+        hintText: icon == null ? (isOptional ? '$label (Optional)' : label) : null,
+        labelStyle: GoogleFonts.outfit(color: Colors.grey[500], fontSize: 13),
+        hintStyle: GoogleFonts.outfit(color: Colors.grey[400], fontSize: 13),
+        prefixText: prefixText,
+        prefixStyle: GoogleFonts.outfit(color: textColorMain, fontSize: 14, fontWeight: FontWeight.bold),
+        prefixIcon: icon != null ? Icon(icon, color: primaryGreen, size: 18) : null,
+        filled: true,
+        fillColor: Colors.white,
+        errorMaxLines: 2,
+        errorStyle: GoogleFonts.outfit(color: Colors.red[400], fontWeight: FontWeight.w500, fontSize: 12),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey[300]!)),
+        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey[300]!)),
+        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: primaryGreen, width: 2)),
+        errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.red[300]!, width: 1.5)),
+        focusedErrorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.red[400]!, width: 2)),
+        contentPadding: const EdgeInsets.all(16),
+      ),
+    );
+  }
+
+  Widget _buildBottomNav() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        border: Border(top: BorderSide(color: Colors.grey[200]!)),
+      ),
+      child: ElevatedButton(
+        onPressed: _isSubmitting ? null : () {
+          if (_activeStep < 3) {
+            if (_validateStep()) setState(() => _activeStep++);
+          } else {
+            _submitFinalApplication();
+          }
+        },
+        style: ElevatedButton.styleFrom(
+          backgroundColor: primaryGreen,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+          elevation: 0,
+        ),
+        child: _isSubmitting
+            ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+            : Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(_activeStep == 3 ? 'Submit Application' : 'Continue', style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold)),
+                  if (_activeStep < 3) ...[
+                    const SizedBox(width: 8),
+                    const Icon(Icons.arrow_forward_rounded, color: Colors.white, size: 18),
+                  ]
+                ],
+              ),
+      ),
+    );
+  }
+
   Widget _buildErrorPlaceholder() {
     return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(40),
+      child: Container(
+        margin: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(32),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.03),
+              blurRadius: 20,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(color: Colors.white, shape: BoxShape.circle, border: Border.all(color: primaryGreen.withOpacity(0.1), width: 10)),
-              child: Icon(Icons.medical_services_outlined, size: 48, color: primaryGreen),
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: primaryGreen.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.access_time_rounded, size: 48, color: primaryGreen),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              'Application Pending',
+              style: GoogleFonts.playfairDisplay(
+                fontSize: 24,
+                fontWeight: FontWeight.w700,
+                color: textColorMain,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              _statusError ?? '',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.outfit(
+                fontSize: 16,
+                color: const Color(0xFF666666),
+                height: 1.5,
+              ),
             ),
             const SizedBox(height: 32),
-            Text(_statusError!, textAlign: TextAlign.center, style: GoogleFonts.playfairDisplay(fontSize: 20, color: textColorMain, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 48),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton(
-                onPressed: () => Navigator.pop(context),
-                style: OutlinedButton.styleFrom(
-                  side: BorderSide(color: primaryGreen),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  padding: const EdgeInsets.symmetric(vertical: 16),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: primaryGreen,
+                minimumSize: const Size(double.infinity, 56),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                elevation: 0,
+              ),
+              child: Text(
+                'Return to Profile',
+                style: GoogleFonts.outfit(
+                  fontSize: 16,
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
                 ),
-                child: Text('Back to Home', style: GoogleFonts.outfit(color: primaryGreen, fontWeight: FontWeight.bold)),
               ),
             ),
           ],
@@ -562,23 +818,4 @@ class _ApplyCounsellorScreenState extends State<ApplyCounsellorScreen> {
       ),
     );
   }
-
-  Widget _buildTextField(String label, IconData icon, TextEditingController controller, {TextInputType? keyboardType}) {
-    return TextFormField(
-      controller: controller,
-      keyboardType: keyboardType,
-      style: GoogleFonts.outfit(fontSize: 14),
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: GoogleFonts.outfit(color: Colors.grey[500], fontSize: 13),
-        prefixIcon: Icon(icon, color: primaryGreen, size: 18),
-        filled: true,
-        fillColor: Colors.white,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: Colors.grey[100]!)),
-        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: Colors.grey[100]!)),
-        contentPadding: const EdgeInsets.all(18),
-      ),
-    );
-  }
 }
-

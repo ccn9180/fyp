@@ -81,8 +81,15 @@ const createDialog = (props) => {
   });
 };
 
-export const customAlert = (message, title = 'System Notification') => {
-  return createDialog({ type: 'alert', message, title });
+export const customAlert = (message, title = 'System Notification', typeOverride = null) => {
+  let type = typeOverride;
+  if (!type) {
+    const t = title.toLowerCase();
+    if (t.includes('success')) type = 'success';
+    else if (t.includes('error') || t.includes('fail')) type = 'error';
+    else type = 'alert';
+  }
+  return createDialog({ type, message, title });
 };
 
 export const customConfirm = (message, title = 'Please Confirm') => {

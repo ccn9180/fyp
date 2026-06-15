@@ -27,7 +27,18 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
     });
 
     final String bookingId = widget.sessionData['id'] ?? 'session';
-    final Uri jitsiUrl = Uri.parse("https://meet.jit.si/eunoia_$bookingId");
+    
+    String urlString = "https://meet.jit.si/eunoia_$bookingId";
+    List<String> configs = [];
+    
+    if (_isMuted) configs.add('config.startWithAudioMuted=true');
+    if (_isVideoOff) configs.add('config.startWithVideoMuted=true');
+    
+    if (configs.isNotEmpty) {
+      urlString += '#${configs.join('&')}';
+    }
+    
+    final Uri jitsiUrl = Uri.parse(urlString);
 
     try {
       if (await canLaunchUrl(jitsiUrl)) {
@@ -109,11 +120,11 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
                   children: [
                     CircleAvatar(
                       radius: 56,
-                      backgroundImage: NetworkImage(widget.sessionData['counsellorImageUrl']),
+                      backgroundImage: NetworkImage(widget.sessionData['counsellorImageUrl'] ?? 'https://ui-avatars.com/api/?name=Counsellor&background=random'),
                     ),
                     const SizedBox(height: 20),
                     Text(
-                      widget.sessionData['counsellorName'],
+                      widget.sessionData['counsellorName'] ?? 'Counsellor',
                       style: GoogleFonts.playfairDisplay(
                         fontSize: 26,
                         fontWeight: FontWeight.bold,

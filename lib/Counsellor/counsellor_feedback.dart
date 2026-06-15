@@ -1,6 +1,9 @@
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:intl/intl.dart';
 
 class CounsellorFeedbackScreen extends StatelessWidget {
   const CounsellorFeedbackScreen({super.key});
@@ -25,83 +28,147 @@ class CounsellorFeedbackScreen extends StatelessWidget {
           style: GoogleFonts.playfairDisplay(color: textColorMain, fontWeight: FontWeight.bold),
         ),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Rating Overview
-            Container(
-              padding: const EdgeInsets.all(28),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(32),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.02),
-                    blurRadius: 20,
-                    offset: const Offset(0, 10),
-                  ),
-                ],
-              ),
-              child: Row(
+      body: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance
+            .collection('counsellor_bookings')
+            .where('counsellorId', isEqualTo: FirebaseAuth.instance.currentUser?.uid)
+            .where('status', isEqualTo: 'completed')
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator(color: Color(0xFF7C9C84)));
+          }
+
+          List<Map<String, dynamic>> reviews = [];
+          if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
+            for (var doc in snapshot.data!.docs) {
+              final data = doc.data() as Map<String, dynamic>;
+              if (data['feedback'] != null) {
+                reviews.add({
+                  'name': data['patientName'] ?? data['userName'] ?? 'Anonymous',
+                  'date': data['feedback']['date'] ?? DateFormat('MMM dd, yyyy').format((data['startTime'] as Timestamp).toDate()),
+                  'comment': data['feedback']['comment'] ?? '',
+                  'rating': (data['feedback']['rating'] ?? 0).toDouble(),
+                });
+              }
+            }
+          }
+
+          if (reviews.isEmpty) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '4.92',
-                        style: GoogleFonts.outfit(
-                          fontSize: 48,
-                          fontWeight: FontWeight.bold,
-                          color: textColorMain,
-                        ),
-                      ),
-                      Row(
-                        children: List.generate(
-                          5,
-                              (idx) => Icon(
-                            idx < 4 ? Icons.star_rounded : Icons.star_half_rounded,
-                            color: Colors.amber,
-                            size: 20,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Based on 124 reviews',
-                        style: GoogleFonts.outfit(fontSize: 12, color: Colors.grey[500]),
-                      ),
-                    ],
+                  Icon(Icons.rate_review_outlined, size: 48, color: primaryGreen.withOpacity(0.5)),
+                  const SizedBox(height: 16),
+                  Text(
+                    'No reviews yet',
+                    style: GoogleFonts.playfairDisplay(fontSize: 20, fontWeight: FontWeight.bold, color: textColorMain),
                   ),
-                  const Spacer(),
-                  Column(
-                    children: [
-                      _buildRatingBar(5, 0.9, primaryGreen),
-                      _buildRatingBar(4, 0.08, primaryGreen),
-                      _buildRatingBar(3, 0.02, primaryGreen),
-                      _buildRatingBar(2, 0.0, primaryGreen),
-                      _buildRatingBar(1, 0.0, primaryGreen),
-                    ],
+                  const SizedBox(height: 8),
+                  Text(
+                    'Client feedback will appear here.',
+                    style: GoogleFonts.outfit(fontSize: 14, color: Colors.grey[500]),
                   ),
                 ],
               ),
-            ),
-            const SizedBox(height: 48),
+            );
+          }
 
-            Text(
-              'REVIEWS FEED',
-              style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.2, color: Colors.grey[400]),
-            ),
-            const SizedBox(height: 20),
+          double totalRating = 0;
+          List<int> starCounts = [0, 0, 0, 0, 0]; // 1-star to 5-star
 
-            _buildReviewItem('Sarah J.', 'March 14, 2026', 'Very empathetic and helped me find clarity.', 5.0),
-            _buildReviewItem('Michael R.', 'March 10, 2026', 'Great sessions. I feel much more mindful now.', 5.0),
-            _buildReviewItem('Wei Keat', 'March 05, 2026', 'Excellent approach to anxiety management.', 4.5),
-            _buildReviewItem('Arjun K.', 'Feb 28, 2026', 'Professional and warm environment.', 5.0),
-            const SizedBox(height: 40),
-          ],
-        ),
+          for (var r in reviews) {
+            double rating = r['rating'] as double;
+            totalRating += rating;
+            if (rating >= 1 && rating <= 5) {
+              starCounts[(rating.round()) - 1]++;
+            }
+          }
+
+          double avgRating = totalRating / reviews.length;
+
+          return SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Rating Overview
+                Container(
+                  padding: const EdgeInsets.all(28),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(32),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.02),
+                        blurRadius: 20,
+                        offset: const Offset(0, 10),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            avgRating.toStringAsFixed(1),
+                            style: GoogleFonts.outfit(
+                              fontSize: 48,
+                              fontWeight: FontWeight.bold,
+                              color: textColorMain,
+                            ),
+                          ),
+                          Row(
+                            children: List.generate(
+                              5,
+                                  (idx) => Icon(
+                                idx < avgRating.floor() ? Icons.star_rounded : (idx < avgRating ? Icons.star_half_rounded : Icons.star_outline_rounded),
+                                color: Colors.amber,
+                                size: 20,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Based on ${reviews.length} reviews',
+                            style: GoogleFonts.outfit(fontSize: 12, color: Colors.grey[500]),
+                          ),
+                        ],
+                      ),
+                      const Spacer(),
+                      Column(
+                        children: [
+                          _buildRatingBar(5, starCounts[4] / reviews.length, primaryGreen),
+                          _buildRatingBar(4, starCounts[3] / reviews.length, primaryGreen),
+                          _buildRatingBar(3, starCounts[2] / reviews.length, primaryGreen),
+                          _buildRatingBar(2, starCounts[1] / reviews.length, primaryGreen),
+                          _buildRatingBar(1, starCounts[0] / reviews.length, primaryGreen),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 48),
+
+                Text(
+                  'REVIEWS FEED',
+                  style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.2, color: Colors.grey[400]),
+                ),
+                const SizedBox(height: 20),
+
+                ...reviews.map((r) => _buildReviewItem(
+                  r['name'] as String,
+                  r['date'] as String,
+                  r['comment'] as String,
+                  r['rating'] as double,
+                )).toList(),
+                const SizedBox(height: 40),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
