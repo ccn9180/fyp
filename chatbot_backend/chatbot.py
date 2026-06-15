@@ -9,6 +9,9 @@ from typing import Optional, Tuple, Dict, List
 import torch
 
 from custom_model import CustomNeuralNet
+from topic_extractor import TopicExtractor
+from nlg_engine import ComponentNLGEngine
+from firebase_manager import FirebaseManager
 
 warnings.filterwarnings("ignore")
 
@@ -16,6 +19,14 @@ warnings.filterwarnings("ignore")
 # ============================================================
 # CONTEXT TRACKER
 # ============================================================
+@dataclass
+class Turn:
+    user_text: str
+    detected_emotion: str
+    detected_topic: str
+    applied_strategy: str
+    bot_response: str
+
 @dataclass
 class UserContextTracker:
     topic: Optional[str] = None
@@ -45,6 +56,15 @@ class UserContextTracker:
     strategy_history: List[str] = field(default_factory=list)  # rolling last 5 strategies
     last_coping_step: Optional[str] = None  # avoid repeating same step type
     current_entity: Optional[str] = None   # extracted specific topic entity (e.g. "final year project")
+    history: List[Turn] = field(default_factory=list) # richer session history
+
+
+    # New Unified Control & Emotion Fields
+    stop_topic_flow: bool = False
+    explicit_emotion_detected: bool = False
+    topic_decay_score: int = 0
+    last_bot_question: dict = field(default_factory=lambda: {"text": "", "intent_slot": "", "topic": "", "answered": False})
+    recent_bot_responses: List[dict] = field(default_factory=list)
 
     DISTRESS_WEIGHT = {
         "emergency_crisis": 10, "physical_panic": 8, "repeated_no_relief": 7,
@@ -93,9 +113,17 @@ class UserContextTracker:
         self.strategy_history = []
         self.last_coping_step = None
         self.current_entity = None
+        self.history = []
+        
+        self.stop_topic_flow = False
+        self.explicit_emotion_detected = False
+        self.topic_decay_score = 0
+        self.last_bot_question = {"text": "", "intent_slot": "", "topic": "", "answered": False}
+        self.recent_bot_responses = []
 
     def update(
         self,
+        user_text: str,
         intent: str,
         topic: str,
         bot_text: str,
@@ -106,6 +134,19 @@ class UserContextTracker:
         self.last_strategy = strategy
         self.last_question_type = question_type
         self.validated_this_turn = False
+        
+        # Add to Turn history
+        self.history.append(Turn(
+            user_text=user_text,
+            detected_emotion=intent,
+            detected_topic=topic or "general",
+            applied_strategy=strategy or "general",
+            bot_response=bot_text
+        ))
+        
+        # Keep last 10 turns
+        if len(self.history) > 10:
+            self.history.pop(0)
 
         if topic and topic != "general":
             self.topic = topic
@@ -176,8 +217,10 @@ class UserContextTracker:
 # ============================================================
 class AdvancedNLUPipeline:
     def __init__(self):
-        print("📡 Loading Eunoia Deep Learning Classifier...")
+        print("[SYS] Loading Eunoia Deep Learning Classifier...")
         import sys
+
+        self.topic_extractor = TopicExtractor()
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -335,7 +378,17 @@ class AdvancedNLUPipeline:
             "good evening", "yo", "hi there", "hello there", "greetings",
             "hey there", "morning", "evening", "hii", "heloo", "helo", "helloo",
         ]
-        if clean in greeting_phrases:
+        greeting_kws = [
+            "how are you", "how are you today", "what's up", "whats up",
+            "how's it going", "hows it going", "how are things",
+            "how have you been", "how do you do"
+        ]
+        
+        if clean in greeting_phrases or any(kw in clean for kw in greeting_kws):
+            return "greeting"
+            
+        # If it starts with a greeting and is relatively short, consider it a greeting
+        if len(clean.split()) <= 6 and any(clean.startswith(p + " ") for p in greeting_phrases):
             return "greeting"
 
         # ── gratitude ────────────────────────────────────────
@@ -867,9 +920,69 @@ class AdvancedNLUPipeline:
         rule_hit = self.extract_direct_rules(text)
 
         # ── Extract and store topic entity ───────────────────
-        entity = self.extract_entity(text)
-        if entity:
-            tracker.current_entity = entity
+        topic_info = self.topic_extractor.extract(text)
+        if topic_info.get("topic_entity"):
+            tracker.current_entity = topic_info["topic_entity"]
+            
+        if topic_info.get("topic_category") and topic_info["topic_category"] != "general":
+            state["topic"] = topic_info["topic_category"]
+
+        # ── GATEKEEPER LAYER ──────────────────────────────────
+        DISENGAGE_KEYWORDS = ["don't want to talk", "dont want to talk", "stop", "change topic", "not this", "overwhelmed", "let's talk about something else", "lets talk about something else"]
+        LOW_ENGAGEMENT_KEYWORDS = ["nothing", "ok", "okay", "idk", "hmm", "...", "no", "nah", "yep", "yes"]
+        
+        ACADEMIC_KEYWORDS = ["fyp", "assignment", "project", "coding", "backend", "report", "deadline", "exam", "study", "work", "alot of thing", "a lot of thing", "task"]
+        EMOTION_KEYWORDS = ["stressed", "overwhelmed", "anxious", "depressed", "sad", "frustrated", "hopeless", "angry", "tired", "panic", "worry"]
+        EMOTION_PHRASES = ["i feel", "i'm feeling", "im feeling", "i can't cope", "icant cope", "i am not okay", "im not okay", "i'm not okay"]
+        PHYSICAL_KEYWORDS = ["heart racing", "breathe", "panic", "shaking", "tense", "dizzy"]
+
+        # Priority 1: Disengagement detection
+        if any(kw in clean for kw in DISENGAGE_KEYWORDS):
+            tracker.stop_topic_flow = True
+            tracker.topic = None
+            has_emotion = any(kw in clean for kw in EMOTION_KEYWORDS) or any(ph in clean for ph in EMOTION_PHRASES)
+            if has_emotion:
+                state["intent"] = "topic_shift_emotion"
+            else:
+                state["intent"] = "topic_shift_neutral"
+            return state
+
+        # Priority 1.5: 'Nothing' edge case
+        if clean.startswith("nothing") and len(clean.split()) <= 6:
+            state["intent"] = "general_activity"
+            return state
+
+        # Priority 2: Question-Answer Resolution Layer
+        BOOLEAN_ANSWERS = ["yes", "no", "yup", "nope", "sure", "maybe", "yeah"]
+        SLOT_ANSWERS = ["backend", "database", "authentication", "flutter", "api", "firebase", "frontend", "ui"]
+        SHORT_PHRASES = ["backend stuff", "debugging", "documentation", "final report", "writing code", "testing"]
+        
+        is_answering = False
+        if tracker.last_bot_question.get("text") and not tracker.last_bot_question.get("answered"):
+            # Broaden heuristic: if it's a short statement and they were just asked a question
+            if len(clean.split()) <= 5 and not any(kw in clean for kw in EMOTION_KEYWORDS):
+                is_answering = True
+            elif clean in BOOLEAN_ANSWERS or clean in SLOT_ANSWERS or clean in SHORT_PHRASES:
+                is_answering = True
+            elif len(clean.split()) <= 3 and any(w in clean for w in SLOT_ANSWERS):
+                is_answering = True
+                
+        if is_answering:
+            tracker.last_bot_question["answered"] = True
+            state["intent"] = "answer_previous_question"
+            state["answer_value"] = clean
+            return state
+
+        # Priority 3: Low-engagement filter (Only if NOT answering a question)
+        if clean in LOW_ENGAGEMENT_KEYWORDS or (len(clean.split()) <= 2 and any(kw == clean for kw in LOW_ENGAGEMENT_KEYWORDS)):
+            state["intent"] = "low_engagement"
+            return state
+
+        # Priority 4: Emotion Activation Flag
+        has_academic = any(kw in clean for kw in ACADEMIC_KEYWORDS) or tracker.topic in ["academic", "fyp"]
+        has_emotion = any(kw in clean for kw in EMOTION_KEYWORDS) or any(ph in clean for ph in EMOTION_PHRASES)
+        has_physical = any(kw in clean for kw in PHYSICAL_KEYWORDS)
+        tracker.explicit_emotion_detected = has_emotion or has_physical
 
         # ── context-aware short-response disambiguation (RUNS FIRST!) ──
         if tracker.awaiting_exercise_feedback:
@@ -977,16 +1090,27 @@ class AdvancedNLUPipeline:
             tag = self.tags[predicted.item()]
 
         if prob.item() < 0.60:
-            if tracker.emotion_history:
-                state["intent"] = tracker.emotion_history[-1]
-            else:
-                state["intent"] = "uncertain"
+            state["intent"] = "uncertain"
         else:
+            emotion_tags = ["body_better_mind_worry", "physical_panic", "anxiety", "depression", "sadness", "stress", "strong_negative_mood"]
+            
+            # Check confidence threshold for academic classification overrides
+            if has_academic and not tracker.explicit_emotion_detected:
+                if tag in emotion_tags or tag in ["general_activity", "neutral_checkin", "venting"] or prob.item() < 0.85:
+                    state["topic"] = "academic"
+                    state["intent"] = "academic_workload"
+                    return state
+
             if tag.startswith("topic_"):
                 state["topic"] = tag.split("_", 1)[1]
                 state["intent"] = "venting"
             else:
                 state["intent"] = tag
+
+        # ── Check if user answered the last question ──────────
+        if tracker.last_bot_question and not tracker.last_bot_question.get("answered"):
+            if len(clean.split()) > 2 and state.get("intent") not in ["topic_shift_neutral", "topic_shift_emotion", "low_engagement"]:
+                tracker.last_bot_question["answered"] = True
 
         return state
 
@@ -1012,6 +1136,16 @@ class SmarterDialogueManager:
         topic = state.get("topic", "general")
         prevent_questions = tracker.consecutive_questions >= 2
 
+        # ── Gatekeeper / Override Intents ─────────────────────────
+        if intent == "topic_shift_emotion":
+            return "topic_shift_emotion_strategy"
+        if intent == "topic_shift_neutral":
+            return "topic_shift_neutral_strategy"
+        if intent == "low_engagement":
+            return "low_engagement_strategy"
+        if intent == "uncertain":
+            return "clarify_uncertain"
+
         # ── safety first ──────────────────────────────────────
         if intent == "emergency_crisis":
             return "escalation"
@@ -1032,22 +1166,43 @@ class SmarterDialogueManager:
         if intent == "repeated_no_relief":
             return "slow_down_support"
 
+        if intent == "academic_workload":
+            return "academic_explore_strategy"
+
+        if intent == "answer_previous_question":
+            return "answer_acknowledgement_strategy"
+
+        if intent == "general_activity":
+            if topic in ["academic", "fyp"]:
+                return "academic_explore_strategy"
+            return "open_chat"
+
         if intent == "academic_all_pressure":
             return "academic_all_support"
 
-        # Soft escalation: sustained + worsening
-        if (tracker.distress_level >= 5 
-                and tracker.no_relief_count >= 2 
-                and tracker.is_sustained_distress()):
-            return "soft_escalation_support"
+        # ── Check emotional context before global overrides ──
+        # DO NOT allow global emotional overrides if the current intent is neutral/academic
+        emotion_tags = [
+            "body_better_mind_worry", "physical_panic", "anxiety", "depression", 
+            "sadness", "stress", "strong_negative_mood", "anger_frustration",
+            "guilt_shame", "emptiness", "repeated_no_relief", "no_relief"
+        ]
+        
+        if intent in emotion_tags:
+            # Soft escalation: sustained + worsening
+            if (tracker.distress_level >= 5 
+                    and tracker.no_relief_count >= 2 
+                    and tracker.is_sustained_distress()):
+                return "soft_escalation_support"
 
-        # Check distress level escalation
-        if tracker.distress_level >= 5:
-            # Skip light-touch responses and go straight to coping/grounding
-            return self.get_coping_strategy_for_symptom(tracker)
+            # Check distress level escalation
+            if tracker.distress_level >= 5:
+                # Skip light-touch responses and go straight to coping/grounding
+                return self.get_coping_strategy_for_symptom(tracker)
 
         # Check topic transition
         if (topic != tracker.topic 
+                and topic not in [None, "general"]
                 and tracker.topic not in [None, "general"] 
                 and tracker.turn_count > 2):
             return "topic_shift_acknowledgement"
@@ -1103,7 +1258,10 @@ class SmarterDialogueManager:
 
         # ── check-in / chat ───────────────────────────────────
         if intent == "neutral_checkin":
-            return "gentle_pivot" if prevent_questions else "explore_checkin"
+            if prevent_questions:
+                tracker.consecutive_questions = 0 # reset to allow normal flow after pivot
+                return "gentle_pivot"
+            return "explore_checkin"
         if intent == "intent_chat":
             return "open_chat"
 
@@ -1196,9 +1354,10 @@ class HumanResponseGenerator:
         defaults: Dict[str, List[str]] = {
             # ── session ──────────────────────────────────────
             "greeting": [
-                "Hello! I'm here with you. How have you been feeling lately?",
-                "Hey, I'm glad you're here. How are you doing today?",
-                "Hi there. I'm with you. What's on your mind right now?",
+                "Hello! I'm here and ready to chat with you. How has your day been so far?",
+                "Hey there. It's good to hear from you. How are things going today?",
+                "Hi! Thanks for dropping by. What's on your mind today?",
+                "Hello! I'm doing well, thanks for asking. How are you doing today?",
             ],
             "close": [
                 "Thank you for sharing with me today. Please be gentle with yourself and take care.",
@@ -1235,6 +1394,18 @@ class HumanResponseGenerator:
             "open_chat": [
                 "I'm here with you. What feels most worth talking about right now?",
                 "I'm glad you came. What would feel helpful to talk about today?",
+            ],
+            
+            # ── academic exploration / assumptions prevention ─
+            "academic_explore_strategy": [
+                "Sounds like you're working hard on that. What exactly are you building or doing right now?",
+                "That sounds like a busy workload. Which part is taking more time right now?",
+                "Got it. What kind of issue or task are you trying to solve at the moment?",
+            ],
+            "answer_acknowledgement_strategy": [
+                "I see. Thanks for letting me know. Tell me a bit more about what's going on.",
+                "Got it. What else is on your mind right now?",
+                "Understood. How does that make you feel overall?",
             ],
 
             # ── mood responses ────────────────────────────────
@@ -1588,8 +1759,9 @@ class HumanResponseGenerator:
                 "I hear you. Feeling alone can be really painful. What makes it feel most lonely?",
             ],
             "topic_exploration_general": [
-                "It makes sense why this feels overwhelming. Has anything made it feel stronger today?",
-                "I can understand how difficult that is. What part of this has felt the hardest lately?",
+                "I see. Tell me a bit more about what's going on.",
+                "Got it. What else is on your mind regarding that?",
+                "I'm listening. How has that been for you lately?",
             ],
 
             # ── soft escalation (sustained distress) ─────────
@@ -1655,15 +1827,39 @@ class HumanResponseGenerator:
             return fallback
 
         valid_options = list(options)
-        if tracker.previous_response in valid_options and len(valid_options) > 1:
-            valid_options.remove(tracker.previous_response)
+        
+        # ── 1. Check if user just answered our last question ──
+        # (This is handled conceptually upstream, but we can prevent
+        # asking the exact same text again by filtering recent responses)
+        recent_texts = [r.get("text", "") for r in tracker.recent_bot_responses]
+        filtered_options = [opt for opt in valid_options if opt not in recent_texts]
+        
+        if not filtered_options:
+            # Fallback if everything was recently used
+            filtered_options = valid_options
+            if tracker.previous_response in filtered_options and len(filtered_options) > 1:
+                filtered_options.remove(tracker.previous_response)
 
-        choice = random.choice(valid_options)
+        choice = random.choice(filtered_options)
 
         # ── [topic] placeholder substitution ─────────────────
         if "[topic]" in choice:
             entity = tracker.current_entity or tracker.topic or "this"
             choice = choice.replace("[topic]", entity)
+
+        # ── 2. Track this response in session memory ──────────
+        tracker.recent_bot_responses.append({"text": choice, "category": key})
+        if len(tracker.recent_bot_responses) > 5:
+            tracker.recent_bot_responses.pop(0)
+
+        # ── 3. Track if this is a question ────────────────────
+        if "?" in choice:
+            tracker.last_bot_question = {
+                "text": choice,
+                "intent_slot": key,
+                "topic": tracker.topic,
+                "answered": False
+            }
 
         return choice
 
@@ -1759,10 +1955,25 @@ class HumanResponseGenerator:
             "chest_release_step":               ("chest_release_step",              "exercise_feedback"),
             "orientation_step":                 ("orientation_step",                "exercise_feedback"),
             "cool_down_grounding":              ("cool_down_grounding",             "exercise_feedback"),
+            # missing academic/activity mappings
+            "academic_explore_strategy":        ("academic_explore_strategy",       "open_emotion"),
+            "answer_acknowledgement_strategy":  ("answer_acknowledgement_strategy", "open_emotion"),
+            "clarify_uncertain":                ("clarify_uncertain",               "clarify"),
         }
 
         if strategy in STRATEGY_MAP:
             key, qtype = STRATEGY_MAP[strategy]
+            
+            # Use Component NLG Engine for emotions
+            if "support" in key and hasattr(self, 'component_engine'):
+                entity = tracker.current_entity or tracker.topic or "this"
+                response = self.component_engine.generate_response(
+                    emotion_intent=state.get("intent", ""),
+                    topic_entity=entity,
+                    strategy="explore" if qtype == "open_emotion" else "validate"
+                )
+                return response, qtype
+
             return self._pick(key, tracker), qtype
 
         # ── solution suggestion (topic-dependent) ─────────────
@@ -1815,32 +2026,62 @@ def safety_filter(response: str) -> str:
 class ProfessionalFYPBot:
     def __init__(self):
         print("\n" + "=" * 60)
-        print("🧠  INITIALIZING EUNOIA HYBRID SUPPORT AI")
+        print("[AI] INITIALIZING EUNOIA HYBRID SUPPORT AI")
         print("=" * 60)
         self.nlu = AdvancedNLUPipeline()
         self.dialogue_manager = SmarterDialogueManager()
         self.generator = HumanResponseGenerator("responses.json")
-        self.tracker = UserContextTracker()
+        self.generator.component_engine = ComponentNLGEngine()
+        
+        # User session tracking
+        self.trackers = {}
+        self.firebase = FirebaseManager()
 
-    def _handle_turn(self, user_input: str) -> str:
+    def _get_tracker(self, user_id: str) -> UserContextTracker:
+        if user_id not in self.trackers:
+            self.trackers[user_id] = UserContextTracker()
+            
+            # Try load from firebase
+            session_data = self.firebase.load_session(user_id)
+            if session_data:
+                self.trackers[user_id].topic = session_data.get("topic")
+                self.trackers[user_id].turn_count = session_data.get("turn_count", 0)
+        return self.trackers[user_id]
+
+    def _save_tracker(self, user_id: str, tracker: UserContextTracker):
+        session_data = {
+            "topic": tracker.topic,
+            "turn_count": tracker.turn_count,
+            "last_active": "now", # Could be timestamp
+        }
+        self.firebase.save_session(user_id, session_data)
+
+    def _handle_turn(self, user_id: str, user_input: str) -> Tuple[str, Dict[str, str], str]:
         """Process one user turn and return the bot response string."""
-        state = self.nlu.analyze(user_input, self.tracker)
-        strategy = self.dialogue_manager.compute_strategy(state, self.tracker)
-
+        tracker = self._get_tracker(user_id)
+        
+        state = self.nlu.analyze(user_input, tracker)
+        
         # ── session reset on mid-conversation greeting ────────
-        if state["intent"] == "greeting" and self.tracker.turn_count > 0:
-            self.tracker.reset_for_new_session()
-
-        response, question_type = self.generator.generate(strategy, state, self.tracker)
+        if state["intent"] == "greeting" and tracker.turn_count > 0:
+            tracker.reset_for_new_session()
+            
+        strategy = self.dialogue_manager.compute_strategy(state, tracker)
+        
+        response, question_type = self.generator.generate(strategy, state, tracker)
         response = safety_filter(response)
 
-        self.tracker.update(
-            state["intent"],
-            state["topic"],
-            response,
-            strategy,
-            question_type,
+        tracker.update(
+            user_text=user_input,
+            intent=state["intent"],
+            topic=state["topic"],
+            bot_text=response,
+            strategy=strategy,
+            question_type=question_type,
         )
+        
+        self._save_tracker(user_id, tracker)
+        
         return response, state, strategy
 
     def run(self):
@@ -1858,7 +2099,7 @@ class ProfessionalFYPBot:
                     print("\nBot: Thank you for sharing with me today. Take care of yourself.")
                     break
 
-                response, state, strategy = self._handle_turn(user_input)
+                response, state, strategy = self._handle_turn("cli_user", user_input)
 
                 # debug line — remove or guard with a flag in production
                 print(

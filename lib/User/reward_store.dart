@@ -246,15 +246,8 @@ class _RewardStoreScreenState extends State<RewardStoreScreen> with SingleTicker
 
         return ListView.builder(
           padding: const EdgeInsets.all(24),
-          itemCount: rewards.length + 1,
+          itemCount: rewards.length,
           itemBuilder: (context, index) {
-            if (index == rewards.length) {
-              return _RecentRedemptionsAccordion(
-                uid: uid ?? '',
-                rewardNamesCache: _rewardNamesCache,
-                primaryGreen: primaryGreen,
-              );
-            }
             final doc = rewards[index];
             final rewardId = doc.id;
             final reward = doc.data() as Map<String, dynamic>;
@@ -610,117 +603,6 @@ class _RewardStoreScreenState extends State<RewardStoreScreen> with SingleTicker
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _RecentRedemptionsAccordion extends StatefulWidget {
-  final String uid;
-  final Map<String, String> rewardNamesCache;
-  final Color primaryGreen;
-  const _RecentRedemptionsAccordion({
-    required this.uid,
-    required this.rewardNamesCache,
-    required this.primaryGreen,
-  });
-
-  @override
-  State<_RecentRedemptionsAccordion> createState() => _RecentRedemptionsAccordionState();
-}
-
-class _RecentRedemptionsAccordionState extends State<_RecentRedemptionsAccordion> {
-  bool _isExpanded = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(top: 16, bottom: 24),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.02),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          )
-        ],
-      ),
-      child: Column(
-        children: [
-          ListTile(
-            title: Text(
-              'Recent Redemptions',
-              style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14, color: const Color(0xFF333333)),
-            ),
-            trailing: Icon(
-              _isExpanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
-              color: widget.primaryGreen,
-            ),
-            onTap: () => setState(() => _isExpanded = !_isExpanded),
-          ),
-          AnimatedSize(
-            duration: const Duration(milliseconds: 250),
-            curve: Curves.easeInOut,
-            child: _isExpanded
-                ? StreamBuilder<QuerySnapshot>(
-                    stream: FirebaseFirestore.instance
-                        .collection('xp_logs')
-                        .doc(widget.uid)
-                        .collection('entries')
-                        .where('source', isEqualTo: 'reward_redeemed')
-                        .orderBy('earned_at', descending: true)
-                        .limit(5)
-                        .snapshots(),
-                    builder: (context, snapshot) {
-                      if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                        return Padding(
-                          padding: const EdgeInsets.all(16.0),
-                          child: Text(
-                            'No recent redemptions',
-                            style: GoogleFonts.outfit(color: Colors.grey, fontSize: 12),
-                          ),
-                        );
-                      }
-                      final logs = snapshot.data!.docs;
-                      return ListView.builder(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        itemCount: logs.length,
-                        itemBuilder: (context, index) {
-                          final log = logs[index].data() as Map<String, dynamic>;
-                          final String rewardId = log['reward_id'] ?? '';
-                          final int spentCoins = (log['coins'] ?? 0) as int;
-                          final String rewardName = widget.rewardNamesCache[rewardId] ?? 'Premium Reward';
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 6.0),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    rewardName,
-                                    style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w600),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                                Text(
-                                  '$spentCoins Coins',
-                                  style: GoogleFonts.outfit(fontSize: 12, color: Colors.red[300], fontWeight: FontWeight.bold),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                      );
-                    },
-                  )
-                : const SizedBox.shrink(),
-          ),
-        ],
       ),
     );
   }

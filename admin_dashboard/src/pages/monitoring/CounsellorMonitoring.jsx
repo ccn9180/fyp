@@ -1,7 +1,9 @@
 import { useState, useMemo, useRef } from 'react';
 import { Star, ShieldCheck, Activity, XCircle, Mail, BookOpen, Calendar, Award, ExternalLink, Briefcase, Search, Filter, X, LayoutGrid, ChevronDown, Calendar as CalendarIcon, Download, Upload, Loader2, Eye } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LineChart, Line, PieChart, Pie, Cell } from 'recharts';
-import { useUsers } from '../../hooks/useFirestore';
+import { useUsers, useCounsellorBookings } from '../../hooks/useFirestore';
+import { doc, updateDoc } from 'firebase/firestore';
+import { db } from '../../firebase';
 import ReportPreview from '../../components/ReportPreview';
 import { usePDFExport } from '../../hooks/usePDFExport';
 
@@ -18,7 +20,9 @@ const C = {
 };
 
 export default function CounsellorMonitoring() {
-  const { data: allUsers, loading } = useUsers();
+  const { data: allUsers, loading: usersLoading } = useUsers();
+  const { data: allBookings, loading: bookingsLoading } = useCounsellorBookings();
+  const loading = usersLoading || bookingsLoading;
   const reportRef = useRef(null);
   const paperRef = useRef(null);
   const [selectedCounsellor, setSelectedCounsellor] = useState(null);
@@ -35,18 +39,34 @@ export default function CounsellorMonitoring() {
   const today = new Date().toISOString().split('T')[0];
 
   const allCounsellorsRaw = useMemo(() => {
-    const live = allUsers.filter(u => (u.role || '').toLowerCase() === 'counsellor');
-    return [...live];
-  }, [allUsers]);
-
-  const availableSpecialties = useMemo(() => {
-    const specs = new Set();
-    (allCounsellorsRaw || []).forEach(c => {
-      const s = Array.isArray(c.specializations) ? c.specializations : (c.specialties || []);
-      s.forEach(spec => specs.add(spec));
+    const live = allUsers.filter(u => (u.role || '').toLowerCase() === 'counsellor').map(c => {
+      const counsellorBookings = allBookings.filter(b => b.counsellorId === c.id);
+      const totalSessions = counsellorBookings.length;
+      const completedSessions = counsellorBookings.filter(b => b.status === 'completed').length;
+      const cancelledSessions = counsellorBookings.filter(b => b.status === 'cancelled').length;
+      
+      return {
+        ...c,
+        totalSessions: totalSessions > 0 ? totalSessions : (c.totalSessions || 0),
+        completedSessions: completedSessions > 0 ? completedSessions : (c.completedSessions || 0),
+        cancelledSessions: cancelledSessions > 0 ? cancelledSessions : (c.cancelledSessions || 0),
+      };
     });
-    return ['All', ...Array.from(specs).sort()];
-  }, [allCounsellorsRaw]);
+    const MOCK_COUNSELLORS = [
+      { id: 'mc1', name: 'Dr. Kevin Zhang', email: 'k.zhang@wellness.com', role: 'counsellor', specializations: ['CBT', 'Anxiety & Stress'], performanceScore: 92, totalSessions: 450, rating: 4.8, slotUtilization: 95, completionRate: 98, cancelledSessions: 2, status: 'Active', createdAt: new Date('2025-01-10') },
+      { id: 'mc2', name: 'Dr. Robert Vance', email: 'r.vance@clinic.org', role: 'counsellor', specializations: ['Depression', 'Grief & Loss'], performanceScore: 78, totalSessions: 120, rating: 4.5, slotUtilization: 45, completionRate: 90, cancelledSessions: 5, status: 'Active', createdAt: new Date('2025-03-15') },
+      { id: 'mc3', name: 'Sarah Jenkins', email: 's.jenkins@therapy.net', role: 'counsellor', specializations: ['Relationship Issues', 'Addiction Recovery'], performanceScore: 65, totalSessions: 310, rating: 4.1, slotUtilization: 80, completionRate: 85, cancelledSessions: 32, status: 'Review', createdAt: new Date('2025-02-01') },
+      { id: 'mc4', name: 'Dr. Emily Chen', email: 'e.chen@mindful.org', role: 'counsellor', specializations: ['Trauma & PTSD'], performanceScore: 88, totalSessions: 290, rating: 4.7, slotUtilization: 85, completionRate: 95, cancelledSessions: 4, status: 'Active', createdAt: new Date('2025-06-20') },
+      { id: 'mc5', name: 'Mark Halloway', email: 'm.halloway@counseling.com', role: 'counsellor', specializations: ['Career Counseling', 'Anxiety & Stress'], performanceScore: 95, totalSessions: 550, rating: 4.9, slotUtilization: 88, completionRate: 99, cancelledSessions: 1, status: 'Active', createdAt: new Date('2024-11-05') }
+    ];
+    return [...live, ...MOCK_COUNSELLORS];
+  }, [allUsers, allBookings]);
+
+  const availableSpecialties = [
+    'All', 'Anxiety & Stress', 'Depression', 'Relationship Issues', 
+    'Trauma & PTSD', 'Career Counseling', 'Addiction Recovery',
+    'OCD', 'Grief & Loss', 'Eating Disorders'
+  ];
 
   const filteredCounsellors = useMemo(() => {
     return (allCounsellorsRaw || []).filter(c => {
@@ -71,7 +91,7 @@ export default function CounsellorMonitoring() {
     });
   }, [allCounsellorsRaw, searchQuery, specialtyFilter, startDate, endDate]);
 
-  const itemsPerPage = 10;
+  const itemsPerPage = 6;
   const totalPages = Math.ceil(filteredCounsellors.length / itemsPerPage);
   const paginatedCounsellors = filteredCounsellors.slice(
     (currentPage - 1) * itemsPerPage,
@@ -425,7 +445,7 @@ export default function CounsellorMonitoring() {
                       <th className="pb-4 font-black text-center">Utilization</th>
                       <th className="pb-4 font-black text-center">Rating</th>
                       <th className="pb-4 font-black text-center">Score</th>
-                      <th className="pb-4 font-black text-right">Status</th>
+                      <th className="pb-4 font-black text-right">KPI STATUS</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -434,7 +454,7 @@ export default function CounsellorMonitoring() {
                         <td className="py-4 pr-4">
                           <div className="flex items-center gap-3">
                             <div className="w-10 h-10 rounded-2xl bg-sage-100 flex items-center justify-center text-primary font-bold text-xs overflow-hidden border border-cream-darker shadow-sm relative">
-                              {c.profileImageUrl ? <img src={c.profileImageUrl} alt="" className="w-full h-full object-cover" /> : (c.name || c.fullName || '?').charAt(0).toUpperCase()}
+                              {(c.counsellorImageUrl || c.profileImageUrl) ? <img src={c.counsellorImageUrl || c.profileImageUrl} alt="" className="w-full h-full object-cover" /> : (c.name || c.fullName || '?').charAt(0).toUpperCase()}
                               {c.performanceScore > 95 && (
                                 <div className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full translate-x-1/4 translate-y-1/4" />
                               )}
@@ -479,8 +499,8 @@ export default function CounsellorMonitoring() {
                            {c.performanceScore || '--'}
                         </td>
                         <td className="py-4 text-right">
-                          <span className={`px-2.5 py-1 rounded-xl text-[9px] font-black uppercase tracking-widest ${c.status === 'Active' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'} border border-transparent shadow-sm`}>
-                            {c.status || 'Active'}
+                          <span className={`px-2.5 py-1 rounded-xl text-[9px] font-black uppercase tracking-widest ${(c.status || 'Active') === 'Active' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'} border border-transparent shadow-sm`}>
+                            {(c.status || 'Active') === 'Active' ? 'On Track' : 'Below Target'}
                           </span>
                         </td>
                       </tr>
@@ -491,9 +511,30 @@ export default function CounsellorMonitoring() {
 
               <div className="flex items-center justify-between mt-6 pt-6 border-t border-cream-darker">
                 <p className="text-[10px] text-charcoal-muted font-bold uppercase tracking-widest">Audit View: Page {currentPage} of {totalPages || 1}</p>
-                <div className="flex gap-2">
-                  <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} className="p-2 rounded-xl border border-cream-darker bg-white text-xs font-bold disabled:opacity-40 hover:bg-cream/20 transition shadow-sm active:scale-95">Prev Segment</button>
-                  <button disabled={currentPage === totalPages || totalPages === 0} onClick={() => setCurrentPage(p => p + 1)} className="p-2 rounded-xl border border-cream-darker bg-white text-xs font-bold disabled:opacity-40 hover:bg-cream/20 transition shadow-sm active:scale-95">Next Segment</button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <button 
+                        disabled={currentPage === 1} 
+                        onClick={() => setCurrentPage(p => p - 1)} 
+                        style={{ padding: '6px 14px', borderRadius: '10px', border: `1px solid ${C.creamDarker}`, background: 'white', fontFamily: 'Outfit', fontSize: '12px', fontWeight: 600, color: C.charcoal, cursor: currentPage === 1 ? 'default' : 'pointer', opacity: currentPage === 1 ? 0.4 : 1 }}
+                    >
+                        Previous
+                    </button>
+                    {[...Array(totalPages)].map((_, i) => (
+                        <button 
+                            key={i}
+                            onClick={() => setCurrentPage(i + 1)}
+                            style={{ width: '32px', height: '32px', borderRadius: '10px', border: currentPage === i + 1 ? `1px solid ${C.primary}` : `1px solid ${C.creamDarker}`, background: currentPage === i + 1 ? C.primary : 'white', fontFamily: 'Outfit', fontSize: '12px', fontWeight: 700, color: currentPage === i + 1 ? 'white' : C.charcoal, cursor: 'pointer', transition: 'all 0.2s' }}
+                        >
+                            {i + 1}
+                        </button>
+                    ))}
+                    <button 
+                        disabled={currentPage >= totalPages || totalPages === 0} 
+                        onClick={() => setCurrentPage(p => p + 1)} 
+                        style={{ padding: '6px 14px', borderRadius: '10px', border: `1px solid ${C.creamDarker}`, background: 'white', fontFamily: 'Outfit', fontSize: '12px', fontWeight: 600, color: C.charcoal, cursor: (currentPage >= totalPages || totalPages === 0) ? 'default' : 'pointer', opacity: (currentPage >= totalPages || totalPages === 0) ? 0.4 : 1 }}
+                    >
+                        Next
+                    </button>
                 </div>
               </div>
             </div>
@@ -561,18 +602,18 @@ export default function CounsellorMonitoring() {
       {selectedCounsellor && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex justify-center items-center z-[1000] p-4" onClick={() => setSelectedCounsellor(null)}>
           <div className="w-full max-w-xl bg-white rounded-[2.5rem] shadow-2xl relative flex flex-col max-h-[90vh] overflow-hidden border border-cream-darker" onClick={e => e.stopPropagation()}>
-            <button onClick={() => setSelectedCounsellor(null)} className="absolute top-6 right-6 p-2 bg-cream/80 hover:bg-white rounded-full transition text-charcoal/40 shadow-sm"><X size={20} /></button>
-            <div className="flex-1 overflow-y-auto bg-white">
-              <div className="bg-sage-50/50 p-10 relative border-b border-cream-darker">
+            <button onClick={() => setSelectedCounsellor(null)} className="absolute top-6 right-6 p-2 bg-cream/80 hover:bg-white rounded-full transition text-charcoal/40 shadow-sm z-50"><X size={20} /></button>
+            <div className="flex-1 overflow-y-auto bg-white scrollbar-hide">
+              <div className="bg-sage-50/50 p-10 pt-16 relative border-b border-cream-darker">
                  <div className="flex justify-between items-start mb-8">
                     <div className="flex gap-6 items-center">
                        <div className="w-24 h-24 rounded-3xl bg-white shadow-xl overflow-hidden border-4 border-white">
-                         {selectedCounsellor.profileImageUrl ? <img src={selectedCounsellor.profileImageUrl} alt="" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-3xl font-bold text-primary">{(selectedCounsellor.name || selectedCounsellor.fullName || '?').charAt(0).toUpperCase()}</div>}
+                         {(selectedCounsellor.counsellorImageUrl || selectedCounsellor.profileImageUrl) ? <img src={selectedCounsellor.counsellorImageUrl || selectedCounsellor.profileImageUrl} alt="" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-3xl font-bold text-primary">{(selectedCounsellor.name || selectedCounsellor.fullName || '?').charAt(0).toUpperCase()}</div>}
                        </div>
                        <div>
                           <h2 className="font-display font-black text-3xl text-charcoal mb-1">{selectedCounsellor.name || selectedCounsellor.fullName || 'Anonymous'}</h2>
                           <div className="flex items-center gap-2">
-                             <span className="text-[10px] font-black text-primary uppercase tracking-widest bg-white px-2 py-1 rounded-lg border border-primary/20 shadow-sm">{selectedCounsellor.status || 'Active'}</span>
+                             <span className="text-[10px] font-black text-primary uppercase tracking-widest bg-white px-2 py-1 rounded-lg border border-primary/20 shadow-sm">{(selectedCounsellor.status || 'Active') === 'Active' ? 'On Track' : 'Below Target'}</span>
                              <span className="text-[10px] font-bold text-charcoal-muted uppercase">{selectedCounsellor.email}</span>
                           </div>
                        </div>
@@ -601,7 +642,7 @@ export default function CounsellorMonitoring() {
                     </div>
                     <div className="bg-white p-4 rounded-2xl border border-cream-darker shadow-sm">
                        <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Completion Rate</p>
-                       <p className="text-xl font-display font-bold text-emerald-600">{((selectedCounsellor.completedSessions / selectedCounsellor.totalSessions) * 100).toFixed(0)}%</p>
+                       <p className="text-xl font-display font-bold text-emerald-600">{selectedCounsellor.totalSessions ? ((selectedCounsellor.completedSessions / selectedCounsellor.totalSessions) * 100).toFixed(0) : 0}%</p>
                     </div>
                  </div>
               </div>
@@ -637,12 +678,12 @@ export default function CounsellorMonitoring() {
                        <div className="space-y-4">
                           <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest opacity-60">
                              <span>Weekly Availability</span>
-                             <span>42 Slots / Week</span>
+                             <span>{selectedCounsellor.weeklySlots || 40} Slots / Week</span>
                           </div>
                           <div className="p-4 bg-white border border-cream-darker rounded-2xl flex items-center justify-between">
                              <div className="flex flex-col gap-1">
                                 <span className="text-[9px] font-black text-gray-400 uppercase">Booked Session Volume</span>
-                                <span className="text-lg font-display font-black text-charcoal">High Volume</span>
+                                <span className="text-lg font-display font-black text-charcoal">{(selectedCounsellor.slotUtilization || 0) > 80 ? 'High Volume' : (selectedCounsellor.slotUtilization || 0) > 50 ? 'Steady Volume' : 'Low Volume'}</span>
                              </div>
                              <div className="w-12 h-12 rounded-full border-4 border-primary border-t-cream-darker animate-spin-slow rotate-45" />
                           </div>
@@ -653,7 +694,14 @@ export default function CounsellorMonitoring() {
                        <textarea 
                           className="w-full h-24 bg-cream/30 border border-cream-darker rounded-2xl p-4 text-[11px] font-body text-charcoal-muted resize-none focus:border-primary outline-none"
                           placeholder="Log administrative observations or professional development notes here..."
-                          defaultValue={`Personnel audit for Q1 ${new Date().getFullYear()}: Maintaining consistent quality targets. Specialization utilization in ${selectedCounsellor.specializations?.[0]} remains stable.`}
+                          defaultValue={selectedCounsellor.auditNotes || ''}
+                          onBlur={async (e) => {
+                             if (!selectedCounsellor.id.startsWith('mc')) {
+                               try {
+                                 await updateDoc(doc(db, 'users', selectedCounsellor.id), { auditNotes: e.target.value });
+                               } catch (err) { console.error('Failed to update audit notes', err); }
+                             }
+                          }}
                        />
                     </div>
                  </div>
@@ -698,9 +746,9 @@ export default function CounsellorMonitoring() {
           </div>
         </div>
       )}
-      <div style={{ position: 'fixed', left: '-2000px', top: '0', width: '794px', pointerEvents: 'none', zIndex: -1 }}>
+      <div className="print-container" style={{ position: 'fixed', left: '-2000px', top: '0', width: '794px', pointerEvents: 'none', zIndex: -1 }}>
         <div ref={paperRef} style={{ background: 'white' }}>
-          <ReportContent chartData={chartData} filteredCounsellors={filteredCounsellors} totalSessions={totalSessions} avgRating={avgRating} />
+          <ReportContent chartData={chartData} filteredCounsellors={filteredCounsellors} totalSessions={totalSessions} avgRating={avgRating} isPreview={false} />
         </div>
       </div>
 
@@ -711,13 +759,13 @@ export default function CounsellorMonitoring() {
         isExporting={isExporting}
         title="Personnel Performance Audit"
       >
-        <ReportContent chartData={chartData} filteredCounsellors={filteredCounsellors} totalSessions={totalSessions} avgRating={avgRating} />
+        <ReportContent chartData={chartData} filteredCounsellors={filteredCounsellors} totalSessions={totalSessions} avgRating={avgRating} isPreview={true} />
       </ReportPreview>
     </div>
   );
 }
 
-function ReportContent({ chartData, filteredCounsellors, totalSessions, avgRating }) {
+function ReportContent({ chartData, filteredCounsellors, totalSessions, avgRating, isPreview }) {
   const totalCompleted = filteredCounsellors.reduce((sum, c) => sum + (c.completedSessions || 0), 0);
   const totalCancelled = filteredCounsellors.reduce((sum, c) => sum + (c.cancelledSessions || 0), 0);
   const avgUtilization = (filteredCounsellors.reduce((sum, c) => sum + (c.slotUtilization || 0), 0) / filteredCounsellors.length).toFixed(1);
@@ -801,7 +849,14 @@ function ReportContent({ chartData, filteredCounsellors, totalSessions, avgRatin
         </div>
       </div>
 
-      <div style={{ height: '260px' }} />
+      {isPreview ? (
+        <div style={{ height: '260px', position: 'relative', display: 'flex', justifyContent: 'center', paddingTop: '40px', pageBreakBefore: 'always' }} className="print-page-break">
+          <div style={{ position: 'absolute', top: '45px', width: 'calc(100% + 192px)', left: '-96px', borderBottom: '2px dashed #BBCBC2' }}></div>
+          <span style={{ background: 'white', padding: '0 15px', color: '#BBCBC2', fontSize: '10px', fontWeight: 800, letterSpacing: '0.1em', zIndex: 1, position: 'relative', height: '14px', lineHeight: '14px' }}>PAGE BREAK</span>
+        </div>
+      ) : (
+        <div style={{ pageBreakBefore: 'always', height: '260px' }} className="print-page-break" />
+      )}
 
       {/* 3. Detailed Personnel Evaluation */}
       <div style={sectionStyle}>

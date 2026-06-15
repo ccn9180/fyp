@@ -37,11 +37,13 @@ class _SessionFeedbackScreenState extends State<SessionFeedbackScreen> {
           ? widget.session['rating'] 
           : int.tryParse(widget.session['rating'].toString()) ?? 0;
       _hasExistingFeedback = _selectedRating > 0;
-      _isReadOnly = _hasExistingFeedback;
     }
     if (widget.session['feedback'] != null) {
       _feedbackController.text = widget.session['feedback'].toString();
     }
+    
+    // Read only if they already left feedback OR if the session was missed
+    _isReadOnly = _hasExistingFeedback || widget.session['isMissed'] == true;
   }
 
   @override
@@ -161,43 +163,70 @@ class _SessionFeedbackScreenState extends State<SessionFeedbackScreen> {
             const SizedBox(height: 48),
 
             // Rating Section
-            Center(
-              child: Column(
-                children: [
-                  Text(
-                    'Rate your experience',
-                    style: GoogleFonts.playfairDisplay(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                      color: textColorMain,
+            if (widget.session['isMissed'] == true)
+              Center(
+                child: Column(
+                  children: [
+                    const Icon(Icons.info_outline_rounded, color: Colors.grey, size: 48),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Session Missed',
+                      style: GoogleFonts.playfairDisplay(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: textColorMain,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'How would you describe your session with ${widget.session['counsellorName']}?',
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.outfit(
-                      fontSize: 14,
-                      color: textColorSub,
+                    const SizedBox(height: 8),
+                    Text(
+                      'This session was missed, so feedback cannot be provided.',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.outfit(
+                        fontSize: 14,
+                        color: textColorSub,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 24),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: List.generate(5, (index) {
-                      return IconButton(
-                        icon: Icon(
-                          index < _selectedRating ? Icons.star_rounded : Icons.star_border_rounded,
-                          color: index < _selectedRating ? const Color(0xFFFFB74D) : Colors.grey[300],
-                          size: 44,
-                        ),
-                        onPressed: _isReadOnly ? null : () => setState(() => _selectedRating = index + 1),
-                      );
-                    }),
-                  ),
-                ],
+                  ],
+                ),
+              )
+            else
+              Center(
+                child: Column(
+                  children: [
+                    Text(
+                      'Rate your experience',
+                      style: GoogleFonts.playfairDisplay(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: textColorMain,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'How would you describe your session with ${widget.session['counsellorName']}?',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.outfit(
+                        fontSize: 14,
+                        color: textColorSub,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: List.generate(5, (index) {
+                        return IconButton(
+                          icon: Icon(
+                            index < _selectedRating ? Icons.star_rounded : Icons.star_border_rounded,
+                            color: index < _selectedRating ? const Color(0xFFFFB74D) : Colors.grey[300],
+                            size: 44,
+                          ),
+                          onPressed: _isReadOnly ? null : () => setState(() => _selectedRating = index + 1),
+                        );
+                      }),
+                    ),
+                  ],
+                ),
               ),
-            ),
 
             const SizedBox(height: 32),
 
@@ -236,7 +265,7 @@ class _SessionFeedbackScreenState extends State<SessionFeedbackScreen> {
             const SizedBox(height: 40),
 
             // Submit Button
-            if (_isReadOnly)
+            if (_hasExistingFeedback)
               Center(
                 child: Column(
                   children: [
@@ -262,7 +291,7 @@ class _SessionFeedbackScreenState extends State<SessionFeedbackScreen> {
                   ],
                 ),
               )
-            else
+            else if (widget.session['isMissed'] != true)
               SizedBox(
                 width: double.infinity,
                 height: 56,
@@ -278,7 +307,11 @@ class _SessionFeedbackScreenState extends State<SessionFeedbackScreen> {
                             .doc(widget.session['id'])
                             .update({
                           'rating': _selectedRating,
-                          'feedback': _feedbackController.text.trim(),
+                          'feedback': {
+                            'rating': _selectedRating,
+                            'comment': _feedbackController.text.trim(),
+                            'date': DateFormat('MMM dd').format(DateTime.now()),
+                          },
                           'feedbackSubmittedAt': FieldValue.serverTimestamp(),
                         });
                         

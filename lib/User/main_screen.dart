@@ -51,25 +51,9 @@ class _MainScreenState extends State<MainScreen> {
         if (mounted) setState(() => _isCounsellor = true);
       }
 
-      // 3. Initialise & Update Gamification Streak
+      // 3. Initialise Gamification
       try {
         await GamificationService.initUserGamification(user.uid);
-        final bool streakUpdated = await GamificationService.updateStreak(user.uid);
-        if (streakUpdated && mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Row(
-                children: const [
-                  Icon(Icons.stars_rounded, color: Colors.amber),
-                  SizedBox(width: 8),
-                  Text('Daily Login Reward: +5 XP & +2 Coins!'),
-                ],
-              ),
-              backgroundColor: const Color(0xFF7C9C84),
-              duration: const Duration(seconds: 4),
-            ),
-          );
-        }
       } catch (e) {
         debugPrint('Error updating gamification: $e');
       }
@@ -308,9 +292,10 @@ class _MainScreenState extends State<MainScreen> {
                 await prefs.setString('last_used_side', 'counsellor');
                 if (mounted) {
                   Navigator.pop(context);
-                  Navigator.push(
+                  Navigator.pushAndRemoveUntil(
                     context,
                     MaterialPageRoute(builder: (context) => const CounsellorMainScreen()),
+                    (route) => false,
                   );
                 }
               },

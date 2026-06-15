@@ -12,6 +12,7 @@ class Post {
   final String moodText;
   final int moodColorValue;
   final List<String> likes; // User IDs who liked the post
+  final Map<String, List<String>> emojiReactions; // emoji -> User IDs
   final int commentCount;
   final String? imageUrl;
   final bool isArchived;
@@ -28,6 +29,7 @@ class Post {
     required this.moodText,
     required this.moodColorValue,
     required this.likes,
+    this.emojiReactions = const {},
     required this.commentCount,
     this.imageUrl,
     this.isArchived = false,
@@ -47,6 +49,9 @@ class Post {
       moodText: data['moodText'] ?? 'Neutral',
       moodColorValue: data['moodColorValue'] ?? 0xFF7C9C84,
       likes: List<String>.from(data['likes'] ?? []),
+      emojiReactions: (data['emojiReactions'] as Map<String, dynamic>?)?.map(
+        (k, v) => MapEntry(k, List<String>.from(v)),
+      ) ?? {},
       commentCount: data['commentCount'] ?? 0,
       imageUrl: data['imageUrl'],
       isArchived: data['isArchived'] ?? false,
@@ -65,6 +70,7 @@ class Post {
       'moodText': moodText,
       'moodColorValue': moodColorValue,
       'likes': likes,
+      'emojiReactions': emojiReactions,
       'commentCount': commentCount,
       'imageUrl': imageUrl,
       'isArchived': isArchived,

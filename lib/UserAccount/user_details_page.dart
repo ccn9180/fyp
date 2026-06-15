@@ -271,7 +271,11 @@ class _UserDetailsPageState extends State<UserDetailsPage> {
                 _buildTextField(
                   controller: _fullNameCtrl,
                   hintText: 'E.g. Julianne Smith',
-                  validator: (val) => val!.isEmpty ? 'Name is required' : null,
+                  validator: (val) {
+                    if (val == null || val.isEmpty) return 'Name is required';
+                    if (!RegExp(r'^[a-zA-Z\s]+$').hasMatch(val)) return 'Name can only contain alphabets';
+                    return null;
+                  },
                 ),
                 const SizedBox(height: 20),
 
@@ -289,13 +293,17 @@ class _UserDetailsPageState extends State<UserDetailsPage> {
                 ),
                 const SizedBox(height: 20),
 
-                // IC Number
-                _buildLabel('IC NUMBER'),
+                // ID Number
+                _buildLabel('ID NUMBER'),
                 _buildTextField(
                   controller: _icNumberCtrl,
-                  hintText: 'E.g. 990123-14-5555 or Passport No',
+                  hintText: 'E.g. 990123-14-5555',
                   keyboardType: TextInputType.text,
-                  validator: (val) => val!.isEmpty ? 'IC number is required' : null,
+                  validator: (val) {
+                    if (val == null || val.isEmpty) return 'ID number is required';
+                    if (!RegExp(r'^\d{6}-\d{2}-\d{4}$').hasMatch(val)) return 'Format must be XXXXXX-XX-XXXX';
+                    return null;
+                  },
                 ),
                 const SizedBox(height: 20),
 

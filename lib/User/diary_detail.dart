@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -78,6 +79,40 @@ class _DiaryDetailScreenState extends State<DiaryDetailScreen> {
   @override
   void initState() {
     super.initState();
+  }
+
+  // Helper methods to get emotion details
+  String _getEmotionEmoji(String emotion) {
+    switch (emotion.toLowerCase()) {
+      case 'joy': return '😊';
+      case 'calm': return '😌';
+      case 'sadness': case 'sad': return '😢';
+      case 'anxiety': case 'anxious': return '😰';
+      case 'anger': case 'angry': return '😠';
+      default: return '😐';
+    }
+  }
+
+  String _getEmotionDisplayName(String emotion) {
+    switch (emotion.toLowerCase()) {
+      case 'joy': return 'Happy';
+      case 'calm': return 'Calm';
+      case 'sadness': case 'sad': return 'Sad';
+      case 'anxiety': case 'anxious': return 'Anxious';
+      case 'anger': case 'angry': return 'Angry';
+      default: return 'Neutral';
+    }
+  }
+
+  Color _getEmotionColor(String emotion) {
+    switch (emotion.toLowerCase()) {
+      case 'joy': return const Color(0xFF4CAF50);
+      case 'calm': return const Color(0xFF2196F3);
+      case 'sadness': case 'sad': return const Color(0xFF9C27B0);
+      case 'anxiety': case 'anxious': return const Color(0xFFFF9800);
+      case 'anger': case 'angry': return const Color(0xFFF44336);
+      default: return const Color(0xFF9E9E9E);
+    }
   }
 
   @override
@@ -204,6 +239,8 @@ class _DiaryDetailScreenState extends State<DiaryDetailScreen> {
     final String? imageUrl = data['imageUrl'];
     final String? summary = data['summary'];
     final Timestamp? timestamp = data['timestamp'];
+    final List<dynamic>? emotionPercentages = data['emotionPercentages'];
+    final List<dynamic>? keywords = data['keywords'];
 
     String formattedDate = '';
     if (timestamp != null) {
@@ -325,23 +362,39 @@ class _DiaryDetailScreenState extends State<DiaryDetailScreen> {
               ],
             ),
 
-            const SizedBox(height: 24),
+            const SizedBox(height: 16),
 
-            // Mood Badges
-            Row(
-              children: [
-                _buildMoodBadge(displayMood, moodEmoji, moodBgColor, const Color(0xFF5D6D66)),
-                const SizedBox(width: 12),
-                if ((mood == 'Happy' || displayMood.contains('Joy')) && !displayMood.toLowerCase().contains('joy'))
-                  _buildMoodBadge('Joyful', '😊', const Color(0xFFFFF3E0), const Color(0xFFFF9800)),
-                if ((mood == 'Calm' || displayMood.contains('Reflective')) && !displayMood.toLowerCase().contains('peace') && !displayMood.toLowerCase().contains('reflect'))
-                  _buildMoodBadge('Peaceful', '🌿', const Color(0xFFE8F5E9), const Color(0xFF4CAF50)),
-              ],
-            ),
+            if (keywords != null && keywords.isNotEmpty) ...[
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: keywords.map((k) => Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1F3EE),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: const Color(0xFFE1E6DC)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.label_outline_rounded, size: 14, color: Color(0xFF7C9C84)),
+                      const SizedBox(width: 6),
+                      Text(
+                        k.toString(),
+                        style: GoogleFonts.outfit(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: textColorMain,
+                        ),
+                      ),
+                    ],
+                  ),
+                )).toList(),
+              ),
+            ],
 
-            const SizedBox(height: 32),
-
-            // Content Box
+            const SizedBox(height: 24),            // Content Box
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(24),
@@ -368,8 +421,93 @@ class _DiaryDetailScreenState extends State<DiaryDetailScreen> {
 
             const SizedBox(height: 24),
 
+            if (emotionPercentages != null && emotionPercentages.isNotEmpty) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(24),
+                  boxShadow: [
+                    BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 20, offset: const Offset(0, 10)),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Emotion Breakdown',
+                      style: GoogleFonts.outfit(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: textColorMain,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    ...emotionPercentages.map((ep) {
+                      final eName = ep['emotion'] ?? 'neutral';
+                      final conf = (ep['confidence'] as num?)?.toDouble() ?? 0.0;
+                      final cLabel = _getEmotionDisplayName(eName);
+                      final cColor = _getEmotionColor(eName);
+                      final emoji = _getEmotionEmoji(eName);
+                      
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 8.0),
+                        child: Row(
+                          children: [
+                            SizedBox(width: 24, child: Text(emoji, style: const TextStyle(fontSize: 14))),
+                            SizedBox(
+                              width: 60, 
+                              child: Text(
+                                cLabel, 
+                                style: GoogleFonts.outfit(fontSize: 13, color: textColorMain, fontWeight: FontWeight.w500)
+                              )
+                            ),
+                            Expanded(
+                              child: Stack(
+                                children: [
+                                  Container(
+                                    height: 8,
+                                    decoration: BoxDecoration(
+                                      color: cColor.withOpacity(0.1),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                  ),
+                                  FractionallySizedBox(
+                                    alignment: Alignment.centerLeft,
+                                    widthFactor: (conf / 100).clamp(0.0, 1.0),
+                                    child: Container(
+                                      height: 8,
+                                      decoration: BoxDecoration(
+                                        color: cColor,
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            SizedBox(
+                              width: 44,
+                              child: Text(
+                                '${conf.toStringAsFixed(1)}%',
+                                style: GoogleFonts.outfit(fontSize: 12, color: textColorSub, fontWeight: FontWeight.bold),
+                                textAlign: TextAlign.right,
+                              )
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                  ],
+                ),
+              ),
+            ],
+
             // AI Insights Box
-            if (summary != null && summary.isNotEmpty)
+            if (summary != null && summary.isNotEmpty) ...[
+              const SizedBox(height: 24),
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(24),
@@ -413,11 +551,11 @@ class _DiaryDetailScreenState extends State<DiaryDetailScreen> {
                   ],
                 ),
               ),
-
-            const SizedBox(height: 24),
+            ],
 
             // Image Card
-            if (imageUrl != null)
+            if (imageUrl != null) ...[
+              const SizedBox(height: 24),
               ClipRRect(
                 borderRadius: BorderRadius.circular(24),
                 child: widget.mockData != null && !imageUrl.startsWith('http')
@@ -428,8 +566,9 @@ class _DiaryDetailScreenState extends State<DiaryDetailScreen> {
                   fit: BoxFit.cover,
                 ),
               ),
+            ],
 
-            const SizedBox(height: 32),
+
 
             // Shared With Section (Only for owner)
             if (activeSharedFriends.isNotEmpty && !widget.isInnerCircle) ...[
@@ -472,7 +611,9 @@ class _DiaryDetailScreenState extends State<DiaryDetailScreen> {
                           child: CircleAvatar(
                             backgroundColor: buttonGreen.withOpacity(0.2),
                             backgroundImage: friend.profileImageUrl != null && friend.profileImageUrl!.isNotEmpty
-                                ? NetworkImage(friend.profileImageUrl!)
+                                ? (friend.profileImageUrl!.startsWith('data:image')
+                                    ? MemoryImage(base64Decode(friend.profileImageUrl!.split(',').last)) as ImageProvider
+                                    : NetworkImage(friend.profileImageUrl!))
                                 : null,
                             child: friend.profileImageUrl == null || friend.profileImageUrl!.isEmpty
                                 ? Text(
@@ -976,7 +1117,9 @@ class _DiaryDetailScreenState extends State<DiaryDetailScreen> {
                                CircleAvatar(
                                  backgroundColor: primaryGreen.withOpacity(0.1),
                                  backgroundImage: friend.profileImageUrl != null && friend.profileImageUrl!.isNotEmpty
-                                     ? NetworkImage(friend.profileImageUrl!)
+                                     ? (friend.profileImageUrl!.startsWith('data:image')
+                                         ? MemoryImage(base64Decode(friend.profileImageUrl!.split(',').last)) as ImageProvider
+                                         : NetworkImage(friend.profileImageUrl!))
                                      : null,
                                  child: friend.profileImageUrl == null || friend.profileImageUrl!.isEmpty
                                      ? Text(
@@ -1079,7 +1222,9 @@ class _DiaryDetailScreenState extends State<DiaryDetailScreen> {
             child: imageUrl != null && imageUrl.isNotEmpty
                 ? CircleAvatar(
                     radius: 20,
-                    backgroundImage: NetworkImage(imageUrl),
+                    backgroundImage: imageUrl.startsWith('data:image')
+                        ? MemoryImage(base64Decode(imageUrl.split(',').last)) as ImageProvider
+                        : NetworkImage(imageUrl),
                   )
                 : Icon(icon, color: isSelected ? const Color(0xFF7C9C84) : Colors.grey[400], size: 20),
           ),

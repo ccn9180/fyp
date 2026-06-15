@@ -1,3 +1,4 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Playfair+Display:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 
 @theme {
@@ -25,8 +26,8 @@
   --color-charcoal-muted: #888888;
   --color-charcoal-subtle: #CCCCCC;
 
-  --font-family-display: "Playfair Display", Georgia, serif;
-  --font-family-body: "Outfit", Inter, sans-serif;
+  --font-display: "Playfair Display", Georgia, serif;
+  --font-body: "Outfit", Inter, sans-serif;
 
   --shadow-card: 0 2px 16px 0 rgba(0,0,0,0.06);
   --shadow-card-hover: 0 6px 24px 0 rgba(124,156,132,0.14);
@@ -36,10 +37,14 @@
 *, *::before, *::after { box-sizing: border-box; }
 html, body, #root { height: 100%; margin: 0; }
 body {
-  font-family: var(--font-family-body);
+  font-family: var(--font-body);
   background-color: var(--color-cream);
   color: var(--color-charcoal);
   -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display);
 }
 
 input::placeholder, textarea::placeholder {
@@ -206,13 +211,23 @@ input::placeholder, textarea::placeholder {
   }
 
   .print-container {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
-    margin: 0;
-    padding: 0;
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
     background: white !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  /* CRITICAL: Browsers will clip print jobs if any ancestor has overflow:hidden or fixed height */
+  html, body, #root, #root > div, [style*="overflow"], .overflow-hidden, .overflow-y-auto, .flex-1 {
+    height: auto !important;
+    min-height: auto !important;
+    overflow: visible !important;
+    position: static !important;
   }
 
   /* Reset page margins */
@@ -221,14 +236,121 @@ input::placeholder, textarea::placeholder {
     size: auto;
   }
 
-  /* Remove backgrounds/shadows for better printing */
-  .print-container {
-    box-shadow: none !important;
-    border: none !important;
-  }
-
   /* Hide the modal overlay/header/footer during print */
   .no-print {
     display: none !important;
   }
+
+  .print-page-break {
+    height: 0 !important;
+  }
 }
+
+/* Hide scrollbar for sidebar */
+.hide-scrollbar {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+:root {
+  --bg-main: #F6F5F2;
+  --bg-card: #FFFFFF;
+  --border-color: #E5E4E0;
+  --text-darker: #2C3630;
+  --text-muted: #8A968F;
+  --primary-color: #7C9C84;
+  --primary-light: rgba(124, 156, 132, 0.12);
+}
+
+html.dark {
+  --bg-main: #181C1A;
+  --bg-card: #222724;
+  --border-color: #39423D;
+  --text-darker: #F9F6F0;
+  --text-muted: #A3ACA7;
+  --primary-color: #7C9C84;
+  --primary-light: rgba(124, 156, 132, 0.2);
+}
+
+/* Dark Mode Overrides */
+html.dark body {
+  background-color: #181C1A;
+  color: #F9F6F0;
+}
+
+html.dark {
+  color-scheme: dark;
+}
+
+/* Override background colors for cards and components */
+html.dark .bg-white,
+html.dark .bg-\[\#F6F5F2\],
+html.dark .bg-cream,
+html.dark .bg-cream\/50,
+html.dark .bg-cream\/30 {
+  background-color: #222724 !important;
+  color: #E5E4E0 !important;
+}
+
+/* Hover overrides for sidebar items */
+html.dark .hover\:bg-cream\/50:hover,
+html.dark .hover\:bg-cream:hover,
+html.dark .hover\:bg-cream-darker:hover {
+  background-color: #181C1A !important;
+}
+
+/* Override borders */
+html.dark .border-cream-darker,
+html.dark .border-\[\#E5E4E0\],
+html.dark .border-white\/20,
+html.dark .border {
+  border-color: #39423D !important;
+}
+
+/* Override text colors */
+html.dark .text-charcoal,
+html.dark .text-\[\#333\] {
+  color: #F9F6F0 !important;
+}
+
+html.dark .text-charcoal-muted,
+html.dark .text-\[\#666\] {
+  color: #A3ACA7 !important;
+}
+
+html.dark .text-muted,
+html.dark .text-\[\#888\] {
+  color: #8A968F !important;
+}
+
+/* Override specific panels */
+html.dark .bg-sage-50,
+html.dark .bg-sage-100 {
+  background-color: #2C332F !important;
+}
+
+html.dark .bg-\[\#525659\]\/10 {
+  background-color: rgba(0,0,0,0.4) !important;
+}
+
+html.dark .bg-white\/80 {
+  background-color: rgba(34, 39, 36, 0.8) !important;
+}
+
+/* Specific chart adjustments */
+html.dark .recharts-cartesian-grid-horizontal line,
+html.dark .recharts-cartesian-grid-vertical line {
+  stroke: #39423D;
+}
+
+html.dark .recharts-text {
+  fill: #A3ACA7;
+}
+
+html.dark .shadow-\[0_0_50px_rgba\(0\,0\,0\,0\.15\)\] {
+  box-shadow: 0 0 50px rgba(0,0,0,0.4) !important;
+}
+

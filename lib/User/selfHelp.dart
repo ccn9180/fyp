@@ -30,6 +30,7 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
   final ScrollController _meditationFilterScrollController = ScrollController();
   final ScrollController _articleFilterScrollController = ScrollController();
   bool _showBackToTop = false;
+  String? _todayMood;
 
   @override
   void initState() {
@@ -59,12 +60,42 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
 
     _searchController.addListener(() {
       setState(() {
-        _searchQuery = _searchController.text.toLowerCase();
+        _searchQuery = _searchController.text.toLowerCase().trim();
       });
     });
     _loadFavorites();
     _loadRecommendations();
+    _checkTodayMood();
     _preloadAssets();
+  }
+
+  Future<void> _checkTodayMood() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    
+    final now = DateTime.now();
+    final todayStart = DateTime(now.year, now.month, now.day);
+    
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('mood_checkins')
+          .where('timestamp', isGreaterThanOrEqualTo: Timestamp.fromDate(todayStart))
+          .orderBy('timestamp', descending: true)
+          .limit(1)
+          .get();
+          
+      if (snap.docs.isNotEmpty) {
+        if (mounted) {
+          setState(() {
+            _todayMood = snap.docs.first['emotion'];
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Error checking today mood: $e');
+    }
   }
 
   void scrollToTop() {
@@ -242,13 +273,32 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        'Resource Hub',
-                        style: GoogleFonts.playfairDisplay(
-                          fontSize: 28,
-                          fontWeight: FontWeight.w600,
-                          color: const Color(0xFF333333),
-                        ),
+                      Row(
+                        children: [
+                          if (Navigator.canPop(context))
+                            Padding(
+                              padding: const EdgeInsets.only(right: 12.0),
+                              child: GestureDetector(
+                                onTap: () => Navigator.pop(context),
+                                child: Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: const BoxDecoration(
+                                    color: Colors.white,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF333333), size: 18),
+                                ),
+                              ),
+                            ),
+                          Text(
+                            'Resource Hub',
+                            style: GoogleFonts.playfairDisplay(
+                              fontSize: 28,
+                              fontWeight: FontWeight.w600,
+                              color: const Color(0xFF333333),
+                            ),
+                          ),
+                        ],
                       ),
                       Row(
                         children: [
@@ -314,6 +364,16 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
                     ),
                     child: TextField(
                       controller: _searchController,
+                      onTap: () {
+                        // Auto-scroll so search bar is at top when keyboard opens
+                        if (_scrollController.hasClients) {
+                          _scrollController.animateTo(
+                            72,
+                            duration: const Duration(milliseconds: 350),
+                            curve: Curves.easeInOut,
+                          );
+                        }
+                      },
                       decoration: InputDecoration(
                         hintText: 'Search resources...',
                         hintStyle: GoogleFonts.outfit(color: const Color(0xFFB3B3B3), fontSize: 14),
@@ -347,109 +407,123 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
                   ),
                 ),
               ),
-              const SliverToBoxAdapter(child: SizedBox(height: 16)),
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Your Journey',
-                        style: GoogleFonts.playfairDisplay(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w500,
-                          color: const Color(0xFF333333),
-                        ),
-                      ),
-                      GestureDetector(
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (context) => const DetailedHistoryScreen()),
-                          );
-                        },
-                        child: Text(
-                          'VIEW DETAILED HISTORY',
-                          style: GoogleFonts.outfit(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 1.0,
-                            color: const Color(0xFF7C9C84),
+              if (_searchQuery.isEmpty) ...[
+                const SliverToBoxAdapter(child: SizedBox(height: 16)),
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Your Journey',
+                          style: GoogleFonts.playfairDisplay(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w500,
+                            color: const Color(0xFF333333),
                           ),
                         ),
-                      ),
-                    ],
+                        GestureDetector(
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (context) => const DetailedHistoryScreen()),
+                            );
+                          },
+                          child: Text(
+                            'VIEW DETAILED HISTORY',
+                            style: GoogleFonts.outfit(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1.0,
+                              color: const Color(0xFF7C9C84),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-              const SliverToBoxAdapter(
-                child: SizedBox(height: 12),
-              ),
-              SliverToBoxAdapter(
-                child: StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance
-                      .collection('user_activity')
-                      .where('userId', isEqualTo: FirebaseAuth.instance.currentUser?.uid)
-                      .snapshots(),
-                  builder: (context, snapshot) {
-                    int totalMins = 0;
-                    int articlesCount = 0;
+                const SliverToBoxAdapter(
+                  child: SizedBox(height: 12),
+                ),
+                SliverToBoxAdapter(
+                  child: StreamBuilder<QuerySnapshot>(
+                    stream: FirebaseFirestore.instance
+                        .collection('user_activity')
+                        .where('userId', isEqualTo: FirebaseAuth.instance.currentUser?.uid)
+                        .snapshots(),
+                    builder: (context, snapshot) {
+                      int totalMins = 0;
+                      int articlesCount = 0;
 
-                    if (snapshot.hasData) {
-                      for (var doc in snapshot.data!.docs) {
-                        final data = doc.data() as Map<String, dynamic>;
-                        if (data['type'] == 'meditation') {
-                          final durStr = (data['duration'] ?? '0:00').toString();
-                          final parts = durStr.split(':');
-                          if (parts.length == 3) {
-                            // HH:MM:SS
-                            totalMins += (int.tryParse(parts[0]) ?? 0) * 60 + (int.tryParse(parts[1]) ?? 0);
-                          } else if (parts.length == 2) {
-                            // MM:SS
-                            totalMins += int.tryParse(parts[0]) ?? 0;
-                          } else {
-                            totalMins += int.tryParse(durStr) ?? 0;
+                      if (snapshot.hasData) {
+                        for (var doc in snapshot.data!.docs) {
+                          final data = doc.data() as Map<String, dynamic>;
+                          if (data['type'] == 'meditation') {
+                            final durStr = (data['duration'] ?? '0:00').toString();
+                            final parts = durStr.split(':');
+                            if (parts.length == 3) {
+                              // HH:MM:SS
+                              totalMins += (int.tryParse(parts[0]) ?? 0) * 60 + (int.tryParse(parts[1]) ?? 0);
+                            } else if (parts.length == 2) {
+                              // MM:SS
+                              totalMins += int.tryParse(parts[0]) ?? 0;
+                            } else {
+                              totalMins += int.tryParse(durStr) ?? 0;
+                            }
+                          } else if (data['type'] == 'article') {
+                            final progress = data['progress'] ?? 0;
+                            if (progress > 80) articlesCount++;
                           }
-                        } else if (data['type'] == 'article') {
-                          final progress = data['progress'] ?? 0;
-                          if (progress > 80) articlesCount++;
                         }
                       }
-                    }
 
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: _buildJourneyCard(
-                              totalMins.toString(),
-                              'MINS',
-                              'MEDITATED',
-                              Icons.timer,
-                              (totalMins / 300).clamp(0.0, 1.0), // Goal of 300 mins
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: _buildJourneyCard(
+                                totalMins.toString(),
+                                'MINS',
+                                'MEDITATED',
+                                Icons.timer,
+                                (totalMins / 300).clamp(0.0, 1.0), // Goal of 300 mins
+                                () { 
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(builder: (context) => const DetailedHistoryScreen(filterType: 'meditation')),
+                                  );
+                                },
+                              ),
                             ),
-                          ),
-                          const SizedBox(width: 20),
-                          Expanded(
-                            child: _buildJourneyCard(
-                              articlesCount.toString(),
-                              'ITEMS',
-                              'ARTICLES READ',
-                              Icons.menu_book,
-                              (articlesCount / 50).clamp(0.0, 1.0), // Goal of 50 articles
+                            const SizedBox(width: 20),
+                            Expanded(
+                              child: _buildJourneyCard(
+                                articlesCount.toString(),
+                                'ITEMS',
+                                'ARTICLES READ',
+                                Icons.menu_book,
+                                (articlesCount / 50).clamp(0.0, 1.0), // Goal of 50 articles
+                                () { 
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(builder: (context) => const DetailedHistoryScreen(filterType: 'article')),
+                                  );
+                                },
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
+                          ],
+                        ),
+                      );
+                    },
+                  ),
                 ),
-              ),
-              const SliverToBoxAdapter(
-                child: SizedBox(height: 16),
-              ),
+                const SliverToBoxAdapter(
+                  child: SizedBox(height: 16),
+                ),
+              ],
               SliverAppBar(
                 pinned: true,
                 backgroundColor: const Color(0xFFF2F1EC),
@@ -581,26 +655,34 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
                     SliverToBoxAdapter(
                       child: _buildCounsellorAnnouncement(),
                     ),
-                  StreamBuilder<QuerySnapshot>(
-                    stream: _selectedMeditationCategory == 'All'
-                        ? FirebaseFirestore.instance.collection('meditation_guides').where('status', isEqualTo: 'published').limit(10).snapshots()
-                        : (_selectedMeditationCategory == 'Favourite' || _selectedMeditationCategory == 'Recommend')
-                        ? FirebaseFirestore.instance.collection('meditation_guides').where('status', isEqualTo: 'published').snapshots()
-                        : FirebaseFirestore.instance.collection('meditation_guides').where('status', isEqualTo: 'published').where('category', isEqualTo: _selectedMeditationCategory).snapshots(),
-                    builder: (context, snapshot) {
+                   if (_searchQuery.isEmpty && _selectedMeditationCategory == 'All')
+                    StreamBuilder<QuerySnapshot>(
+                      stream: FirebaseFirestore.instance.collection('meditation_guides').where('status', isEqualTo: 'published').snapshots(),
+                      builder: (context, snapshot) {
                       if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
+                        String? moodCategory;
+                        if (_todayMood != null) {
+                          switch (_todayMood!.toLowerCase()) {
+                            case 'anxious': moodCategory = 'Stress'; break;
+                            case 'angry': moodCategory = 'Breathing'; break;
+                            case 'happy': moodCategory = 'Focus'; break;
+                            case 'calm': moodCategory = 'Guided'; break;
+                            case 'neutral': moodCategory = 'Mindfulness'; break;
+                          }
+                        }
+
                         final filteredDocs = snapshot.data!.docs.where((doc) {
                           final data = doc.data() as Map<String, dynamic>;
 
-                          bool matchesCategory = true;
-                          if (_selectedMeditationCategory == 'Favourite') {
-                            matchesCategory = _favoritedResources.contains(doc.id);
-                          } else if (_selectedMeditationCategory == 'Recommend') {
-                            matchesCategory = _recommendedResourceIds.contains(doc.id);
+                          bool matchesCategory = false;
+                          if (_recommendedResourceIds.isNotEmpty && _recommendedResourceIds.contains(doc.id)) {
+                            matchesCategory = true;
+                          } else if (moodCategory != null && (data['category'] ?? '').toString() == moodCategory) {
+                            matchesCategory = true;
                           }
 
                           return matchesCategory;
-                        }).toList();
+                        }).take(8).toList();
 
                         if (filteredDocs.isEmpty) return const SliverToBoxAdapter(child: SizedBox.shrink());
 
@@ -672,7 +754,10 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 24.0),
                       child: Text(
-                        'Daily Practice',
+                        _selectedMeditationCategory == 'All' ? 'Daily Practice' : 
+                        _selectedMeditationCategory == 'Favourite' ? 'Your Favourites' : 
+                        _selectedMeditationCategory == 'Recommend' ? 'Recommended for You' : 
+                        '${_selectedMeditationCategory} Meditations',
                         style: GoogleFonts.playfairDisplay(
                           fontSize: 20,
                           fontWeight: FontWeight.w500,
@@ -688,24 +773,30 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
                         : FirebaseFirestore.instance.collection('meditation_guides').where('status', isEqualTo: 'published').where('category', isEqualTo: _selectedMeditationCategory).snapshots(),
                     builder: (context, snapshot) {
                       if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
-                        // Filter client-side for search
-                        final filteredDocs = snapshot.data!.docs.where((doc) {
+                        // Filter client-side for search + duration + category
+                        var filteredDocs = snapshot.data!.docs.where((doc) {
                           final data = doc.data() as Map<String, dynamic>;
                           final title = (data['title'] ?? '').toString().toLowerCase();
                           final category = (data['category'] ?? '').toString().toLowerCase();
                           final durationStr = (data['duration'] ?? '').toString();
 
-                          final matchesSearch = title.contains(_searchQuery) || category.contains(_searchQuery);
+                          final matchesSearch = _searchQuery.isEmpty || title.contains(_searchQuery) || category.contains(_searchQuery);
                           bool matchesDuration = _selectedMeditationDuration == 'All';
 
                           final parts = durationStr.split(':');
-                          if (parts.length >= 2) {
-                            final mins = int.tryParse(parts[0]) ?? 99;
-                            if (_selectedMeditationDuration == 'UNDER_3') matchesDuration = mins < 3;
-                            else if (_selectedMeditationDuration == '3_TO_5') matchesDuration = mins >= 3 && mins <= 5;
-                            else if (_selectedMeditationDuration == '5_TO_10') matchesDuration = mins > 5 && mins <= 10;
-                            else if (_selectedMeditationDuration == 'OVER_10') matchesDuration = mins > 10;
+                          int mins = 99;
+                          if (durationStr.contains('min')) {
+                            mins = int.tryParse(durationStr.replaceAll(RegExp(r'[^0-9]'), '')) ?? 99;
+                          } else if (parts.length >= 2) {
+                            mins = int.tryParse(parts[0]) ?? 99;
+                          } else {
+                            mins = int.tryParse(durationStr) ?? 99;
                           }
+
+                          if (_selectedMeditationDuration == 'UNDER_3') matchesDuration = mins < 3;
+                          else if (_selectedMeditationDuration == '3_TO_5') matchesDuration = mins >= 3 && mins <= 5;
+                          else if (_selectedMeditationDuration == '5_TO_10') matchesDuration = mins > 5 && mins <= 10;
+                          else if (_selectedMeditationDuration == 'OVER_10') matchesDuration = mins > 10;
 
                           bool matchesCategory = true;
                           if (_selectedMeditationCategory == 'Favourite') {
@@ -716,6 +807,26 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
 
                           return matchesSearch && matchesDuration && matchesCategory;
                         }).toList();
+
+                        // Relevance sort — best matches float to top when searching
+                        if (_searchQuery.isNotEmpty) {
+                          final q = _searchQuery;
+                          filteredDocs.sort((a, b) {
+                            final aData = a.data() as Map<String, dynamic>;
+                            final bData = b.data() as Map<String, dynamic>;
+                            int score(Map<String, dynamic> d) {
+                              final title = (d['title'] ?? '').toString().toLowerCase();
+                              final cat = (d['category'] ?? '').toString().toLowerCase();
+                              if (title == q) return 0;
+                              if (title.startsWith(q)) return 1;
+                              if (title.contains(q)) return 2;
+                              if (cat.startsWith(q)) return 3;
+                              if (cat.contains(q)) return 4;
+                              return 5;
+                            }
+                            return score(aData).compareTo(score(bData));
+                          });
+                        }
 
                         if (filteredDocs.isEmpty) {
                           return _buildEmptyState("No meditation guides match your search or filter.");
@@ -753,7 +864,7 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
                       }
                     },
                   ),
-                  const SliverToBoxAdapter(child: SizedBox(height: 100)),
+                  const SliverToBoxAdapter(child: SizedBox(height: 32)),
                 ],
               ),
 
@@ -837,14 +948,22 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
                     SliverToBoxAdapter(
                       child: _buildCounsellorAnnouncement(),
                     ),
-                  StreamBuilder<QuerySnapshot>(
-                    stream: _selectedArticleCategory == 'All'
-                        ? FirebaseFirestore.instance.collection('articles').where('status', isEqualTo: 'published').limit(10).snapshots()
-                        : (_selectedArticleCategory == 'Favourite' || _selectedArticleCategory == 'Recommend')
-                        ? FirebaseFirestore.instance.collection('articles').where('status', isEqualTo: 'published').snapshots()
-                        : FirebaseFirestore.instance.collection('articles').where('status', isEqualTo: 'published').where('tag', isEqualTo: _selectedArticleCategory).snapshots(),
-                    builder: (context, snapshot) {
+                  if (_searchQuery.isEmpty && _selectedArticleCategory == 'All')
+                    StreamBuilder<QuerySnapshot>(
+                      stream: FirebaseFirestore.instance.collection('articles').where('status', isEqualTo: 'published').snapshots(),
+                      builder: (context, snapshot) {
                       if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
+                        String? moodTag;
+                        if (_todayMood != null) {
+                          switch (_todayMood!.toLowerCase()) {
+                            case 'anxious': moodTag = 'Anxiety'; break;
+                            case 'angry': moodTag = 'Self-Care'; break;
+                            case 'happy': moodTag = 'Mental Health'; break;
+                            case 'calm': moodTag = 'Science-Backed'; break;
+                            case 'neutral': moodTag = 'Self-Care'; break;
+                          }
+                        }
+
                         final filteredDocs = snapshot.data!.docs.where((doc) {
                           final data = doc.data() as Map<String, dynamic>;
                           final title = (data['title'] ?? '').toString().toLowerCase();
@@ -861,15 +980,15 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
                             matchesDuration = true;
                           }
 
-                          bool matchesCategory = true;
-                          if (_selectedArticleCategory == 'Favourite') {
-                            matchesCategory = _favoritedResources.contains(doc.id);
-                          } else if (_selectedArticleCategory == 'Recommend') {
-                            matchesCategory = _recommendedResourceIds.contains(doc.id);
+                          bool matchesCategory = false;
+                          if (_recommendedResourceIds.isNotEmpty && _recommendedResourceIds.contains(doc.id)) {
+                            matchesCategory = true;
+                          } else if (moodTag != null && (data['tag'] ?? '').toString() == moodTag) {
+                            matchesCategory = true;
                           }
 
-                          return (title.contains(_searchQuery) || tag.contains(_searchQuery)) && matchesDuration && matchesCategory;
-                        }).toList();
+                          return matchesCategory && matchesDuration;
+                        }).take(8).toList();
 
                         if (filteredDocs.isEmpty) return const SliverToBoxAdapter(child: SizedBox.shrink());
 
@@ -949,7 +1068,10 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 24.0),
                       child: Text(
-                        'Daily Reads',
+                        _selectedArticleCategory == 'All' ? 'Latest Reads' : 
+                        _selectedArticleCategory == 'Favourite' ? 'Your Favourites' : 
+                        _selectedArticleCategory == 'Recommend' ? 'Recommended for You' : 
+                        '${_selectedArticleCategory} Articles',
                         style: GoogleFonts.playfairDisplay(
                           fontSize: 20,
                           fontWeight: FontWeight.w500,
@@ -965,13 +1087,14 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
                         : FirebaseFirestore.instance.collection('articles').where('status', isEqualTo: 'published').where('tag', isEqualTo: _selectedArticleCategory).snapshots(),
                     builder: (context, snapshot) {
                       if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
-                        // Filter client-side for search
-                        final filteredDocs = snapshot.data!.docs.where((doc) {
+                        // Filter client-side for search + duration + category
+                        var filteredDocs = snapshot.data!.docs.where((doc) {
                           final data = doc.data() as Map<String, dynamic>;
                           final title = (data['title'] ?? '').toString().toLowerCase();
                           final tag = (data['tag'] ?? '').toString().toLowerCase();
                           final readTime = (data['readingTime'] ?? '').toString().toLowerCase();
 
+                          final matchesSearch = _searchQuery.isEmpty || title.contains(_searchQuery) || tag.contains(_searchQuery);
                           bool matchesDuration = _selectedArticleDuration == 'All';
                           if (readTime.contains('min')) {
                             final mins = int.tryParse(readTime.split(' ')[0]) ?? 99;
@@ -988,8 +1111,28 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
                             matchesArticleCategory = _recommendedResourceIds.contains(doc.id);
                           }
 
-                          return (title.contains(_searchQuery) || tag.contains(_searchQuery)) && matchesDuration && matchesArticleCategory;
+                          return matchesSearch && matchesDuration && matchesArticleCategory;
                         }).toList();
+
+                        // Relevance sort — best matches float to top when searching
+                        if (_searchQuery.isNotEmpty) {
+                          final q = _searchQuery;
+                          filteredDocs.sort((a, b) {
+                            final aData = a.data() as Map<String, dynamic>;
+                            final bData = b.data() as Map<String, dynamic>;
+                            int score(Map<String, dynamic> d) {
+                              final title = (d['title'] ?? '').toString().toLowerCase();
+                              final tag = (d['tag'] ?? '').toString().toLowerCase();
+                              if (title == q) return 0;
+                              if (title.startsWith(q)) return 1;
+                              if (title.contains(q)) return 2;
+                              if (tag.startsWith(q)) return 3;
+                              if (tag.contains(q)) return 4;
+                              return 5;
+                            }
+                            return score(aData).compareTo(score(bData));
+                          });
+                        }
 
                         if (filteredDocs.isEmpty) {
                           return _buildEmptyState("No articles match your search or filter.");
@@ -1035,7 +1178,7 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
                       }
                     },
                   ),
-                  const SliverToBoxAdapter(child: SizedBox(height: 100)),
+                  const SliverToBoxAdapter(child: SizedBox(height: 32)),
                 ],
               ),
             ],
@@ -1340,10 +1483,12 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
     );
   }
 
-  Widget _buildJourneyCard(String value, String unit, String subtitle, IconData icon, double progress) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 14),
-      decoration: BoxDecoration(
+  Widget _buildJourneyCard(String value, String unit, String subtitle, IconData icon, double progress, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(28),
         boxShadow: [
@@ -1416,6 +1561,7 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
             ),
           ),
         ],
+      ),
       ),
     );
   }
@@ -2024,18 +2170,18 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: const Color(0xFF7C9C84).withOpacity(0.1),
+              color: const Color(0xFF7C9C84).withOpacity(0.08),
               shape: BoxShape.circle,
             ),
             child: const Icon(
-              Icons.spa_outlined,
+              Icons.search_off_rounded,
               color: Color(0xFF7C9C84),
               size: 32,
             ),
           ),
           const SizedBox(height: 16),
           Text(
-            "No resources found",
+            "No results found",
             style: GoogleFonts.playfairDisplay(
               fontSize: 18,
               fontWeight: FontWeight.bold,
@@ -2049,6 +2195,7 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
             style: GoogleFonts.outfit(
               fontSize: 13,
               color: const Color(0xFF888888),
+              height: 1.5,
             ),
           ),
           const SizedBox(height: 20),

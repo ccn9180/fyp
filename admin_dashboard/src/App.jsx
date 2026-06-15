@@ -23,6 +23,7 @@ import AccountSettings from './pages/account/AccountSettings.jsx';
 import CrisisCenter from './pages/monitoring/CrisisCenter.jsx';
 import CommunityMonitoring from './pages/monitoring/CommunityMonitoring.jsx';
 import AddFeed from './pages/monitoring/AddFeed.jsx';
+import SystemSettings from './pages/settings/SystemSettings.jsx';
 
 const C = { primary: '#7C9C84', cream: '#F6F5F2', charcoal: '#333' };
 
@@ -150,6 +151,7 @@ export default function App() {
           <Route path="/gamification/engagement" element={<Engagement />} />
           <Route path="/gamification/rewards" element={<Rewards />} />
           <Route path="/account" element={<AccountSettings />} />
+          <Route path="/settings" element={<SystemSettings />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </ErrorBoundary>

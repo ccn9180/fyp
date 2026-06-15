@@ -9,7 +9,13 @@ Reads from emotion_dataset.csv and saves to emotion_model_data.pth
 import csv
 import re
 import random
+import nltk
+from nltk.stem import WordNetLemmatizer
+
+nltk.download('wordnet', quiet=True)
+nltk.download('omw-1.4', quiet=True)
 from collections import Counter
+from tqdm import tqdm
 
 import numpy as np
 import torch
@@ -31,8 +37,44 @@ UNK_TOKEN = "<UNK>"
 
 
 # ── Tokeniser ────────────────────────────────────────────────
+_lemmatizer = WordNetLemmatizer()
+
 def tokenize(sentence: str):
-    return re.findall(r"\b\w+\b", sentence.lower())
+    words = re.findall(r"\b\w+\b", sentence.lower())
+    return [_lemmatizer.lemmatize(w) for w in words]
+
+# ── Emotion Grouping ─────────────────────────────────────────
+EMOTION_MAP = {
+    # Joy: strong positive emotions — personal achievement, warmth, happiness
+    'amusement': 'Joy', 'enthusiasm': 'Joy', 'excitement': 'Joy', 'fun': 'Joy',
+    'happiness': 'Joy', 'joy': 'Joy', 'pride': 'Joy',
+    'admiration': 'Joy', 'gratitude': 'Joy', 'love': 'Joy',
+
+    # Calm: peaceful, grounded, relieved
+    'calm': 'Calm', 'relief': 'Calm',
+
+    # Sadness: loss, grief, regret
+    'disappointment': 'Sadness', 'empty': 'Sadness', 'grief': 'Sadness',
+    'remorse': 'Sadness', 'sadness': 'Sadness',
+
+    # Anxiety: fear, worry, nervousness
+    'anxiety': 'Anxiety', 'fear': 'Anxiety', 'nervousness': 'Anxiety', 'worry': 'Anxiety',
+
+    # Anger: hostility, frustration, moral disapproval
+    'anger': 'Anger', 'annoyance': 'Anger', 'disapproval': 'Anger',
+    'disgust': 'Anger', 'hate': 'Anger',
+
+    # Hopeful: forward-looking, supportive, aspirational
+    'optimism': 'Hopeful', 'approval': 'Hopeful', 'caring': 'Hopeful', 'desire': 'Hopeful',
+
+    # Overwhelmed: internally distressing self-conscious emotions
+    'confusion': 'Overwhelmed', 'embarrassment': 'Overwhelmed',
+    'guilt': 'Overwhelmed', 'shame': 'Overwhelmed',
+
+    # Neutral: observational, cognitive, everyday states
+    'neutral': 'Neutral', 'boredom': 'Neutral', 'curiosity': 'Neutral',
+    'realization': 'Neutral', 'surprise': 'Neutral',
+}
 
 
 # ── Load CSV dataset ─────────────────────────────────────────
@@ -43,10 +85,11 @@ def load_dataset(path="emotion_dataset.csv"):
         reader = csv.DictReader(f, delimiter="\t")
         for row in reader:
             text = row["text"].strip()
-            label = row["label"].strip()
-            if text and label:
+            label_raw = row["label"].strip()
+            if text and label_raw:
+                mapped_label = EMOTION_MAP.get(label_raw, "Neutral")
                 texts.append(text)
-                labels_raw.append(label)
+                labels_raw.append(mapped_label)
 
     # Build sorted label list (ensures consistent index mapping)
     tags = sorted(set(labels_raw))
@@ -61,7 +104,7 @@ def load_dataset(path="emotion_dataset.csv"):
 
 
 # ── Vocabulary ───────────────────────────────────────────────
-def build_vocab(texts, min_freq=1):
+def build_vocab(texts, min_freq=2):
     counter = Counter()
     for text in texts:
         counter.update(tokenize(text))
@@ -129,11 +172,35 @@ def compute_class_weights(labels, num_classes, device):
     weights = [total / (num_classes * counts.get(i, 1)) for i in range(num_classes)]
     return torch.tensor(weights, dtype=torch.float32, device=device)
 
+import torch.nn.functional as F
+
+class FocalLoss(nn.Module):
+    def __init__(self, alpha=None, gamma=2.0, reduction='mean', label_smoothing=0.05):
+        super(FocalLoss, self).__init__()
+        self.alpha = alpha
+        self.gamma = gamma
+        self.reduction = reduction
+        self.label_smoothing = label_smoothing
+
+    def forward(self, inputs, targets):
+        ce_loss = F.cross_entropy(inputs, targets, weight=self.alpha, reduction='none', label_smoothing=self.label_smoothing)
+        pt = torch.exp(-ce_loss)
+        focal_loss = ((1 - pt) ** self.gamma) * ce_loss
+        
+        if self.reduction == 'mean':
+            return focal_loss.mean()
+        elif self.reduction == 'sum':
+            return focal_loss.sum()
+        else:
+            return focal_loss
+
 
 # ── Evaluation ───────────────────────────────────────────────
-def evaluate(model, loader, criterion, device):
+def evaluate(model, loader, criterion, device, num_classes):
     model.eval()
     total_loss, correct, total = 0.0, 0, 0
+    cm = np.zeros((num_classes, num_classes), dtype=int)
+    
     with torch.no_grad():
         for x, y in loader:
             x, y = x.to(device), y.to(device)
@@ -143,30 +210,83 @@ def evaluate(model, loader, criterion, device):
             preds = out.argmax(dim=1)
             correct += (preds == y).sum().item()
             total += y.size(0)
-    return total_loss / max(len(loader), 1), correct / max(total, 1) * 100
+            
+            for true, pred in zip(y.tolist(), preds.tolist()):
+                cm[true, pred] += 1
+                
+    class_correct = cm.diagonal()
+    class_total = cm.sum(axis=1)
+    
+    f1s = []
+    for i in range(num_classes):
+        cor = class_correct[i]
+        tot = class_total[i]
+        pred_tot = cm[:, i].sum()
+        precision = cor / pred_tot if pred_tot > 0 else 0.0
+        recall = cor / tot if tot > 0 else 0.0
+        f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
+        f1s.append(f1)
+        
+    macro_f1 = np.mean(f1s) * 100
+    
+    return total_loss / max(len(loader), 1), correct / max(total, 1) * 100, macro_f1
 
 
 def evaluate_per_class(model, loader, tags, device):
     model.eval()
-    class_correct = {t: 0 for t in tags}
-    class_total   = {t: 0 for t in tags}
+    num_classes = len(tags)
+    cm = np.zeros((num_classes, num_classes), dtype=int)
+    
     with torch.no_grad():
         for x, y in loader:
             x, y = x.to(device), y.to(device)
             preds = model(x).argmax(dim=1)
             for true, pred in zip(y.tolist(), preds.tolist()):
-                tag = tags[true]
-                class_total[tag] += 1
-                if true == pred:
-                    class_correct[tag] += 1
-    print("\n[RESULTS] Per-Class Accuracy (Validation):")
-    print(f"  {'Emotion':<12} {'Correct':>8} {'Total':>8} {'Acc':>8}")
-    print("  " + "-" * 42)
-    for tag in tags:
-        tot = class_total[tag]
-        cor = class_correct[tag]
+                cm[true, pred] += 1
+
+    print("\n[RESULTS] Per-Class Metrics (Validation):")
+    print(f"  {'Emotion':<12} {'Correct':>8} {'Total':>8} {'Acc':>7} | {'Prec':>6} {'Rec':>6} {'F1':>6}")
+    print("  " + "-" * 62)
+    
+    class_total = cm.sum(axis=1)
+    class_correct = cm.diagonal()
+    
+    precisions = []
+    recalls = []
+    f1s = []
+    
+    for i, tag in enumerate(tags):
+        tot = class_total[i]
+        cor = class_correct[i]
         acc = (cor / tot * 100) if tot > 0 else 0.0
-        print(f"  {tag:<12} {cor:>8} {tot:>8} {acc:>7.1f}%")
+        
+        pred_tot = cm[:, i].sum()
+        precision = cor / pred_tot if pred_tot > 0 else 0.0
+        recall = cor / tot if tot > 0 else 0.0
+        f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
+        
+        precisions.append(precision)
+        recalls.append(recall)
+        f1s.append(f1)
+        
+        print(f"  {tag:<12} {cor:>8} {tot:>8} {acc:>6.1f}% | {precision*100:>5.1f}% {recall*100:>5.1f}% {f1*100:>5.1f}%")
+        
+    macro_precision = np.mean(precisions)
+    macro_recall = np.mean(recalls)
+    macro_f1 = np.mean(f1s)
+    
+    print("\n[RESULTS] Overall Metrics:")
+    print(f"  Macro Precision: {macro_precision * 100:.1f}%")
+    print(f"  Macro Recall   : {macro_recall * 100:.1f}%")
+    print(f"  Macro F1       : {macro_f1 * 100:.1f}%")
+    
+    print("\n[RESULTS] Confusion Matrix:")
+    label_str = "True \\ Pred"
+    header = f"{label_str:<15}" + "".join([f"{t[:4]:>6}" for t in tags])
+    print("  " + header)
+    for i, row in enumerate(cm):
+        row_str = "".join([f"{val:>6}" for val in row])
+        print(f"  {tags[i]:<15}{row_str}")
 
 
 # ── Main training function ───────────────────────────────────
@@ -176,18 +296,17 @@ def train_model():
 
     # ── Hyperparameters ──────────────────────────────────────
     NUM_EPOCHS          = 200
-    BATCH_SIZE          = 16
-    LEARNING_RATE       = 0.0008
-    EMBEDDING_DIM       = 64
-    HIDDEN_SIZE         = 64        # Reduced from 128 → less capacity → less overfitting
+    BATCH_SIZE          = 32
+    LEARNING_RATE       = 0.0005
+    EMBEDDING_DIM       = 128
+    HIDDEN_SIZE         = 128
     NUM_LAYERS          = 2
-    DROPOUT             = 0.5       # Increased from 0.35 → stronger regularisation
+    DROPOUT             = 0.5  # Increased dropout for regularization
     VALIDATION_RATIO    = 0.2
-    EARLY_STOP_PATIENCE = 30        # More patience to find better generalisation
+    EARLY_STOP_PATIENCE = 20
     MIN_DELTA           = 0.005
 
-    # ── Data ─────────────────────────────────────────────────
-    texts, labels_raw, tags, label_to_idx = load_dataset("emotion_dataset.csv")
+    texts, labels_raw, tags, label_to_idx = load_dataset("emotion_dataset_combined.csv")
     vocab = build_vocab(texts)
 
     label_indices = [label_to_idx[l] for l in labels_raw]
@@ -204,10 +323,22 @@ def train_model():
     dataset = EmotionDataset(sequences, label_indices)
     train_idx, val_idx = stratified_split(label_indices, val_ratio=VALIDATION_RATIO, seed=SEED)
 
+    # --- Weighted Random Sampler ---
+    train_labels_only = [label_indices[i] for i in train_idx]
+    counts = np.bincount(train_labels_only, minlength=num_classes)
+    weights = 1.0 / np.maximum(counts, 1)
+    sample_weights = [weights[l] for l in train_labels_only]
+    sampler = torch.utils.data.WeightedRandomSampler(
+        weights=sample_weights,
+        num_samples=len(train_labels_only),
+        replacement=True
+    )
+    # -------------------------------
+
     pad_idx = vocab[PAD_TOKEN]
     collate = lambda b: collate_batch(b, pad_idx=pad_idx, max_len=max_seq_len)
 
-    train_loader = DataLoader(Subset(dataset, train_idx), batch_size=BATCH_SIZE, shuffle=True,  collate_fn=collate)
+    train_loader = DataLoader(Subset(dataset, train_idx), batch_size=BATCH_SIZE, sampler=sampler, collate_fn=collate)
     val_loader   = DataLoader(Subset(dataset, val_idx),   batch_size=BATCH_SIZE, shuffle=False, collate_fn=collate)
 
     # ── Model ────────────────────────────────────────────────
@@ -224,13 +355,13 @@ def train_model():
         dropout=DROPOUT,
     ).to(device)
 
-    train_labels_only = [label_indices[i] for i in train_idx]
     class_weights = compute_class_weights(train_labels_only, num_classes, device)
-    criterion     = nn.CrossEntropyLoss(weight=class_weights, label_smoothing=0.1)
-    optimizer     = torch.optim.AdamW(model.parameters(), lr=LEARNING_RATE, weight_decay=5e-4)
-    scheduler     = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="max", factor=0.5, patience=7)
+    criterion     = FocalLoss(alpha=class_weights, gamma=2.0, label_smoothing=0.05)
+    optimizer     = torch.optim.AdamW(model.parameters(), lr=LEARNING_RATE, weight_decay=1e-3) # Stronger weight decay
+    scheduler     = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="max", factor=0.5, patience=5)
 
     # ── Training loop ────────────────────────────────────────
+    best_macro_f1  = 0.0
     best_val_acc   = 0.0
     best_val_loss  = float("inf")
     best_model_data = None
@@ -244,7 +375,11 @@ def train_model():
     for epoch in range(NUM_EPOCHS):
         model.train()
         run_loss, correct, total = 0.0, 0, 0
-        for x, y in train_loader:
+
+        # Add tqdm to show progress within the epoch
+        batch_iterator = tqdm(train_loader, desc=f"x {epoch+1}/{NUM_EPOCHS}", leave=False)
+
+        for x, y in batch_iterator:
             x, y = x.to(device), y.to(device)
             out  = model(x)
             loss = criterion(out, y)
@@ -258,10 +393,13 @@ def train_model():
             correct  += (preds == y).sum().item()
             total    += y.size(0)
 
+            # Update progress bar with running loss
+            batch_iterator.set_postfix(loss=f"{loss.item():.4f}")
+
         train_loss = run_loss / max(len(train_loader), 1)
         train_acc  = correct / max(total, 1) * 100
-        val_loss, val_acc = evaluate(model, val_loader, criterion, device)
-        scheduler.step(val_acc)
+        val_loss, val_acc, val_macro_f1 = evaluate(model, val_loader, criterion, device, num_classes)
+        scheduler.step(val_macro_f1)
 
         history["train_loss"].append(train_loss)
         history["train_acc"].append(train_acc)
@@ -272,16 +410,17 @@ def train_model():
         if (epoch + 1) % 10 == 0 or epoch == 0:
             print(f"  Epoch [{epoch+1:>3}/{NUM_EPOCHS}] "
                   f"Train Loss: {train_loss:.4f} | Train Acc: {train_acc:.1f}% | "
-                  f"Val Loss: {val_loss:.4f} | Val Acc: {val_acc:.1f}%")
+                  f"Val Loss: {val_loss:.4f} | Val F1: {val_macro_f1:.1f}%")
 
         # ── Save best ────────────────────────────────────────
         improved = False
-        if val_acc > best_val_acc + MIN_DELTA:
+        if val_macro_f1 > best_macro_f1 + MIN_DELTA:
+            best_macro_f1 = val_macro_f1
             best_val_acc  = val_acc
             best_val_loss = val_loss
             patience_counter = 0
             improved = True
-        elif abs(val_acc - best_val_acc) <= MIN_DELTA and val_loss < best_val_loss:
+        elif abs(val_macro_f1 - best_macro_f1) <= MIN_DELTA and val_loss < best_val_loss:
             best_val_loss = val_loss
             patience_counter = 0
             improved = True
@@ -305,6 +444,7 @@ def train_model():
                 "seed":          SEED,
                 "best_val_acc":  best_val_acc,
                 "best_val_loss": best_val_loss,
+                "best_macro_f1": best_macro_f1,
                 "history":       history,
             }
 
@@ -321,7 +461,7 @@ def train_model():
             "output_size": num_classes, "num_layers": NUM_LAYERS,
             "dropout": DROPOUT, "pad_idx": pad_idx, "unk_idx": vocab[UNK_TOKEN],
             "max_seq_len": max_seq_len, "seed": SEED,
-            "best_val_acc": best_val_acc, "best_val_loss": best_val_loss,
+            "best_val_acc": best_val_acc, "best_val_loss": best_val_loss, "best_macro_f1": best_macro_f1,
             "history": history,
         }
 
@@ -333,6 +473,7 @@ def train_model():
 
     print("\n" + "=" * 60)
     print(f"[RESULT] Best Validation Accuracy : {best_val_acc:.2f}%")
+    print(f"[RESULT] Best Validation Macro F1 : {best_macro_f1:.2f}%")
     print(f"[RESULT] Best Validation Loss     : {best_val_loss:.4f}")
     print("[SAVED]  Model saved -> emotion_model_data.pth")
     print("=" * 60)

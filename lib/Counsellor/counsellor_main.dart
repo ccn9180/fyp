@@ -6,6 +6,8 @@ import 'counsellor_dashboard.dart';
 import 'counsellor_profile.dart';
 import 'counsellor_schedule.dart';
 import 'counsellor_performance.dart';
+import '../User/main_screen.dart';
+import 'counsellor_wallet.dart';
 
 class CounsellorMainScreen extends StatefulWidget {
   const CounsellorMainScreen({super.key});
@@ -25,6 +27,7 @@ class _CounsellorMainScreenState extends State<CounsellorMainScreen> {
     _pages = [
       CounsellorDashboardScreen(onTabChange: _onItemTapped),
       const CounsellorScheduleScreen(),
+      const WalletTab(),
       const CounsellorPerformanceScreen(),
       CounsellorProfileScreen(onTabChange: _onItemTapped),
     ];
@@ -70,8 +73,9 @@ class _CounsellorMainScreenState extends State<CounsellorMainScreen> {
             children: [
               _buildNavItem(0, Icons.grid_view_rounded, Icons.grid_view_outlined, "Home"),
               _buildNavItem(1, Icons.calendar_month_rounded, Icons.calendar_month_outlined, "Sessions"),
-              _buildNavItem(2, Icons.analytics_rounded, Icons.analytics_outlined, "Performance"),
-              _buildNavItem(3, Icons.person_rounded, Icons.person_outline_rounded, "Profile"),
+              _buildNavItem(2, Icons.account_balance_wallet_rounded, Icons.account_balance_wallet_outlined, "Wallet"),
+              _buildNavItem(3, Icons.analytics_rounded, Icons.analytics_outlined, "Stats"),
+              _buildNavItem(4, Icons.person_rounded, Icons.person_outline_rounded, "Profile"),
             ],
           ),
         ),
@@ -84,7 +88,7 @@ class _CounsellorMainScreenState extends State<CounsellorMainScreen> {
 
     return GestureDetector(
       onTap: () => _onItemTapped(index),
-      onLongPress: index == 3 ? () => _handleSwitchBack(context) : null,
+      onLongPress: index == 4 ? () => _handleSwitchBack(context) : null,
       behavior: HitTestBehavior.opaque,
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -158,7 +162,11 @@ class _CounsellorMainScreenState extends State<CounsellorMainScreen> {
                 await prefs.setString('last_used_side', 'user');
                 if (mounted) {
                   Navigator.pop(context); 
-                  Navigator.pop(context); 
+                  Navigator.pushAndRemoveUntil(
+                    context,
+                    MaterialPageRoute(builder: (context) => const MainScreen()),
+                    (route) => false,
+                  );
                 }
               },
             ),

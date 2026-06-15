@@ -10,11 +10,18 @@ import 'chat_history.dart';
 import 'shared_with_me.dart';
 import 'video_call.dart';
 import 'upcoming_session_detail.dart';
+import 'all_upcoming_sessions.dart';
+import 'session_history.dart';
 import 'user_analytics.dart';
 import 'mood_trend.dart';
 import 'xp_journey.dart';
 import 'daily_tasks.dart';
+import 'session_feedback.dart';
+import 'selfHelp.dart';
+import 'meditation_player.dart';
+import 'widgets/mood_calendar_widget.dart';
 import '../services/gamification_service.dart';
+import '../widgets/quest_completed_dialog.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -53,6 +60,34 @@ class _HomeScreenState extends State<HomeScreen> {
         .snapshots();
         
     _checkTodayMood();
+    _fetchUserProgress();
+  }
+
+  int _diaryCount = 0;
+  int _chatCount = 0;
+  int _counselCount = 0;
+  int _moodCount = 0;
+
+  Future<void> _fetchUserProgress() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    try {
+      final diarySnap = await FirebaseFirestore.instance.collection('users').doc(uid).collection('diary_entries').get();
+      final chatSnap = await FirebaseFirestore.instance.collection('chat_sessions').where('userId', isEqualTo: uid).get();
+      final counselSnap = await FirebaseFirestore.instance.collection('counsellor_bookings').where('patientId', isEqualTo: uid).get();
+      final moodSnap = await FirebaseFirestore.instance.collection('users').doc(uid).collection('mood_checkins').get();
+      
+      if (mounted) {
+        setState(() {
+          _diaryCount = diarySnap.docs.length;
+          _chatCount = chatSnap.docs.length;
+          _counselCount = counselSnap.docs.length;
+          _moodCount = moodSnap.docs.length;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error fetching user progress: $e');
+    }
   }
   
   Future<void> _checkTodayMood() async {
@@ -104,7 +139,7 @@ class _HomeScreenState extends State<HomeScreen> {
           .collection('mood_checkins')
           .add({
         'emotion': mood,
-        'timestamp': FieldValue.serverTimestamp(),
+        'timestamp': Timestamp.now(),
       });
       
       _todayMood = mood;
@@ -114,6 +149,35 @@ class _HomeScreenState extends State<HomeScreen> {
           const SnackBar(
             content: Text('Thanks for checking in today!'), 
             backgroundColor: Color(0xFF7C9C84)
+          ),
+        );
+      }
+      
+      // Check and update streak
+      final bool streakUpdated = await GamificationService.updateStreak(uid);
+      
+      // Also complete gamification tasks
+      final results = await GamificationService.completeTasksByType(uid, 'mood');
+      int totalXp = 5; // Default fallback if no task is returned
+      int totalCoins = 2; // Default fallback if no task is returned
+      bool taskCompleted = false;
+      for (final res in results) {
+        if (res['success'] == true) {
+          taskCompleted = true;
+          totalXp += (res['xp'] ?? 0) as int;
+          totalCoins += (res['coins'] ?? 0) as int;
+        }
+      }
+
+      if ((streakUpdated || taskCompleted) && mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => QuestCompletedDialog(
+            xpEarned: totalXp,
+            coinsEarned: totalCoins,
+            title: 'Daily Check-In',
+            subtitle: 'Consistency is key. Keep it up!',
           ),
         );
       }
@@ -193,7 +257,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
                     if (snapshot.hasData && snapshot.data!.exists) {
                       final data = snapshot.data!.data() as Map<String, dynamic>;
-                      name = data['fullName']?.split(' ')[0] ?? 'Friend';
+                      String? nickname = data['nickname'] as String?;
+                      if (nickname != null && nickname.trim().isNotEmpty) {
+                        name = nickname.split(' ')[0];
+                      } else {
+                        name = data['fullName']?.split(' ')[0] ?? 'Friend';
+                      }
                       profileUrl = data['profileImageUrl'];
                     }
 
@@ -439,35 +508,14 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(height: 24),
 
               // Shared Journeys (Inner Circle) Section
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'SHARED JOURNEYS',
-                    style: GoogleFonts.outfit(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.2,
-                      color: const Color(0xFFB0B0B0),
-                    ),
-                  ),
-                  GestureDetector(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (context) => const SharedWithMeScreen()),
-                      );
-                    },
-                    child: Text(
-                      'View All',
-                      style: GoogleFonts.outfit(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: const Color(0xFF7C9C84),
-                      ),
-                    ),
-                  ),
-                ],
+              Text(
+                'SHARED JOURNEYS',
+                style: GoogleFonts.outfit(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.2,
+                  color: const Color(0xFFB0B0B0),
+                ),
               ),
               const SizedBox(height: 16),
               GestureDetector(
@@ -530,25 +578,51 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
 
-              const SizedBox(height: 35),
+              const SizedBox(height: 32),
 
               _buildUpcomingSessionCard(),
 
-              const SizedBox(height: 35),
-
-              Text(
-                'YOUR WELLNESS SUMMARY',
-                style: GoogleFonts.outfit(
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.2,
-                  color: const Color(0xFFB0B0B0),
-                ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'YOUR WELLNESS SUMMARY',
+                    style: GoogleFonts.outfit(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.2,
+                      color: const Color(0xFFB0B0B0),
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const MoodTrendScreen())),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: primaryGreen.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        children: [
+                          Text(
+                            'View Trends',
+                            style: GoogleFonts.outfit(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: primaryGreen,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Icon(Icons.arrow_forward_rounded, size: 12, color: primaryGreen),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 16),
 
-              _buildMoodTrendSummaryCard(),
-
+              const MoodCalendarWidget(),
               const SizedBox(height: 24),
 
               _buildActivityReportSection(),
@@ -566,86 +640,132 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(height: 16),
 
-              // Forest Breathing Card
-              Container(
-                height: 250,
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(30),
-                  image: const DecorationImage(
-                    image: NetworkImage('https://images.unsplash.com/photo-1441974231531-c6227db76b6e?q=80&w=2560&auto=format&fit=crop'), // Forest image
-                    fit: BoxFit.cover,
-                  ),
-                ),
-                child: Container(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(30),
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Colors.black.withOpacity(0.1),
-                        Colors.black.withOpacity(0.6),
-                      ],
-                    ),
-                  ),
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.spa, color: Colors.white70, size: 16),
-                          const SizedBox(width: 8),
-                          Text(
-                            '6 MINUTE SESSION',
-                            style: GoogleFonts.outfit(
-                              color: Colors.white.withOpacity(0.9),
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 0.5,
-                            ),
+              // Dynamic Meditation Card
+              StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance.collection('meditation_guides').where('status', isEqualTo: 'published').limit(1).snapshots(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return Container(
+                      height: 250,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[200],
+                        borderRadius: BorderRadius.circular(30),
+                      ),
+                      child: const Center(child: CircularProgressIndicator(color: Color(0xFF7C9C84))),
+                    );
+                  }
+
+                  if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                    return const SizedBox.shrink();
+                  }
+
+                  final doc = snapshot.data!.docs.first;
+                  final data = doc.data() as Map<String, dynamic>;
+                  final title = data['title'] ?? 'Meditation';
+                  final duration = data['duration'] ?? '10:00';
+                  final category = data['category'] ?? 'RELAX';
+                  final imageUrl = data['imageUrl'] ?? 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?q=80&w=2560&auto=format&fit=crop';
+                  final audioUrl = data['audioUrl']?.toString();
+
+                  return GestureDetector(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => MeditationPlayerScreen(
+                            title: title,
+                            subtitle: '$duration • $category',
+                            imageUrl: imageUrl,
+                            duration: duration,
+                            audioUrl: audioUrl,
+                            isFavorite: false, // We'd need to fetch user favorites to know for sure, but false is fine for preview
+                            onFavoriteToggle: () {},
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Forest Breathing',
-                        style: GoogleFonts.outfit(
-                          color: Colors.white,
-                          fontSize: 28,
-                          fontWeight: FontWeight.w600,
+                        ),
+                      );
+                    },
+                    child: Container(
+                      height: 250,
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(30),
+                        image: DecorationImage(
+                          image: NetworkImage(imageUrl),
+                          fit: BoxFit.cover,
                         ),
                       ),
-                      const SizedBox(height: 20),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                      child: Container(
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
                           borderRadius: BorderRadius.circular(30),
-                          border: Border.all(color: Colors.white.withOpacity(0.4)),
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Colors.black.withOpacity(0.1),
+                              Colors.black.withOpacity(0.6),
+                            ],
+                          ),
                         ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Icon(Icons.play_arrow_rounded, color: Colors.white),
-                            const SizedBox(width: 8),
+                            Row(
+                              children: [
+                                const Icon(Icons.spa, color: Colors.white70, size: 16),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'SUGGESTED SESSION',
+                                  style: GoogleFonts.outfit(
+                                    color: Colors.white.withOpacity(0.9),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
                             Text(
-                              'Practice Now',
+                              title,
                               style: GoogleFonts.outfit(
                                 color: Colors.white,
+                                fontSize: 28,
                                 fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(30),
+                                border: Border.all(color: Colors.white.withOpacity(0.4)),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.play_arrow_rounded, color: Colors.white),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Practice Now',
+                                    style: GoogleFonts.outfit(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ],
                         ),
                       ),
-                    ],
-                  ),
-                ),
+                    ),
+                  );
+                },
               ),
-              const SizedBox(height: 100), // Space for bottom nav
+              const SizedBox(height: 32), // Space for bottom nav
             ],
           ),
         ),
@@ -749,246 +869,210 @@ class _HomeScreenState extends State<HomeScreen> {
     return StreamBuilder<QuerySnapshot>(
       stream: _bookingsStream,
       builder: (context, snapshot) {
-        bool hasRealBooking = false;
-        Map<String, dynamic>? upcomingBookingData;
-        
-        if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
-          final now = DateTime.now();
-          // Filter to only upcoming bookings, then sort in memory
-          final upcomingDocs = snapshot.data!.docs.where((doc) {
-            final data = doc.data() as Map<String, dynamic>;
-            final rawStartTime = data['startTime'];
-            final startTime = (rawStartTime is Timestamp) ? rawStartTime.toDate() : null;
-            return startTime != null && startTime.isAfter(now);
-          }).toList();
-
-          if (upcomingDocs.isNotEmpty) {
-            // Sort ascending to get the earliest upcoming booking
-            upcomingDocs.sort((a, b) {
-              final aTime = ((a.data() as Map<String, dynamic>)['startTime'] as Timestamp).toDate();
-              final bTime = ((b.data() as Map<String, dynamic>)['startTime'] as Timestamp).toDate();
-              return aTime.compareTo(bTime);
-            });
-            
-            upcomingBookingData = {
-              ...(upcomingDocs.first.data() as Map<String, dynamic>),
-              'id': upcomingDocs.first.id,
-            };
-            hasRealBooking = true;
-          }
-        }
-        
-        if (!hasRealBooking || upcomingBookingData == null) {
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
           return const SizedBox.shrink(); // Show nothing if no upcoming session
         }
 
-        final Map<String, dynamic> bookingData = upcomingBookingData;
+        final now = DateTime.now();
+        // Filter to only upcoming bookings and NOT cancelled
+        final upcomingDocs = snapshot.data!.docs.where((doc) {
+          final data = doc.data() as Map<String, dynamic>;
+          final rawStartTime = data['startTime'];
+          final startTime = (rawStartTime is Timestamp) ? rawStartTime.toDate() : null;
+          final status = data['status'] ?? '';
+          return startTime != null && startTime.isAfter(now) && status != 'cancelled';
+        }).toList();
 
-        final name = bookingData['counsellorName'] ?? 'Counsellor';
-        final specialty = bookingData['counsellorSpecialty'] ?? 'Mental Wellness Counselor';
-        final imageUrl = bookingData['counsellorImageUrl'] ?? 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&q=80&w=2000';
-        final rawStartTime = bookingData['startTime'];
-        final DateTime startTime = (rawStartTime is Timestamp) 
-            ? rawStartTime.toDate() 
-            : (rawStartTime is DateTime ? rawStartTime : DateTime.now());
+        if (upcomingDocs.isEmpty) {
+          return const SizedBox.shrink(); // Show nothing if no upcoming session
+        }
 
-        final int diffInMinutes = startTime.difference(DateTime.now()).inMinutes;
-        final String tagText = diffInMinutes < 60 && diffInMinutes >= -60 ? 'LIVE SOON' : 'UPCOMING';
-        final String displayDate = DateFormat('MMM dd, hh:mm a').format(startTime);
+        // Sort ascending to get the earliest upcoming booking
+        upcomingDocs.sort((a, b) {
+          final aTime = ((a.data() as Map<String, dynamic>)['startTime'] as Timestamp).toDate();
+          final bTime = ((b.data() as Map<String, dynamic>)['startTime'] as Timestamp).toDate();
+          return aTime.compareTo(bTime);
+        });
 
         return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'UPCOMING SESSION',
-              style: GoogleFonts.outfit(
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1.2,
-                color: const Color(0xFFB0B0B0),
-              ),
-            ),
-            const SizedBox(height: 16),
-            GestureDetector(
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => UpcomingSessionDetailScreen(sessionData: bookingData),
-                  ),
-                );
-              },
-              child: Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(28),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.04),
-                      blurRadius: 20,
-                      offset: const Offset(0, 10),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  children: [
-                    Row(
-                      children: [
-                        CircleAvatar(
-                          radius: 28,
-                          backgroundImage: imageUrl.startsWith('data:image')
-                              ? MemoryImage(base64Decode(imageUrl.split(',').last)) as ImageProvider
-                              : NetworkImage(imageUrl),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                name,
-                                style: GoogleFonts.outfit(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: const Color(0xFF333333),
-                                ),
-                              ),
-                              Text(
-                                specialty,
-                                style: GoogleFonts.outfit(
-                                  fontSize: 13,
-                                  color: const Color(0xFF888888),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFF1F3EE),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Text(
-                            tagText,
-                            style: GoogleFonts.outfit(
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              color: const Color(0xFF7C9C84),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 24),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(Icons.calendar_month_rounded, size: 14, color: Colors.grey.shade400),
-                            const SizedBox(width: 8),
-                            Text(
-                              displayDate,
-                              style: GoogleFonts.outfit(fontSize: 12, color: Colors.grey.shade600, fontWeight: FontWeight.w500),
-                            ),
-                          ],
-                        ),
-                        Text(
-                          'VIEW DETAILS',
-                          style: GoogleFonts.outfit(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: const Color(0xFF7C9C84),
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        );
-      }
-    );
-  }
-  Widget _buildMoodTrendSummaryCard() {
-    return GestureDetector(
-      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const MoodTrendScreen())),
-      child: Container(
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(32),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 20, offset: const Offset(0, 10))],
-        ),
-        child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                     Text('Weekly Mood Trends', style: GoogleFonts.playfairDisplay(fontSize: 22, fontWeight: FontWeight.bold)),
-                     Text('Your emotional balance', style: GoogleFonts.outfit(fontSize: 12, color: Colors.grey)),
-                  ],
+                Text(
+                  'UPCOMING SESSIONS',
+                  style: GoogleFonts.outfit(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.2,
+                    color: const Color(0xFFB0B0B0),
+                  ),
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(color: primaryGreen.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-                  child: Row(
-                    children: [
-                      Text('Details', style: GoogleFonts.outfit(fontSize: 10, fontWeight: FontWeight.bold, color: primaryGreen)),
-                      const SizedBox(width: 4),
-                      Icon(Icons.chevron_right_rounded, size: 12, color: primaryGreen),
-                    ],
+                GestureDetector(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const AllUpcomingSessionsScreen()),
+                    );
+                  },
+                  child: Text(
+                    'View All',
+                    style: GoogleFonts.outfit(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFF7C9C84),
+                    ),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 32),
+            const SizedBox(height: 16),
             SizedBox(
-              height: 120,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  _buildMoodPill(0.4, 'MON'),
-                  _buildMoodPill(0.7, 'TUE'),
-                  _buildMoodPill(0.5, 'WED'),
-                  _buildMoodPill(0.85, 'THU', isHighlighted: true),
-                  _buildMoodPill(0.6, 'FRI'),
-                  _buildMoodPill(0.45, 'SAT'),
-                  _buildMoodPill(0.3, 'SUN'),
-                ],
+              height: 156,
+              child: PageView.builder(
+                controller: PageController(viewportFraction: 1.0),
+                itemCount: upcomingDocs.length,
+                itemBuilder: (context, index) {
+                  final bookingData = {
+                    ...(upcomingDocs[index].data() as Map<String, dynamic>),
+                    'id': upcomingDocs[index].id,
+                  };
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 12.0),
+                    child: _buildSingleSessionCard(bookingData),
+                  );
+                },
               ),
+            ),
+            const SizedBox(height: 32),
+          ],
+        );
+      }
+    );
+  }
+
+  Widget _buildSingleSessionCard(Map<String, dynamic> bookingData) {
+    final name = bookingData['counsellorName'] ?? 'Counsellor';
+    final specialty = bookingData['counsellorSpecialty'] ?? 'Mental Wellness Counselor';
+    final rawImageUrl = bookingData['counsellorImageUrl']?.toString() ?? '';
+    final imageUrl = rawImageUrl.isNotEmpty ? rawImageUrl : 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&q=80&w=2000';
+    final rawStartTime = bookingData['startTime'];
+    final DateTime startTime = (rawStartTime is Timestamp) 
+        ? rawStartTime.toDate() 
+        : (rawStartTime is DateTime ? rawStartTime : DateTime.now());
+
+    final int diffInMinutes = startTime.difference(DateTime.now()).inMinutes;
+    final String tagText = diffInMinutes < 60 && diffInMinutes >= -60 ? 'LIVE SOON' : 'UPCOMING';
+    final String displayDate = DateFormat('MMM dd, hh:mm a').format(startTime);
+
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => UpcomingSessionDetailScreen(sessionData: bookingData),
+          ),
+        );
+      },
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(28),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 20,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 28,
+                  backgroundImage: imageUrl.startsWith('data:image')
+                      ? MemoryImage(base64Decode(imageUrl.split(',').last)) as ImageProvider
+                      : NetworkImage(imageUrl),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        name,
+                        style: GoogleFonts.outfit(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: const Color(0xFF333333),
+                        ),
+                      ),
+                      Text(
+                        specialty,
+                        style: GoogleFonts.outfit(
+                          fontSize: 13,
+                          color: const Color(0xFF888888),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1F3EE),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    tagText,
+                    style: GoogleFonts.outfit(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFF7C9C84),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Row(
+                    children: [
+                      Icon(Icons.calendar_month_rounded, size: 14, color: Colors.grey.shade400),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          displayDate,
+                          style: GoogleFonts.outfit(fontSize: 12, color: Colors.grey.shade600, fontWeight: FontWeight.w500),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Text(
+                  'VIEW DETAILS',
+                  style: GoogleFonts.outfit(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFF7C9C84),
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ],
             ),
           ],
         ),
       ),
-    );
-  }
-
-  Widget _buildMoodPill(double scale, String day, {bool isHighlighted = false}) {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.end,
-      children: [
-        Container(
-          width: 24,
-          height: 100 * scale,
-          decoration: BoxDecoration(
-            color: isHighlighted ? accentGold : primaryGreen.withOpacity(scale > 0.6 ? 0.8 : 0.4),
-            borderRadius: BorderRadius.circular(12),
-          ),
-        ),
-        const SizedBox(height: 8),
-        Text(day, style: GoogleFonts.outfit(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.grey[400])),
-      ],
     );
   }
 
@@ -1025,14 +1109,14 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(height: 24),
             Row(
               children: [
-                _buildModernActivityCard(Icons.edit_note_rounded, 'Diary', '12', const Color(0xFFF0EFE9)),
+                _buildModernActivityCard(Icons.edit_note_rounded, 'Diary', '$_diaryCount', const Color(0xFFF0EFE9)),
                 const SizedBox(width: 12),
-                _buildModernActivityCard(Icons.chat_bubble_outline_rounded, 'AI Support', '48', const Color(0xFFE9E8EE)),
+                _buildModernActivityCard(Icons.chat_bubble_outline_rounded, 'AI Support', '$_chatCount', const Color(0xFFE9E8EE)),
               ],
             ),
             const SizedBox(height: 24),
-            _buildActivityRow('Counselor Sessions', 0.4, '2 / 5'),
-            _buildActivityRow('Daily Reflections', 0.85, '6 / 7'),
+            _buildActivityRow('Counselor Sessions', _counselCount > 0 ? 1.0 : 0.0, '$_counselCount Total'),
+            _buildActivityRow('Daily Reflections', _moodCount > 0 ? 1.0 : 0.0, '$_moodCount Total'),
           ],
         ),
       ),

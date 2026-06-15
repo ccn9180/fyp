@@ -25,6 +25,29 @@ class _ActiveChatScreenState extends State<ActiveChatScreen> {
     }
   ];
   bool _isLoading = false;
+  String? _userProfileImageUrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserProfile();
+  }
+
+  Future<void> _loadUserProfile() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      try {
+        final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+        if (doc.exists && mounted) {
+          setState(() {
+            _userProfileImageUrl = doc.data()?['profileImageUrl'];
+          });
+        }
+      } catch (e) {
+        debugPrint('Error loading user profile image: $e');
+      }
+    }
+  }
 
   final Color primaryGreen = const Color(0xFF86A590);
   final Color backgroundColor = const Color(0xFFFBFBF6);
@@ -394,12 +417,29 @@ class _ActiveChatScreenState extends State<ActiveChatScreen> {
           ),
         ),
         const SizedBox(width: 8),
-        const CircleAvatar(
+        CircleAvatar(
           radius: 16,
-          backgroundImage: NetworkImage('https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=2000'),
+          backgroundColor: const Color(0xFFF1F3EE),
+          backgroundImage: _getAvatarProvider(_userProfileImageUrl),
+          child: (_userProfileImageUrl == null || _userProfileImageUrl!.isEmpty)
+              ? Text('U', style: GoogleFonts.outfit(color: const Color(0xFF86A590), fontWeight: FontWeight.bold))
+              : null,
         ),
       ],
     );
+  }
+
+  ImageProvider? _getAvatarProvider(String? url) {
+    if (url == null || url.isEmpty) return null;
+    if (url.startsWith('data:image')) {
+      try {
+        final bytes = base64Decode(url.split(',').last);
+        return MemoryImage(bytes);
+      } catch (_) {
+        return null;
+      }
+    }
+    return NetworkImage(url);
   }
 
   Widget _buildExerciseChip({required IconData icon, required String title, required String subtitle}) {
@@ -534,6 +574,25 @@ class _ActiveChatScreenState extends State<ActiveChatScreen> {
       'text': m['text'],
     }).toList();
 
+    String aiSummary = preview;
+    try {
+      final String baseUrl = await BackendConfig.getBaseUrl();
+      final response = await http.post(
+        Uri.parse('$baseUrl/summarize_chat'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'messages': formattedMessages}),
+      ).timeout(const Duration(seconds: 8));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['summary'] != null && data['summary'].toString().isNotEmpty) {
+          aiSummary = data['summary'];
+        }
+      }
+    } catch (e) {
+      debugPrint('Error generating chat summary: $e');
+    }
+
     try {
       await FirebaseFirestore.instance.collection('chat_sessions').add({
         'userId': user.uid,
@@ -542,7 +601,8 @@ class _ActiveChatScreenState extends State<ActiveChatScreen> {
         'tag': tag,
         'subTag': subTag,
         'preview': preview,
-        'createdAt': FieldValue.serverTimestamp(),
+        'aiSummary': aiSummary,
+        'createdAt': Timestamp.now(),
         'messages': formattedMessages,
         'sharingAccess': {}, // initially not shared with anyone
         'crisisDetected': false,

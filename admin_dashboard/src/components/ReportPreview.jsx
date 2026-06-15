@@ -31,13 +31,6 @@ export default function ReportPreview({ isOpen, onClose, onDownload, title, isEx
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={() => window.print()}
-              className="flex items-center gap-2 px-4 py-2.5 bg-white border border-[#E5E4E0] text-[#333] rounded-xl font-bold text-sm hover:bg-[#F6F5F2] transition active:scale-95 no-print"
-            >
-              <Printer size={16} />
-              Print
-            </button>
-            <button
               onClick={onDownload}
               disabled={isExporting}
               className="flex items-center gap-2 px-6 py-2.5 bg-[#7C9C84] text-white rounded-xl font-bold text-sm shadow-lg shadow-[#7C9C84]/20 hover:opacity-90 transition active:scale-95 disabled:opacity-50 no-print"
@@ -57,7 +50,7 @@ export default function ReportPreview({ isOpen, onClose, onDownload, title, isEx
 
         {/* Preview Area */}
         <div className="flex-1 overflow-y-auto p-12 flex justify-center bg-[#525659]/10 scrollbar-hide">
-          <div className="bg-white shadow-[0_0_50px_rgba(0,0,0,0.15)] w-[794px] min-h-[1123px] origin-top transform transition-transform duration-500 hover:shadow-[0_0_60px_rgba(0,0,0,0.2)] print-container">
+          <div className="bg-white shadow-[0_0_50px_rgba(0,0,0,0.15)] w-[794px] min-h-[1123px] origin-top transform transition-transform duration-500 hover:shadow-[0_0_60px_rgba(0,0,0,0.2)]">
              {/* Scale wrapper for responsiveness if needed, but here we keep it fixed width for accuracy */}
              <div className="w-full h-full">
                 {children}

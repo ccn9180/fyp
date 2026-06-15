@@ -5,17 +5,26 @@ import 'package:flutter/material.dart';
 import 'package:fyp/firebase_options.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_stripe/flutter_stripe.dart';
 import 'app_localizations.dart';
 import 'UserAccount/login.dart';
 import 'UserAccount/welcome_screen.dart';
 import 'User/main_screen.dart';
 import 'Counsellor/counsellor_main.dart';
+import 'services/fcm_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+
+  // Initialize Stripe
+  Stripe.publishableKey = 'pk_test_51Tdp70GqRs3M9AcHB0xHdGDGuOunAIR0WO2ws0JKcpn9cFawsEwKHnCL8rNe8B15fkhNabnYQi8KPaTLUbvMRCqE00HH6OsTat';
+  await Stripe.instance.applySettings();
+
+  // Initialize Firebase Cloud Messaging for Push Notifications
+  await FCMService.initialize();
 
   final prefs = await SharedPreferences.getInstance();
   final String languageCode = prefs.getString('languageCode') ?? 'en';
@@ -73,6 +82,9 @@ class AuthGate extends StatelessWidget {
 
         if (snapshot.hasData) {
           final User user = snapshot.data!;
+          
+          // Ensure FCM token is registered now that we definitely have a user
+          FCMService.registerToken();
 
           // We check if the user has a completed profile in Firestore
           return FutureBuilder<DocumentSnapshot>(
@@ -106,6 +118,9 @@ class AuthGate extends StatelessWidget {
 
                     // For simplicity and to solve the lag, we'll return the screen directly here.
                     // The SplashTransitionScreen should be used explicitly from Welcome/Login
+                    // Register/refresh FCM token now that we know the user is logged in
+                    FCMService.registerToken();
+
                     if (lastSide == 'counsellor') {
                       return const CounsellorMainScreen();
                     } else {

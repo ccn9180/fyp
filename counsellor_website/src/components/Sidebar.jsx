@@ -1,9 +1,39 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutGrid, Calendar, TrendingUp, User, LogOut, Clock, MessageSquare } from 'lucide-react';
+import { LayoutGrid, Calendar, TrendingUp, User, LogOut, Clock, MessageSquare, ChevronDown, ChevronRight } from 'lucide-react';
 import { doc, getDoc, collection, query, where, getDocs, limit } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import logo from '../assets/leaf.png';
+
+const SidebarGroup = ({ group }) => {
+  const [open, setOpen] = useState(true);
+
+  return (
+    <div className="sidebar-group-container">
+      <button 
+        onClick={() => setOpen(!open)}
+        className="sidebar-group-button"
+      >
+        <span className="sidebar-group-title">{group.label}</span>
+        {open ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+      </button>
+      {open && (
+        <div className="sidebar-group-children">
+          {group.items.map((item) => (
+            <NavLink 
+              key={item.path} 
+              to={item.path}
+              className={({ isActive }) => `nav-item child-item ${isActive ? 'active' : ''}`}
+            >
+              <div className="icon-wrapper">{item.icon}</div>
+              <span>{item.name}</span>
+            </NavLink>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
 
 const Sidebar = ({ onLogout }) => {
   const [counsellor, setCounsellor] = useState({ name: 'Counsellor', photo: null });
@@ -91,19 +121,7 @@ const Sidebar = ({ onLogout }) => {
       {/* Grouped Navigation */}
       <div style={{ flex: 1, overflowY: 'auto', paddingRight: '4px' }}>
         {navGroups.map((group, gIdx) => (
-          <div key={gIdx} className="sidebar-group">
-            <div className="sidebar-group-label">{group.label}</div>
-            {group.items.map((item) => (
-              <NavLink 
-                key={item.path} 
-                to={item.path}
-                className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
-              >
-                {item.icon}
-                <span>{item.name}</span>
-              </NavLink>
-            ))}
-          </div>
+          <SidebarGroup key={gIdx} group={group} />
         ))}
       </div>
 

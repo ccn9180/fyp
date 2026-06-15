@@ -7,8 +7,10 @@ import '../services/gamification_service.dart';
 import '../widgets/level_up_dialog.dart';
 import 'active_chat.dart';
 import 'add_diary.dart';
+import 'selfHelp.dart';
 
 import 'xp_history_screen.dart';
+import 'main_screen.dart';
 
 class DailyTasksScreen extends StatefulWidget {
   final int initialTab;
@@ -26,89 +28,7 @@ class _DailyTasksScreenState extends State<DailyTasksScreen> with SingleTickerPr
 
   final String? uid = FirebaseAuth.instance.currentUser?.uid;
 
-  // Hardcoded demo tasks shown when Firestore has no data
-  static const List<Map<String, dynamic>> _mockDailyTasks = [
-    {
-      'id': 'mock_d1',
-      'title': 'Morning Mood Check-in',
-      'description': 'Track how you feel to start the day right.',
-      'icon': 'mood',
-      'xp_reward': 15,
-      'coin_reward': 5,
-      'frequency': 'daily',
-      'task_type': 'mood',
-      'isCompleted': true,
-    },
-    {
-      'id': 'mock_d2',
-      'title': 'Mindful Breathing',
-      'description': 'Take 5 deep breaths to center yourself.',
-      'icon': 'breathing',
-      'xp_reward': 10,
-      'coin_reward': 3,
-      'frequency': 'daily',
-      'task_type': 'breathing',
-      'isCompleted': false,
-    },
-    {
-      'id': 'mock_d3',
-      'title': 'Write a Journal Entry',
-      'description': 'Reflect on your day and capture your thoughts.',
-      'icon': 'journal',
-      'xp_reward': 20,
-      'coin_reward': 8,
-      'frequency': 'daily',
-      'task_type': 'journal',
-      'isCompleted': false,
-    },
-    {
-      'id': 'mock_d4',
-      'title': 'Chat with Wellness Bot',
-      'description': 'Have a supportive conversation with the AI.',
-      'icon': 'chat',
-      'xp_reward': 15,
-      'coin_reward': 5,
-      'frequency': 'daily',
-      'task_type': 'chat',
-      'isCompleted': false,
-    },
-  ];
 
-  static const List<Map<String, dynamic>> _mockWeeklyTasks = [
-    {
-      'id': 'mock_w1',
-      'title': 'Complete 5 Mood Check-ins',
-      'description': 'Track your mood for 5 days this week.',
-      'icon': 'mood',
-      'xp_reward': 75,
-      'coin_reward': 25,
-      'frequency': 'weekly',
-      'task_type': 'mood',
-      'isCompleted': true,
-    },
-    {
-      'id': 'mock_w2',
-      'title': 'Write 3 Journal Entries',
-      'description': 'Reflect and write in your journal 3 times this week.',
-      'icon': 'journal',
-      'xp_reward': 60,
-      'coin_reward': 20,
-      'frequency': 'weekly',
-      'task_type': 'journal',
-      'isCompleted': false,
-    },
-    {
-      'id': 'mock_w3',
-      'title': 'Maintain a 7-Day Streak',
-      'description': 'Complete at least one task every day this week.',
-      'icon': 'exercise',
-      'xp_reward': 100,
-      'coin_reward': 35,
-      'frequency': 'weekly',
-      'task_type': 'streak',
-      'isCompleted': false,
-    },
-  ];
 
   @override
   void initState() {
@@ -382,6 +302,8 @@ class _DailyTasksScreenState extends State<DailyTasksScreen> with SingleTickerPr
       case 'chat':
       case 'chatbot':
         return 'Chat with Bot';
+      case 'meditation':
+        return 'Meditate';
       default:
         return 'Complete Task';
     }
@@ -391,7 +313,7 @@ class _DailyTasksScreenState extends State<DailyTasksScreen> with SingleTickerPr
     if (uid == null) return;
 
     // For tasks that can be completed directly
-    if (taskType != 'journal' && taskType != 'chat' && taskType != 'mood') {
+    if (taskType != 'journal' && taskType != 'chat' && taskType != 'mood' && taskType != 'meditation') {
       _triggerCompletion(taskId);
       return;
     }
@@ -404,7 +326,11 @@ class _DailyTasksScreenState extends State<DailyTasksScreen> with SingleTickerPr
           backgroundColor: Color(0xFF7C9C84),
         ),
       );
-      Navigator.pop(context); // Go back to Home
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (context) => const MainScreen()),
+        (route) => false,
+      );
     } else if (taskType == 'journal') {
       Navigator.push(
         context,
@@ -414,6 +340,11 @@ class _DailyTasksScreenState extends State<DailyTasksScreen> with SingleTickerPr
       Navigator.push(
         context,
         MaterialPageRoute(builder: (context) => const ActiveChatScreen()),
+      );
+    } else if (taskType == 'meditation') {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => const SelfHelpScreen()),
       );
     }
   }
@@ -674,15 +605,12 @@ class _DailyTasksScreenState extends State<DailyTasksScreen> with SingleTickerPr
                       return const Center(child: CircularProgressIndicator());
                     }
 
-                    // Use Firestore data if available, otherwise fall back to hardcoded mock
-                    final bool useMock = !tasksSnap.hasData || tasksSnap.data!.docs.isEmpty;
-
-                    if (useMock) {
+                    if (!tasksSnap.hasData || tasksSnap.data!.docs.isEmpty) {
                       return TabBarView(
                         controller: _tabController,
                         children: [
-                          _buildMockTaskList(_mockDailyTasks),
-                          _buildMockTaskList(_mockWeeklyTasks),
+                          Center(child: Text('No daily tasks found', style: GoogleFonts.outfit(color: Colors.grey))),
+                          Center(child: Text('No weekly tasks found', style: GoogleFonts.outfit(color: Colors.grey))),
                         ],
                       );
                     }
@@ -829,19 +757,7 @@ class _DailyTasksScreenState extends State<DailyTasksScreen> with SingleTickerPr
   }
 
   /// Renders the hardcoded mock list (shown when Firestore has no tasks)
-  Widget _buildMockTaskList(List<Map<String, dynamic>> tasks) {
-    return ListView.builder(
-      padding: const EdgeInsets.all(24),
-      itemCount: tasks.length,
-      itemBuilder: (context, index) {
-        final task = tasks[index];
-        final bool isCompleted = task['isCompleted'] ?? false;
-        return _buildTaskCard(task, task['id'] ?? '', isCompleted, isMock: true);
-      },
-    );
-  }
-
-  Widget _buildTaskCard(Map<String, dynamic> task, String taskId, bool isCompleted, {bool isMock = false}) {
+  Widget _buildTaskCard(Map<String, dynamic> task, String taskId, bool isCompleted) {
     final Color cardBg = isCompleted ? const Color(0xFFF9FAF8) : Colors.white;
 
     return Container(
@@ -866,7 +782,7 @@ class _DailyTasksScreenState extends State<DailyTasksScreen> with SingleTickerPr
       child: ClipRRect(
         borderRadius: BorderRadius.circular(28),
         child: InkWell(
-          onTap: isMock && isCompleted ? null : () => _onTaskAction(task, taskId, isCompleted),
+          onTap: isCompleted ? null : () => _onTaskAction(task, taskId, isCompleted),
           borderRadius: BorderRadius.circular(28),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),

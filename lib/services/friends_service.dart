@@ -35,9 +35,9 @@ class FriendsService {
 
       final List<FriendProfile> friends = [];
       
-      // Batch UIDs into chunks of 30 due to Firestore whereIn query limitations.
-      for (var i = 0; i < following.length; i += 30) {
-        final chunk = following.sublist(i, i + 30 > following.length ? following.length : i + 30);
+      // Batch UIDs into chunks of 10 due to Firestore whereIn query limitations.
+      for (var i = 0; i < following.length; i += 10) {
+        final chunk = following.sublist(i, i + 10 > following.length ? following.length : i + 10);
         final snapshot = await FirebaseFirestore.instance
             .collection('users')
             .where(FieldPath.documentId, whereIn: chunk)
@@ -59,8 +59,8 @@ class FriendsService {
     if (uids.isEmpty) return [];
     try {
       final List<FriendProfile> profiles = [];
-      for (var i = 0; i < uids.length; i += 30) {
-        final chunk = uids.sublist(i, i + 30 > uids.length ? uids.length : i + 30);
+      for (var i = 0; i < uids.length; i += 10) {
+        final chunk = uids.sublist(i, i + 10 > uids.length ? uids.length : i + 10);
         final snapshot = await FirebaseFirestore.instance
             .collection('users')
             .where(FieldPath.documentId, whereIn: chunk)

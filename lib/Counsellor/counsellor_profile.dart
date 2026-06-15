@@ -7,6 +7,8 @@ import 'edit_counsellor_profile.dart';
 import 'counsellor_availability_management.dart';
 import 'counsellor_history.dart';
 import 'counsellor_deactivation.dart';
+import 'counsellor_settings.dart';
+import '../UserAccount/splash_screen.dart';
 
 class CounsellorProfileScreen extends StatefulWidget {
   final Function(int)? onTabChange;
@@ -20,6 +22,27 @@ class _CounsellorProfileScreenState extends State<CounsellorProfileScreen> {
   final Color primaryGreen = const Color(0xFF7C9C84);
   final Color backgroundColor = const Color(0xFFF2F1EC);
   final Color textColorMain = const Color(0xFF333333);
+
+  bool _isLoggingOut = false;
+
+  Future<void> _signOut() async {
+    setState(() => _isLoggingOut = true);
+    try {
+      if (mounted) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (context) => const SplashTransitionScreen(isLogout: true)),
+              (route) => false,
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoggingOut = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error logging out: $e')),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -36,12 +59,24 @@ class _CounsellorProfileScreenState extends State<CounsellorProfileScreen> {
         title: Text(
           'Profile',
           style: GoogleFonts.playfairDisplay(
-            color: textColorMain,
+            color: const Color(0xFF333333),
             fontWeight: FontWeight.w600,
             fontSize: 24,
           ),
         ),
         centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings_outlined),
+            color: const Color(0xFF333333),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const CounsellorSettingsScreen()),
+              );
+            },
+          ),
+        ],
       ),
       body: StreamBuilder<DocumentSnapshot>(
         stream: FirebaseFirestore.instance.collection('users').doc(user?.uid).snapshots(),
@@ -54,7 +89,7 @@ class _CounsellorProfileScreenState extends State<CounsellorProfileScreen> {
           final String name = data['fullName'] ?? user?.displayName ?? 'Expert Counselor';
           final List<dynamic> specs = data['specializations'] ?? ['Mental Health Specialist'];
           final String specialty = specs.isNotEmpty ? specs[0].toString() : 'Mental Health Specialist';
-          final String? profileImageUrl = data['counsellorImageUrl'] ?? user?.photoURL;
+          final String? profileImageUrl = data['counsellorImageUrl'] ?? data['profileImageUrl'] ?? data['image'] ?? user?.photoURL;
 
           return SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
@@ -118,7 +153,7 @@ class _CounsellorProfileScreenState extends State<CounsellorProfileScreen> {
                   ],
                 ),
                 
-                const SizedBox(height: 48),
+                const SizedBox(height: 24),
 
                 // MANAGEMENT TOOLS Group
                 _buildGroupHeader('PRACTICE TOOLS'),
@@ -155,7 +190,7 @@ class _CounsellorProfileScreenState extends State<CounsellorProfileScreen> {
                   width: double.infinity,
                   height: 56,
                   child: OutlinedButton.icon(
-                    onPressed: () => _showLogoutDialog(context),
+                    onPressed: _isLoggingOut ? null : () => _showLogoutDialog(context),
                     icon: const Icon(Icons.logout_rounded, color: Color(0xFFFF8A8A)),
                     label: Text(
                       'Log Out',
@@ -168,7 +203,7 @@ class _CounsellorProfileScreenState extends State<CounsellorProfileScreen> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 100),
+                const SizedBox(height: 32),
               ],
             ),
           );
@@ -182,13 +217,56 @@ class _CounsellorProfileScreenState extends State<CounsellorProfileScreen> {
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: Text('Log Out', style: GoogleFonts.playfairDisplay(fontWeight: FontWeight.bold)),
-        content: Text('Are you sure you want to log out from your expert session?', style: GoogleFonts.outfit()),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: Text('Cancel', style: GoogleFonts.outfit(color: Colors.grey))),
-          TextButton(onPressed: () => FirebaseAuth.instance.signOut(), child: Text('Log Out', style: GoogleFonts.outfit(color: Colors.red))),
-        ],
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(32)),
+        contentPadding: const EdgeInsets.all(32),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFF5F5),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.logout_rounded, color: Color(0xFFFF8A8A), size: 48),
+            ),
+            const SizedBox(height: 24),
+            Text('Log Out?', style: GoogleFonts.playfairDisplay(fontSize: 24, fontWeight: FontWeight.bold, color: const Color(0xFF333333))),
+            const SizedBox(height: 16),
+            Text(
+              'Are you sure you want to log out from your expert session?',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.outfit(color: Colors.grey[600], height: 1.5),
+            ),
+            const SizedBox(height: 32),
+            Row(
+              children: [
+                Expanded(
+                  child: TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: Text('Cancel', style: GoogleFonts.outfit(color: Colors.grey[600], fontWeight: FontWeight.bold)),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _signOut();
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFFF8A8A),
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                    ),
+                    child: Text('Log Out', style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

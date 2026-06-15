@@ -6,6 +6,7 @@ import { useArticles } from '../../hooks/useFirestore';
 import { Plus, Search, Pencil, Trash2, Eye, X, Send, Archive, Save, Image as ImageIcon, User, Clock, FileText, Tag, ChevronDown, Upload, Loader2, Sparkles, FileUp, CheckCircle2, AlertCircle } from 'lucide-react';
 import { customAlert, customConfirm } from '../../utils/dialogUtils';
 import Skeleton from '../../components/Skeleton.jsx';
+import RichTextEditor from '../../components/RichTextEditor.jsx';
 
 const C = { 
   primary: '#7C9C84', 
@@ -45,6 +46,8 @@ const badge = (type) => ({ display: 'inline-flex', padding: '3px 10px', borderRa
 export default function Articles() {
   const { data: articles, loading } = useArticles();
   const [search, setSearch] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [deleting, setDeleting] = useState(null);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [editingArticle, setEditingArticle] = useState(null);
@@ -184,10 +187,14 @@ export default function Articles() {
     status: 'draft'
   });
 
-  const filtered = (articles || []).filter(a =>
-    (a.title || '').toLowerCase().includes(search.toLowerCase()) ||
-    (a.tag || '').toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = (articles || []).filter(a => {
+    const matchesSearch = (a.title || '').toLowerCase().includes(search.toLowerCase()) || 
+                          (a.tag || '').toLowerCase().includes(search.toLowerCase());
+    const matchesCategory = categoryFilter === 'all' || (a.tag || '').toLowerCase() === categoryFilter.toLowerCase();
+    const matchesStatus = statusFilter === 'all' || (a.status || 'draft').toLowerCase() === statusFilter.toLowerCase();
+    
+    return matchesSearch && matchesCategory && matchesStatus;
+  });
 
   // Pagination
   const totalPages = Math.ceil(filtered.length / itemsPerPage);
@@ -245,6 +252,24 @@ export default function Articles() {
       return;
     }
 
+    // Title Length Validation
+    if (formData.title.trim().length > 100) {
+      await customAlert("Title is too long. Please keep it under 100 characters.", "Title Too Long");
+      return;
+    }
+
+    // Reading Time Validation
+    if (formData.readingTime && !/^\d+(\s*min\s*read)?$/i.test(formData.readingTime.trim())) {
+      await customAlert("Reading time must be a number followed by 'min read' (e.g., '6 min read' or '6').", "Invalid Reading Time");
+      return;
+    }
+
+    // URL Validation
+    if (formData.imageUrl && !/^https?:\/\//.test(formData.imageUrl) && !formData.imageUrl.startsWith('blob:') && !formData.imageUrl.startsWith('/')) {
+        await customAlert("Please provide a valid URL for the Cover Image.", "Invalid URL");
+        return;
+    }
+
     try {
       let finalData = { ...formData };
       
@@ -264,6 +289,7 @@ export default function Articles() {
           ...finalData,
           updatedAt: serverTimestamp()
         });
+        await customAlert("Article successfully updated.", "Success");
       } else {
         // Add new article
         await addDoc(collection(db, 'articles'), {
@@ -274,6 +300,7 @@ export default function Articles() {
           clicks: 0,
           rating: 0
         });
+        await customAlert("Article successfully published.", "Success");
       }
       handleCloseEditor();
     } catch (error) {
@@ -288,6 +315,7 @@ export default function Articles() {
     setDeleting(id);
     try {
       await deleteDoc(doc(db, 'articles', id));
+      await customAlert("Article successfully deleted.", "Success");
     } catch (error) {
       console.error("Error deleting article: ", error);
     }
@@ -317,6 +345,44 @@ export default function Articles() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', position: 'relative' }}>
+      <style>
+        {`
+          .tab-btn.inactive { background: ${C.cream}; color: ${C.charcoalMuted}; }
+          .markdown-preview { font-family: 'Outfit', sans-serif; line-height: 1.6; color: ${C.charcoal}; padding: 10px; }
+          .markdown-preview h1, .markdown-preview h2, .markdown-preview h3 { font-family: 'Playfair Display'; margin-top: 1.5em; border-bottom: 1px solid ${C.creamDarker}; padding-bottom: 0.3em; }
+          .markdown-preview code { background: ${C.cream}; padding: 2px 5px; border-radius: 4px; }
+          
+          .custom-dropdown {
+            padding: 10px 32px 10px 14px;
+            border-radius: 12px;
+            border: 1px solid ${C.creamDarker};
+            background-color: ${C.cream};
+            font-family: 'Outfit', sans-serif;
+            font-size: 13px;
+            color: ${C.charcoal};
+            cursor: pointer;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%234F796B' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            min-width: 140px;
+            transition: all 0.2s ease;
+            outline: none;
+          }
+          .custom-dropdown:hover {
+            background-color: #f8faf9;
+            border-color: ${C.primaryLight};
+          }
+          .custom-dropdown:focus {
+            background-color: white;
+            border-color: ${C.primary};
+            box-shadow: 0 0 0 3px ${C.sage100};
+          }
+          .editor-header { padding: 24px; border-bottom: 1px solid ${C.creamDarker}; display: flex; align-items: center; justify-content: space-between; }
+          .editor-content { flex: 1; overflow-y: auto; padding: 24px; }
+          .editor-footer { padding: 20px 24px; border-top: 1px solid ${C.creamDarker}; display: flex; justify-content: flex-end; gap: 12px; }
+        `}
+      </style>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
           <span style={{ ...sLabel, display: 'block', marginBottom: '4px' }}>Content Management</span>
@@ -333,15 +399,43 @@ export default function Articles() {
         </div>
 
       <div style={card}>
-        <div style={{ position: 'relative', maxWidth: '280px', marginBottom: '20px' }}>
-          <Search size={14} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: C.muted }} />
-          <input
-            style={{ width: '100%', background: C.cream, border: `1px solid ${C.creamDarker}`, borderRadius: '12px', padding: '10px 12px 10px 36px', fontFamily: 'Outfit', fontSize: '13px', color: C.charcoal, outline: 'none', boxSizing: 'border-box' }}
-            placeholder="Search articles…"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
-        </div>        {loading ? (
+        <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', flexWrap: 'wrap' }}>
+          <div style={{ position: 'relative', flex: '1', minWidth: '220px' }}>
+            <Search size={14} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: C.muted }} />
+            <input
+              style={{ width: '100%', background: C.cream, border: `1px solid ${C.creamDarker}`, borderRadius: '12px', padding: '10px 12px 10px 36px', fontFamily: 'Outfit', fontSize: '13px', color: C.charcoal, outline: 'none', boxSizing: 'border-box' }}
+              placeholder="Search by title or category..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+          </div>
+          
+          <select
+            className="custom-dropdown"
+            value={categoryFilter}
+            onChange={e => setCategoryFilter(e.target.value)}
+          >
+            <option value="all">All Categories</option>
+            <option value="Mental Health">Mental Health</option>
+            <option value="Self-Care">Self-Care</option>
+            <option value="Science-Backed">Science-Backed</option>
+            <option value="Anxiety">Anxiety</option>
+            <option value="Productivity">Productivity</option>
+          </select>
+
+          <select
+            className="custom-dropdown"
+            value={statusFilter}
+            onChange={e => setStatusFilter(e.target.value)}
+          >
+            <option value="all">All Status</option>
+            <option value="draft">Draft</option>
+            <option value="published">Published</option>
+            <option value="archived">Archived</option>
+          </select>
+        </div>
+        
+        {loading ? (
           <div className="flex flex-col gap-3 mt-4">
             {[1, 2, 3, 4, 5].map((i) => (
               <div key={i} className="flex items-center gap-4 py-3 border-b border-cream-darker last:border-none">
@@ -522,7 +616,11 @@ export default function Articles() {
 
                <div 
                 style={{ fontSize: '17px', lineHeight: 1.9, color: '#334155', fontFamily: 'Outfit' }}
-                dangerouslySetInnerHTML={{ __html: viewingArticle.content?.replace(/\n/g, '<br/>') }}
+                dangerouslySetInnerHTML={{ 
+                  __html: /<[a-z][\s\S]*>/i.test(viewingArticle.content) 
+                    ? viewingArticle.content 
+                    : viewingArticle.content?.replace(/\n/g, '<br/>') 
+                }}
                />
             </div>
             <div style={{ padding: '20px 40px', background: '#FAF9F6', borderTop: `1px solid ${C.creamDarker}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -568,30 +666,6 @@ export default function Articles() {
               animation: 'slideIn 0.3s ease-out'
             }}
           >
-            <style>
-              {`
-                @keyframes slideIn {
-                  from { transform: translateX(100%); }
-                  to { transform: translateX(0); }
-                }
-                .form-group { margin-bottom: 20px; }
-                .form-label { display: flex; align-items: center; gap: 6px; font-family: 'Outfit', sans-serif; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: ${C.muted}; margin-bottom: 8px; }
-                .form-input { width: 100%; background: ${C.cream}; border: 1px solid ${C.creamDarker}; border-radius: 12px; padding: 10px 14px; height: 42px; font-family: 'Outfit', sans-serif; font-size: 14px; color: ${C.charcoal}; outline: none; box-sizing: border-box; transition: all 0.2s ease; }
-                .form-input:focus { border-color: ${C.primary}; box-shadow: 0 0 0 3px ${C.sage100};}
-                select.form-input { cursor: pointer; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 14px center; padding-right: 40px; }
-                textarea.form-input { min-height: 120px; height: auto; resize: vertical; padding: 14px; }
-                .editor-header { padding: 20px 24px; border-bottom: 1px solid ${C.creamDarker}; display: flex; align-items: center; justify-content: space-between; gap: 20px; }
-                .editor-content { flex: 1; overflow-y: auto; padding: 24px; }
-                .editor-footer { padding: 20px 24px; border-top: 1px solid ${C.creamDarker}; display: flex; justify-content: flex-end; gap: 12px; }
-                .tab-btn { padding: 8px 16px; border-radius: 10px; border: none; font-family: 'Outfit'; font-weight: 600; font-size: 13px; cursor: pointer; transition: all 0.2s; }
-                .tab-btn.active { background: ${C.primary}; color: white; }
-                .tab-btn.inactive { background: ${C.cream}; color: ${C.charcoalMuted}; }
-                .markdown-preview { font-family: 'Outfit', sans-serif; line-height: 1.6; color: ${C.charcoal}; padding: 10px; }
-                .markdown-preview h1, .markdown-preview h2, .markdown-preview h3 { font-family: 'Playfair Display'; margin-top: 1.5em; border-bottom: 1px solid ${C.creamDarker}; padding-bottom: 0.3em; }
-                .markdown-preview code { background: ${C.cream}; padding: 2px 5px; border-radius: 4px; }
-              `}
-            </style>
-
             <div className="editor-header">
               <div style={{ flex: 1 }}>
                 <span style={sLabel}>{editingArticle ? 'Editing Article' : 'Creation'}</span>
@@ -847,13 +921,11 @@ export default function Articles() {
                   </div>
 
                   <div className="form-group">
-                    <label className="form-label"><FileText size={12} /> Main Content (Markdown supported)</label>
-                    <textarea 
-                      className="form-input" 
-                      value={formData.content} 
-                      onChange={e => setFormData({...formData, content: e.target.value})} 
-                      placeholder="The full article text (or leave empty if using Source Link)"
-                      style={{ minHeight: '300px' }}
+                    <label className="form-label"><FileText size={12} /> Main Content (Rich Text)</label>
+                    <RichTextEditor
+                      value={formData.content}
+                      onChange={(newContent) => setFormData({...formData, content: newContent})}
+                      placeholder="Type the full article text here. Use the toolbar for formatting..."
                     />
                   </div>
 
@@ -890,10 +962,14 @@ export default function Articles() {
                     {formData.subtitle || 'No summary provided.'}
                   </div>
 
-                  {/* Simple Markdown Preview simulation */}
-                  <div style={{ whiteSpace: 'pre-wrap' }}>
-                    {formData.content || 'No content yet.'}
-                  </div>
+                  {/* Simple Rich Text Preview simulation */}
+                  <div style={{ whiteSpace: /<[a-z][\s\S]*>/i.test(formData.content) ? 'normal' : 'pre-wrap' }}
+                       dangerouslySetInnerHTML={{ 
+                         __html: /<[a-z][\s\S]*>/i.test(formData.content) 
+                           ? formData.content 
+                           : formData.content?.replace(/\n/g, '<br/>') || 'No content yet.'
+                       }}
+                  />
                 </div>
               )}
             </div>

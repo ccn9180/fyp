@@ -319,7 +319,7 @@ class _RegisterPageState extends State<RegisterPage> {
                   keyboardType: TextInputType.emailAddress,
                   validator: (val) {
                     if (val == null || val.isEmpty) return 'Email is required';
-                    if (!val.contains('@')) return 'Enter a valid email';
+                    if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(val)) return 'Enter a valid email';
                     return null;
                   },
                 ),
@@ -339,6 +339,9 @@ class _RegisterPageState extends State<RegisterPage> {
                   validator: (val) {
                     if (val == null || val.isEmpty) return 'Password is required';
                     if (val.length < 6) return 'Password must be at least 6 characters';
+                    if (!RegExp(r'(?=.*[a-z])').hasMatch(val)) return 'Must contain at least one lowercase letter';
+                    if (!RegExp(r'(?=.*[A-Z])').hasMatch(val)) return 'Must contain at least one uppercase letter';
+                    if (!RegExp(r'(?=.*\d)').hasMatch(val)) return 'Must contain at least one number';
                     return null;
                   },
                 ),

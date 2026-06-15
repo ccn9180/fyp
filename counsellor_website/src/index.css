@@ -1,21 +1,41 @@
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Playfair+Display:wght@400;500;600;700&display=swap');
 
 :root {
-  --bg-main: #F9F6F0; /* Premium warm cream */
+  --bg-main: #F6F5F2;
   --bg-card: #FFFFFF;
-  --bg-secondary: #F5F4F0; /* Cream-darker */
+  --bg-secondary: #E5E4E0;
   --text-darker: #2C3630;
-  --text-dark: #4A5750;
+  --text-dark: #333333;
   --text-muted: #8A968F;
   
   --primary-color: #7C9C84;
   --primary-dark: #5D7E65;
-  --primary-light: rgba(124, 156, 132, 0.08);
+  --primary-light: #E5EDE8;
   --primary-light-hover: rgba(124, 156, 132, 0.14);
   --border-color: #E5E4E0;
   
-  --font-main: 'Outfit', sans-serif;
-  --font-serif: 'Playfair Display', serif;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.05);
+  --font-main: 'Outfit', system-ui, -apple-system, sans-serif;
+  --font-serif: 'Playfair Display', Georgia, serif;
+}
+
+.sidebar-hover:hover {
+  background-color: var(--bg-main) !important;
+}
+
+body.dark-mode {
+  --bg-main: #181C1A;
+  --bg-card: #222724;
+  --bg-secondary: #2C332F;
+  --text-darker: #F9F6F0;
+  --text-dark: #E5E4E0;
+  --text-muted: #A3ACA7;
+  
+  --primary-color: #92B59D;
+  --primary-dark: #7C9C84;
+  --primary-light: rgba(146, 181, 157, 0.12);
+  --primary-light-hover: rgba(146, 181, 157, 0.2);
+  --border-color: #39423D;
 }
 
 * {
@@ -63,8 +83,8 @@ a {
 }
 
 .sidebar-logo {
-  font-size: 22px;
-  font-weight: 700;
+  font-size: 24px;
+  font-weight: 800;
   margin-bottom: 32px;
   color: var(--text-darker);
   display: flex;
@@ -75,7 +95,7 @@ a {
 }
 
 .sidebar-logo-icon {
-  background-color: white;
+  background-color: #FFFFFF;
   border: 1px solid var(--border-color);
   box-shadow: 0 8px 20px rgba(124,156,132,0.06);
   padding: 8px;
@@ -85,21 +105,74 @@ a {
   justify-content: center;
 }
 
-/* Sidebar Sections & Navigation Groups */
-.sidebar-group {
+/* Sidebar Groups - Admin Style Dropdown */
+.sidebar-group-container {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  margin-bottom: 24px;
+  margin-bottom: 8px;
 }
 
-.sidebar-group-label {
-  font-size: 10px;
-  font-weight: 700;
+.sidebar-group-button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 10px 16px;
+  border-radius: 12px;
+  cursor: pointer;
+  border: none;
+  background: transparent;
   color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  padding: 0 14px 6px 14px;
+  font-family: var(--font-main);
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sidebar-group-button:hover {
+  background-color: rgba(124, 156, 132, 0.08); /* sage-100 equivalent */
+  color: var(--text-darker);
+}
+
+.sidebar-group-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.sidebar-group-children {
+  margin-left: 16px;
+  padding-left: 0;
+  border-left: 1px solid rgba(124, 156, 132, 0.2); /* sage-100 border */
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 2px;
+}
+
+/* Child item specific overrides to match Admin style */
+.child-item {
+  font-size: 13px !important;
+  font-weight: 400 !important;
+  padding: 8px 16px !important;
+  color: #777777 !important;
+  margin-left: 8px;
+}
+
+.child-item.active {
+  font-weight: 600 !important;
+  background-color: rgba(124, 156, 132, 0.12) !important;
+  color: var(--primary-color) !important;
+}
+
+.child-item.active::before {
+  display: none; /* Hide the vertical bar for children */
+}
+
+.icon-wrapper {
+  opacity: 0.8;
+  display: flex;
+  align-items: center;
 }
 
 .nav-item {
@@ -112,7 +185,7 @@ a {
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   font-weight: 500;
   color: var(--text-dark);
-  font-size: 13.5px;
+  font-size: 15px;
   border: none;
   background: transparent;
   width: 100%;
@@ -166,7 +239,7 @@ a {
 
 .sidebar-profile:hover {
   border-color: var(--primary-color);
-  background-color: white;
+  background-color: var(--bg-card);
   box-shadow: 0 6px 18px rgba(124, 156, 132, 0.05);
 }
 
@@ -224,14 +297,15 @@ a {
 
 .page-title {
   font-size: 30px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-darker);
-  margin-bottom: 4px;
+  margin-bottom: 6px;
+  font-family: var(--font-serif);
 }
 
 .page-subtitle {
   color: var(--text-muted);
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 400;
 }
 
@@ -244,7 +318,6 @@ a {
   box-shadow: 0 8px 24px rgba(124, 156, 132, 0.03);
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
-  overflow: hidden;
 }
 
 .card:hover {
@@ -289,7 +362,7 @@ a {
 
 .card:hover .stat-icon-wrapper {
   background-color: var(--primary-color);
-  color: white;
+  color: var(--bg-card);
   transform: scale(1.04) rotate(4deg);
 }
 
@@ -301,7 +374,7 @@ a {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background-color: white;
+  background-color: var(--bg-card);
   transition: all 0.2s ease;
 }
 
@@ -319,7 +392,7 @@ a {
   border-radius: 50%;
   display: flex;
   align-items: center;
-  justifyContent: center;
+  justify-content: center;
   font-weight: 700;
   color: var(--primary-color);
   font-size: 15px;
@@ -364,7 +437,7 @@ a {
   padding: 10px 14px;
   border-radius: 10px;
   border: 1px solid var(--border-color);
-  background-color: var(--bg-secondary);
+  background-color: var(--bg-card);
   font-family: var(--font-main);
   font-size: 13.5px;
   color: var(--text-darker);
@@ -372,10 +445,23 @@ a {
   transition: all 0.2s ease;
 }
 
+select.form-control {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 16px center;
+  padding-right: 40px;
+  cursor: pointer;
+}
+
 .form-control:focus {
   border-color: var(--primary-color);
-  background-color: white;
+  background-color: var(--bg-card);
   box-shadow: 0 0 0 3px rgba(124, 156, 132, 0.08);
+}
+
+select.form-control:focus {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%237C9C84' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
 }
 
 /* Buttons */
@@ -404,8 +490,8 @@ a {
 }
 
 .btn-secondary {
-  background-color: var(--bg-secondary);
-  color: var(--primary-color);
+  background-color: var(--bg-card);
+  color: var(--text-dark);
   border: 1px solid var(--border-color);
 }
 
@@ -429,7 +515,7 @@ a {
 }
 
 .insights-list-card {
-  background-color: white;
+  background-color: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: 16px;
   padding: 16px;
@@ -448,7 +534,7 @@ a {
 }
 
 .insights-detail-pane {
-  background-color: white;
+  background-color: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: 20px;
   padding: 28px;
@@ -457,7 +543,7 @@ a {
 
 /* Day-grouped Grid for Availability */
 .availability-day-card {
-  background-color: white;
+  background-color: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: 16px;
   padding: 20px;

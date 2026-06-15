@@ -10,6 +10,8 @@ import '../main.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../UserAccount/login.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -19,11 +21,10 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  // Mock settings state
+  // Settings state
   bool _pushNotifications = true;
-  bool _emailAlerts = false;
-  bool _offlineMode = false;
   bool _dailyReminder = true;
+  bool _syncToGoogleCalendar = true;
   bool _isFaceIdEnabled = false;
   bool _isFingerprintEnabled = false;
   final LocalAuthentication _localAuth = LocalAuthentication();
@@ -39,6 +40,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() {
       _isFaceIdEnabled = prefs.getBool('face_id_enabled') ?? false;
       _isFingerprintEnabled = prefs.getBool('fingerprint_enabled') ?? false;
+      _syncToGoogleCalendar = prefs.getBool('sync_google_calendar') ?? true;
     });
   }
 
@@ -103,6 +105,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     if (!formKey.currentState!.validate()) return;
                     setStateDialog(() => isVerifying = true);
                     
+                    final nav = Navigator.of(context);
+                    final messenger = ScaffoldMessenger.of(context);
                     try {
                       final user = FirebaseAuth.instance.currentUser;
                       if (user != null && user.email != null) {
@@ -126,9 +130,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           await prefs.setString('biometric_password', passwordCtrl.text.trim());
                           
                           if (mounted) {
-                            Navigator.pop(context);
+                            nav.pop();
                             _loadSettings();
-                            ScaffoldMessenger.of(context).showSnackBar(
+                            messenger.showSnackBar(
                               SnackBar(
                                 content: Text('${type == 'face_id' ? 'Face ID' : 'Fingerprint'} enabled successfully!'),
                                 backgroundColor: const Color(0xFF7B9E89),
@@ -143,8 +147,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       }
                     } catch (e) {
                       setStateDialog(() => isVerifying = false);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
+                      messenger.showSnackBar(
+                        const SnackBar(
                           content: Text('Verification failed. Please check your password.'),
                           backgroundColor: Colors.redAccent,
                         ),
@@ -206,6 +210,147 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  Future<void> _showDeleteAccountDialog() async {
+    final passwordCtrl = TextEditingController();
+    bool isDeleting = false;
+    final formKey = GlobalKey<FormState>();
+
+    await showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (dialogContext, setStateDialog) {
+            return AlertDialog(
+              backgroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(32)),
+              contentPadding: const EdgeInsets.all(32),
+              content: Form(
+                key: formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFFFF0F0),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.delete_forever_rounded, color: Color(0xFFB71C1C), size: 48),
+                    ),
+                    const SizedBox(height: 24),
+                    Text(
+                      'Delete Account?',
+                      style: GoogleFonts.playfairDisplay(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFFB71C1C),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'This action is irreversible. All your data, diary entries, and session history will be permanently deleted.',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.outfit(color: Colors.grey[600], height: 1.5),
+                    ),
+                    const SizedBox(height: 24),
+                    TextFormField(
+                      controller: passwordCtrl,
+                      obscureText: true,
+                      validator: (val) => val == null || val.isEmpty ? 'Password is required' : null,
+                      style: GoogleFonts.outfit(color: const Color(0xFF333333)),
+                      decoration: InputDecoration(
+                        hintText: 'Enter password to confirm',
+                        hintStyle: GoogleFonts.outfit(color: Colors.grey[400]),
+                        filled: true,
+                        fillColor: const Color(0xFFFFF5F5),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        prefixIcon: const Icon(Icons.lock_outline, color: Color(0xFFB71C1C), size: 20),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 32),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextButton(
+                            onPressed: () => Navigator.pop(dialogContext),
+                            child: Text('Cancel', style: GoogleFonts.outfit(color: Colors.grey[600], fontWeight: FontWeight.bold)),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: isDeleting ? null : () async {
+                              if (!formKey.currentState!.validate()) return;
+                              setStateDialog(() => isDeleting = true);
+                              final nav = Navigator.of(dialogContext);
+                              final messenger = ScaffoldMessenger.of(dialogContext);
+                              try {
+                                final user = FirebaseAuth.instance.currentUser;
+                                if (user != null && user.email != null) {
+                                  final AuthCredential credential = EmailAuthProvider.credential(
+                                    email: user.email!,
+                                    password: passwordCtrl.text.trim(),
+                                  );
+                                  await user.reauthenticateWithCredential(credential);
+                                  await FirebaseFirestore.instance.collection('users').doc(user.uid).delete();
+                                  await user.delete();
+                                  if (mounted) {
+                                    nav.pushAndRemoveUntil(
+                                      MaterialPageRoute(builder: (context) => const LoginPage()),
+                                      (route) => false,
+                                    );
+                                  }
+                                } else if (user != null) {
+                                  await FirebaseFirestore.instance.collection('users').doc(user.uid).delete();
+                                  await user.delete();
+                                  if (mounted) {
+                                    nav.pushAndRemoveUntil(
+                                      MaterialPageRoute(builder: (context) => const LoginPage()),
+                                      (route) => false,
+                                    );
+                                  }
+                                }
+                              } catch (e) {
+                                setStateDialog(() => isDeleting = false);
+                                messenger.showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Verification failed. Please check your password.'),
+                                    backgroundColor: Color(0xFFB71C1C),
+                                  ),
+                                );
+                              }
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFFB71C1C),
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                            ),
+                            child: isDeleting
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                  )
+                                : Text('Delete', style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   void _showError(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(msg), backgroundColor: Colors.orangeAccent),
@@ -251,27 +396,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               const Divider(height: 1, indent: 60),
               _buildSwitchTile(
-                icon: Icons.email_outlined,
-                title: 'Email Newsletter',
-                subtitle: 'Weekly mindfulness tips',
-                value: _emailAlerts,
-                onChanged: (val) => setState(() => _emailAlerts = val),
-              ),
-              const Divider(height: 1, indent: 60),
-              _buildSwitchTile(
-                icon: Icons.cloud_off_outlined,
-                title: 'Offline Mode',
-                subtitle: 'Download sessions automatically',
-                value: _offlineMode,
-                onChanged: (val) => setState(() => _offlineMode = val),
-              ),
-              const Divider(height: 1, indent: 60),
-              _buildSwitchTile(
                 icon: Icons.access_time_outlined,
                 title: 'Daily Reminder',
                 subtitle: 'Evening reflection prompt',
                 value: _dailyReminder,
                 onChanged: (val) => setState(() => _dailyReminder = val),
+              ),
+              const Divider(height: 1, indent: 60),
+              _buildSwitchTile(
+                icon: Icons.calendar_month_outlined,
+                title: 'Sync to Calendar',
+                subtitle: 'Auto-add sessions to Google Calendar',
+                value: _syncToGoogleCalendar,
+                onChanged: (val) async {
+                  setState(() => _syncToGoogleCalendar = val);
+                  final prefs = await SharedPreferences.getInstance();
+                  await prefs.setBool('sync_google_calendar', val);
+                },
               ),
             ],
           ),
@@ -327,9 +468,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               _buildNavigationTile(
                 icon: Icons.delete_outline,
                 title: 'Delete Account',
-                iconColor: Colors.redAccent,
-                titleColor: Colors.redAccent,
-                onTap: () {},
+                iconColor: const Color(0xFFB71C1C),
+                titleColor: const Color(0xFFB71C1C),
+                onTap: _showDeleteAccountDialog,
               ),
             ],
           ),
@@ -414,7 +555,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.02),
+            color: Colors.black.withValues(alpha: 0.02),
             blurRadius: 15,
             offset: const Offset(0, 5),
           ),
@@ -482,7 +623,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       leading: Container(
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          color: iconColor == const Color(0xFF7C9C84) ? const Color(0xFFF5F7F6) : iconColor.withOpacity(0.1),
+          color: iconColor == const Color(0xFF7C9C84) ? const Color(0xFFF5F7F6) : iconColor.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Icon(icon, color: iconColor, size: 22),

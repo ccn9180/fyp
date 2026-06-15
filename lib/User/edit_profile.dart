@@ -16,6 +16,7 @@ class EditProfileScreen extends StatefulWidget {
 class _EditProfileScreenState extends State<EditProfileScreen> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _nicknameController = TextEditingController();
   final TextEditingController _bioController = TextEditingController();
 
   final List<String> _selectedInterests = [];
@@ -247,6 +248,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   void dispose() {
     _nameController.dispose();
     _emailController.dispose();
+    _nicknameController.dispose();
     _bioController.dispose();
     super.dispose();
   }
@@ -268,6 +270,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         setState(() {
           _nameController.text = data['fullName'] ?? '';
           _emailController.text = data['email'] ?? '';
+          _nicknameController.text = data['nickname'] ?? '';
           _bioController.text = data['bio'] ?? '';
           _profileImageUrl = data['profileImageUrl'];
 
@@ -322,7 +325,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           .toList();
 
       await docRef.update({
-        'fullName': name,
+        'fullName': name, // Can't edit but good to keep
+        'nickname': _nicknameController.text.trim(),
         'email': _emailController.text.trim(),
         'bio': _bioController.text.trim(),
         'interests': _selectedInterests,
@@ -484,13 +488,19 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
             // Full Name Field
             _buildLabel('FULL NAME'),
-            _buildTextField(_nameController, hintText: "Enter your full name"),
+            _buildTextField(_nameController, hintText: "Enter your full name", readOnly: true),
+
+            const SizedBox(height: 24),
+
+            // Nickname Field
+            _buildLabel('NICKNAME'),
+            _buildTextField(_nicknameController, hintText: "Enter your nickname"),
 
             const SizedBox(height: 24),
 
             // Email Field
             _buildLabel('EMAIL ADDRESS'),
-            _buildTextField(_emailController, hintText: "Enter your email address"),
+            _buildTextField(_emailController, hintText: "Enter your email address", readOnly: true),
 
             const SizedBox(height: 24),
 
@@ -688,7 +698,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     );
   }
 
-  Widget _buildTextField(TextEditingController controller, {int maxLines = 1, String? hintText}) {
+  Widget _buildTextField(TextEditingController controller, {int maxLines = 1, String? hintText, bool readOnly = false}) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -704,9 +714,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       child: TextField(
         controller: controller,
         maxLines: maxLines,
+        readOnly: readOnly,
         style: GoogleFonts.outfit(
           fontSize: 16,
-          color: const Color(0xFF333333),
+          color: readOnly ? const Color(0xFF9E9E9E) : const Color(0xFF333333),
         ),
         decoration: InputDecoration(
           hintText: hintText,
@@ -714,6 +725,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             color: Colors.grey[400],
             fontSize: 14,
           ),
+          suffixIcon: readOnly 
+              ? const Icon(Icons.lock_outline_rounded, color: Color(0xFFD1D5DB), size: 20) 
+              : null,
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(16),
             borderSide: BorderSide.none,

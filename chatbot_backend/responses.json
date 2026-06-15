@@ -1,353 +1,452 @@
 {
-  "explore_checkin": [
-    "I'm glad you're doing okay. Is there anything on your mind today, or do you just want to chat?"
-  ],
-  "gentle_pivot": [
-    "That is okay. Sometimes things just feel quiet or neutral, and that matters too."
-  ],
-  "open_chat": [
-    "I'm here with you. What feels most worth talking about right now?"
-  ],
-  "validate_confirm": [
-    "Okay, I’m with you. What feels strongest right now?",
-    "Alright. What are you noticing most in this moment?",
-    "Got it. Is it showing up more in your thoughts, your body, or both?"
-  ],
-  "anxiety_direct_open": [
-    "I’m here with you. Is the anxiety showing up more in your thoughts, your body, or both right now?",
-    "That sounds heavy. Is it feeling more like racing thoughts, physical panic, or both?",
-    "I’m with you. When the anxiety comes up, do you notice it more in your mind, your body, or both?"
-  ],
-  "deliver_coping_step": [
-    "Okay. Let’s do one small step together. Take one slow breath in, then breathe out gently. After that, name three things around you that feel solid or real right now.",
-    "Alright. Put both feet on the ground, take one slow breath, and then tell me three things near you that you can notice clearly.",
-    "Okay, we can do that together. Start with one slow breath, then name three objects around you that feel real and steady."
-  ],
-  "guided_breath_step": [
-    "Okay, let’s do one slow breath together. Breathe in gently through your nose for 4, hold for 2, and breathe out slowly for 6. When you finish, tell me if your body feels even a little softer.",
-    "Alright, just one breath. In slowly, hold for a moment, and out gently. After that, tell me whether anything in your body feels a little less tight.",
-    "Okay, stay with me for one breath. Slow inhale, gentle pause, then a long exhale. What do you notice in your body after that?"
-  ],
-  "stay_present_support": [
-    "Okay. We can pause here for a moment. You do not need to explain anything else right now. Just let your hands rest and take one slow breath.",
-    "I’m here with you. We do not need to fix it immediately. You can just stay with this moment gently for a bit.",
-    "Okay. We can stay here for a moment. You are not alone in this."
-  ],
-  "mixed_anxiety_followup": [
-    "That makes sense. When it hits both your thoughts and your body at once, it can feel really overwhelming. What are you noticing more strongly right now — the shaking in your body, or the thoughts in your mind?",
-    "That sounds like a lot to carry at once. Since it is showing up in both your mind and body, what feels strongest right now?"
-  ],
-  "body_symptom_probe": [
-    "Okay, so it feels strongest in your body right now. What are you noticing most — shaking, tightness, chest pressure, or something else?",
-    "Got it. Since it feels strongest in your body, what is standing out most right now — your hands, chest, breathing, or something else?"
-  ],
-  "soft_positive_transition": [
-    "I’m glad there may be a small shift there. Would you rather pause here for a moment, or try one more gentle step?",
-    "That sounds like it may be easing a little. We can pause here, or take one more small step if you want."
-  ],
-  "evaluate_task": [
-    "Thank you for trying that. Has anything softened a little, or does it still feel just as strong?",
-    "You did well to pause and try that. Do you feel even a little lighter now, or about the same?",
-    "Thank you for doing that with me. Does your body feel a bit calmer now, or still very tense?"
-  ],
-  "stabilize_partial_relief": [
-    "It sounds like some of the intensity has eased, even if the feeling has not fully gone yet. Would you like to stay with this calmer moment for a bit, or try one more gentle step?",
-    "That sounds like a small but real shift. It does not have to disappear all at once. Do you want another short calming step, or would you rather stay here for a moment?",
-    "It is okay if it is still there a little. The fact that it feels lighter matters. Would it help to take one more slow breath together, or just stay here for a moment?"
-  ],
-  "reinforce_small_progress": [
-    "That small shift matters. Even a little change is still real. Would you like to try one more gentle step, or pause here for a moment?",
-    "A little better is still important. We can either stay with this calmer moment or try one more short grounding step.",
-    "That is a good sign. Even small relief counts. Do you want another gentle step, or would you rather rest here for a moment?"
-  ],
-  "clarify_progress_binary": [
-    "I’m not fully sure what you mean by yes there. Does it feel a bit more manageable now, or is it still quite strong?",
-    "Just to make sure I understand you correctly, is the feeling easing a little, or still hitting quite hard?"
-  ],
-  "clarify_short_yes": [
-    "I want to make sure I understand you properly. Could you say a little more about what you mean?",
-    "I’m with you. Can you tell me a bit more instead of just yes, so I understand better?"
-  ],
-  "respond_to_no_relief": [
-    "That is okay. One step not helping right away does not mean you failed. Would you like to try another gentle grounding step?",
-    "That makes sense. Sometimes it takes a few small steps before anything shifts. Should we try one more together?",
-    "That is understandable. We can try a different calming step if you want."
-  ],
-  "panic_body_symptom_followup": [
-    "That sounds really uncomfortable. When your body reacts that strongly, it can help to settle it first. Would you like to try one small grounding step with me?",
-    "That sounds intense in your body right now. Let’s focus on helping your body slow down first. Would you like to try a quick calming step together?",
-    "That sounds hard to sit with. Since it is showing up strongly in your body, we can try one simple grounding step first if you want."
-  ],
-  "deep_empathy_guided": [
-    "That sounds exhausting, especially if it has been going on for a long time. Is there a time when it feels heaviest?",
-    "Carrying this for so long sounds really tiring. When it peaks, what kind of thoughts usually come up?",
-    "That sounds hard to deal with for such a long time. When it gets worse, do you notice it more in your body, your thoughts, or both?"
-  ],
-  "body_better_mind_worry_support": [
-      "That makes sense. Your body may be settling a little, but your mind is still trying to solve the worry. What thought is staying with you most?",
-      "That is a useful difference to notice. Your body feels a bit calmer, but the worry is still there. What is the main thing your mind keeps returning to?",
-      "I hear you. Sometimes the body calms first, then the thoughts take longer. What feels unresolved in your mind right now?"
+    "explore_checkin": [
+        "I'm really glad you're doing okay today. Is there anything specific on your mind, or do you just want to hang out and chat?",
+        "That's good to hear. Feel free to just sit in the quiet with me, or we can talk about whatever's floating around in your head today."
+    ],
+    "gentle_pivot": [
+        "That's completely okay. Sometimes having a 'neutral' or quiet day is exactly what the mind needs to rest.",
+        "I understand. Not every day has to be a big high or a deep low. A quiet middle ground matters too."
+    ],
+    "open_chat": [
+        "I'm right here with you. Whatever feels heaviest or most important right now, we can talk about it.",
+        "I'm listening. Take your time, and tell me what's on your mind."
+    ],
+    "validate_confirm": [
+        "Got it. Can you tell me a little more about that?",
+        "I hear you. What else is on your mind regarding that?",
+        "That makes sense. I'm following you."
+    ],
+    "anxiety_direct_open": [
+        "I hear you. Anxiety can be so exhausting. Is it making your mind race right now, or do you feel it more physically in your chest or stomach?",
+        "I'm so sorry you're dealing with that right now. Anxiety is a heavy weight. Does it feel more like physical panic, or looping thoughts?",
+        "I'm right here with you. Let's take it slow. Are you noticing the anxiety more in your body or in your head today?"
+    ],
+    "deliver_coping_step": [
+        "Okay, let's slow things down together. Take one gentle, deep breath in... and let it out slowly. Now, look around and tell me three things you can see near you.",
+        "I know it's hard, but let's try one small step. Put both feet flat on the floor, take a slow breath, and name three things you can touch right now.",
+        "We can get through this moment together. Start with one slow, deep breath. Then, find three solid objects around you that feel real."
+    ],
+    "guided_breath_step": [
+        "Let's just take one breath together. Inhale gently through your nose for 4 seconds, hold for 2, and exhale slowly for 6. Tell me how your body feels after that.",
+        "Just one breath. Breathe in slowly... hold it... and let it out like a sigh. Does your chest feel even a tiny bit lighter?",
+        "I'm right here. Let's do a slow inhale, pause, and a long, relaxing exhale. What do you notice in your body now?"
+    ],
+    "stay_present_support": [
+        "We can just pause right here. You don't have to explain anything or find the perfect words. Just breathe.",
+        "I'm sitting right here with you. We don't need to fix everything this second. Just let your shoulders drop a little.",
+        "It's okay to just 'be' for a minute. You are not alone, and there's no rush to say anything."
+    ],
+    "mixed_anxiety_followup": [
+        "That makes total sense. When anxiety hits both your mind and your body, it's incredibly overwhelming. Which part feels harder to manage right now?",
+        "That is a lot to carry at once. I'm sorry it's hitting you so hard. What's standing out more to you\u2014the physical shaking or the racing thoughts?"
+    ],
+    "body_symptom_probe": [
+        "I see. Since it's sitting so heavily in your body, what specifically are you feeling? Is it tightness, shaking, or maybe chest pressure?",
+        "Got it. Physical anxiety is deeply uncomfortable. Where are you feeling it most\u2014your hands, your breathing, or somewhere else?"
+    ],
+    "soft_positive_transition": [
+        "I'm really glad there was a small shift for you. Would you like to just rest here for a moment, or try one more gentle step?",
+        "That sounds like it might be easing up, even just a little. We can pause here, or do another small grounding step if you're up for it."
+    ],
+    "evaluate_task": [
+        "Thank you so much for trying that with me. Does your mind feel even a tiny bit clearer, or is it still just as heavy?",
+        "You did really well. Taking a pause is hard. Does your body feel a little lighter now?",
+        "I appreciate you doing that with me. Let's check in\u2014does it feel a bit calmer, or still very tense?"
+    ],
+    "stabilize_partial_relief": [
+        "It sounds like the edge has softened a bit, even if the feeling isn't entirely gone. That's a real win. Do you want to rest here, or take one more step?",
+        "A small shift is still a real shift. It doesn't have to magically disappear all at once. Would you like to pause and breathe, or try another gentle step?",
+        "It's completely okay if it's still lingering. The fact that it's lighter is what matters. Do you want to sit with this calmer feeling for a bit?"
+    ],
+    "reinforce_small_progress": [
+        "That small shift matters so much. Any relief is a step in the right direction. Should we pause here?",
+        "Even feeling 1% better is important. You're doing great. Would you like another small grounding step, or just want to rest?",
+        "I love hearing that. Small relief is real relief. Do you want to stay in this calmer space for a moment?"
+    ],
+    "clarify_progress_binary": [
+        "I just want to make sure I'm following you\u2014does it feel a bit more manageable now, or is it still hitting you quite hard?",
+        "Just to be certain I understand: is the feeling starting to ease up, or is it still very intense?"
+    ],
+    "clarify_short_yes": [
+        "I want to make sure I really hear you. Could you share a tiny bit more about what you mean?",
+        "I'm with you. If you feel up to it, can you tell me a little more so I can understand you better?"
+    ],
+    "respond_to_no_relief": [
+        "That is completely okay. Sometimes the first thing we try doesn't work, and it doesn't mean you failed. Would you like to try a different gentle step?",
+        "That's so frustrating, I know. Sometimes the body takes a while to realize it's safe. Should we try one more thing together?",
+        "I hear you. It's okay if it didn't help right away. We can try a different approach if you're comfortable."
+    ],
+    "panic_body_symptom_followup": [
+        "That sounds deeply uncomfortable, and I'm so sorry you're experiencing it. When your body reacts like that, it helps to ground it first. Can we try a small step together?",
+        "That physical intensity sounds really scary. Let's focus purely on helping your body realize it's safe right now. Would you be open to a quick calming exercise?",
+        "I can only imagine how hard that is to sit with. Since your body is in overdrive, let's try one simple grounding step to help it slow down."
+    ],
+    "deep_empathy_guided": [
+        "That sounds incredibly exhausting, especially carrying it for so long. Is there a certain time of day when it feels the heaviest?",
+        "Holding onto this for so long sounds so draining. I'm really sorry you've had to deal with this. When it peaks, what kinds of thoughts usually run through your mind?",
+        "That sounds like a really hard burden to carry. When it gets really bad, do you feel it more physically, or is it mostly racing thoughts?"
+    ],
+    "body_better_mind_worry_support": [
+        "That makes total sense. Your body is starting to realize it's safe, but your mind is still running on a treadmill. What is the main worry your brain keeps circling back to?",
+        "That's a really good observation. The physical panic is settling, but the thoughts are still loud. What is the one thought that won't let go?",
+        "I completely hear you. Sometimes our bodies calm down way before our brains do. What unresolved problem is your mind fixated on right now?"
     ],
     "high_intensity_support": [
-      "That sounds really intense right now. Let’s slow this down and focus only on the next few seconds. Would you like to do one grounding step with me?",
-      "I hear that it feels very strong. You do not have to solve everything immediately. Let’s focus on helping your body settle first.",
-      "That sounds overwhelming. For now, let’s make the next step very small and steady."
+        "I hear how intense this is right now. It sounds overwhelming. Let's just slow everything way down and focus on the next 10 seconds. Can we do a grounding step together?",
+        "I'm so sorry it's hitting you this hard. You do not need to figure everything out or solve the problem right now. Let's just help your nervous system settle first.",
+        "That sounds terrifying and overwhelming. Please know I am right here. For now, let's make the next step very small and very steady."
     ],
     "academic_support": [
-      "That sounds like a lot of pressure. What feels most urgent right now — the deadline, the workload, or the fear of not doing well?",
-      "Academic stress can pile up quickly. What is the one task that feels heaviest at the moment?",
-      "I hear you. When everything feels urgent, it can help to choose one small next step. What assignment or exam is stressing you most?"
+        "That sounds like an immense amount of pressure. What feels most paralyzing right now\u2014the tight deadline, the sheer amount of work, or the fear of failing?",
+        "Academic stress can pile up so quickly and make it hard to breathe. What is the single task that feels the heaviest to you right now?",
+        "I hear you. When everything feels urgent, our brains just freeze up. Let's break it down: what specific assignment or exam is giving you the most anxiety?",
+        "It is completely normal and valid to feel overwhelmed by your studies. We all hit that wall. What part of the [topic] is stressing you out the most?",
+        "Academic pressure can feel like a mountain you can't climb. We can break the [topic] down into tiny pebbles if you want. Where are you stuck?",
+        "I hear you. Balancing life, studies, and your [topic] is incredibly hard. What's the biggest hurdle right this second?",
+        "That sounds like a massive load to carry. Sometimes stepping away from the [topic] for just 5 or 10 minutes is the best and most productive thing you can do.",
+        "You're working really, really hard. Let's forget the entire [topic] for a second and just focus on the very next step. What is it?"
     ],
     "sleep_support": [
-      "That sounds exhausting, especially when your mind will not slow down at night. Would you like to try a simple wind-down breathing step?",
-      "Sleep can become harder when your body is still carrying stress. We can try a small calming step first if you want.",
-      "That sounds frustrating. Instead of forcing sleep immediately, it may help to settle your body first. Would you like one gentle step?"
+        "That sounds utterly exhausting. Not being able to sleep when you desperately need it is a terrible feeling. Would you like to try a simple wind-down breathing step?",
+        "Sleep becomes nearly impossible when your nervous system is still carrying the stress of the day. We can try a small, gentle calming step first if you'd like.",
+        "I know how frustrating it is to just lie there in the dark. Instead of trying to force sleep, maybe we can help your body settle first. Are you open to one gentle step?"
     ],
     "overthinking_support": [
-      "That sounds mentally exhausting. When thoughts keep looping, it can help to slow the mind down through the body first. Would you like to try a short grounding step?",
-      "I hear you. Overthinking can make the same problem feel bigger and heavier. Would it help to separate what you can control from what you cannot right now?",
-      "That sounds tiring. Let’s not solve everything at once. What is the one thought that keeps repeating the most?"
+        "That sounds mentally exhausting. When your thoughts keep looping like a broken record, it can help to physically ground yourself first. Would you like to try a short step to get out of your head?",
+        "I hear you. Overthinking can make a small problem feel like an absolute disaster. Would it help to separate what you can actually control right now from what you can't?",
+        "That sounds so tiring. Let's not try to solve everything at once. What is the one specific thought that keeps repeating the loudest?"
     ],
-  "future_worry_support": [
-    "That sounds like a heavy worry to carry. Sometimes when the body calms down, the mind starts focusing on unresolved problems again. What feels most unresolved right now?",
-    "I hear that. It sounds like part of you is afraid things will not work out. What feels most important to deal with first?",
-    "That makes sense. When something feels unfinished or imperfect, the mind can keep holding onto it. What part is bothering you most?"
-  ],
-  "chronic_shift_to_body_or_thoughts": [
-    "That unpredictability can make it even more draining. When it starts, do you notice it more in your thoughts, your body, or both?",
-    "That sounds frustrating. When it happens, what do you usually notice first?",
-    "That can feel really unsettling. Does it come with racing thoughts, chest tightness, or something else first?"
-  ],
-  "random_pattern_anxiety_support": [
-    "That unpredictability can feel really unsettling. Since it shows up strongly in your body, we can focus on helping your body settle first. Would you like to try a quick grounding step with me now?",
-    "That sounds hard, especially when you cannot predict how long it will last. Since your hands shake and your heartbeat gets fast, it makes sense to calm the body first. Would you like to try that together?",
-    "That kind of unpredictability can make anxiety feel even more overwhelming. Because it hits your body so strongly, we can start with one small calming step if you want."
-  ],
-  "looping_thoughts_support": [
-      "That sounds mentally exhausting when a thought keeps circling like that. Would it help to slow down and look at the thought together, or would you rather focus on calming your mind first?",
-      "I hear you. When something keeps replaying in your head, it can feel hard to rest. Would you like to talk about the thought, or try a short grounding step first?",
-      "That sounds tiring. Repeating thoughts can feel sticky and hard to shake off. What feels stronger right now — the thought itself, or the anxiety it creates?"
+    "future_worry_support": [
+        "That sounds like an incredibly heavy worry. Sometimes when our bodies finally calm down, our brains start scanning for unresolved problems again. What feels most 'unfinished' right now?",
+        "I hear that. It sounds like a deep fear that things just aren't going to work out. What feels like the most important piece of this to deal with first?",
+        "That makes total sense. When something feels imperfect or unresolved, the mind desperately clings to it. What specific part of it is bothering you the most?"
     ],
-  "random_pattern_followup": [
-    "That unpredictability can make it even more draining. When it starts, do you notice it more in your thoughts, your body, or both?",
-    "That sounds frustrating, especially when it feels random. What do you usually notice first when it starts?",
-    "That can feel really unsettling. Does it usually begin with racing thoughts, chest tightness, or something else?"
-  ],
-  "coping_alternative": [
-    "It sounds really frustrating when it keeps coming back. Since forcing it away is not helping, maybe we can focus on helping your body settle for a moment instead. How does that sound?",
-    "That sounds discouraging. When coping steps do not seem to hold, it can help to stop forcing the feeling away and try something gentler. Would you be open to a slow grounding breath with me?"
-  ],
-  "smart_clarification": [
-    "I want to understand you properly. Could you tell me which feeling is strongest right now?",
-    "It can be hard to find the words sometimes. What feels heaviest for you right now?"
-  ],
-  "coding_pressure_support": [
-    "Coding pressure can feel especially frustrating because one small bug can block everything. What part feels hardest right now — understanding the logic, fixing errors, or not knowing where to start?",
-    "That makes sense. Coding can feel heavy when the problem is unclear. Is it more about bugs, deadline pressure, or feeling stuck with the logic?",
-    "I hear you. When coding feels overwhelming, it helps to separate the problem. Are you stuck because the code has an error, the logic is confusing, or the workload feels too much?"
-  ],
-  "exam_pressure_support": [
-    "Exam stress can feel intense because there is pressure and uncertainty at the same time. What feels hardest right now — remembering content, lack of time, or fear of failing?",
-    "That sounds heavy. Is the stress more about preparation, confidence, or the result?",
-    "I hear you. Exams can make everything feel urgent. What part is weighing on you most?"
-  ],
-
-  "deadline_pressure_support": [
-    "Deadlines can create a lot of pressure quickly. What feels heaviest right now — too much work, not enough time, or not knowing where to begin?",
-    "That sounds stressful. Is it more about time running out, unfinished work, or feeling mentally drained?",
-    "I hear you. When deadlines pile up, it can help to focus on one next step. What is the most urgent task right now?"
-  ],
-
-  "presentation_pressure_support": [
-    "Presentations can feel scary because you are being seen and evaluated. Is the hardest part speaking in front of people, fear of mistakes, or pressure to perform well?",
-    "That makes sense. Presentation anxiety is common. What part feels strongest right now?",
-    "I hear you. Is it more about nervousness, confidence, or worrying what others think?"
-  ],
-"family_pressure_support": [
-  "Family pressure can feel heavy because it follows you into your safe space. What feels hardest right now — expectations, arguments, or not feeling understood?",
-  "That sounds draining. Is the pressure mostly from expectations, conflict, or feeling like your family does not understand you?",
-  "I hear you. Family stress can be exhausting. What part of it feels most difficult today?"
-],
-"money_stress_support": [
-  "Money stress can feel really heavy because it affects daily life and future plans. What feels most urgent right now?",
-  "That sounds stressful. Is it more about not having enough, upcoming payments, or worrying about the future?",
-  "I hear you. Financial pressure can make everything feel tighter. What part is weighing on you most?"
-],
-"self_comparison_support": [
-  "Comparing yourself to others can make you feel like you are always behind, even when you are trying. What comparison has been hurting the most?",
-  "That sounds painful. It can be hard when everyone else seems ahead. What makes you feel not good enough right now?",
-  "I hear you. Feeling behind can be really discouraging. What area are you comparing yourself in most?"
-],
-"low_motivation_support": [
-  "That sounds draining. Sometimes low motivation is a sign you have been carrying too much. What feels hardest to begin right now?",
-  "I hear you. When energy feels low, even small tasks can feel heavy. What feels most stuck today?",
-  "That makes sense. Instead of forcing everything, we can start very small. What is one task you wish felt easier?"
-],
-"focus_problem_support": [
-  "Focus can be hard when your mind is overloaded. What usually pulls your attention away the most?",
-  "That sounds frustrating. Is it more like mental tiredness, distractions, or anxious thoughts interrupting you?",
-  "I hear you. When focus drops, it helps to reduce the task first. What are you trying to focus on right now?"
-],
-"strong_negative_support": [
-  "That sounds really rough. I’m here with you. What happened that made it feel this bad?",
-  "I hear you. That sounds like a heavy moment. Do you want to talk about what triggered it?",
-  "That sounds painful to sit with. What part of today has been hitting you the hardest?"
-],
-  "group_work_pressure_support": [
-    "Group work can feel draining when responsibility is uneven. Is the hardest part unfair workload, poor communication, or conflict with teammates?",
-    "That sounds frustrating. Group stress is often about carrying more than your share. What is happening most right now?",
-    "I hear you. Is it more about teammates not helping, deadline pressure, or tension in the group?"
-  ],
-  "reflective_validation": [
-    "It sounds like this is still sitting heavily with you.",
-    "I can hear that this still feels difficult right now.",
-    "That makes sense. Your body and mind both sound worn down from it."
-  ],
-  "solution_suggestion_anxiety": [
-    "When anxiety peaks, it can help to anchor your body first. Would you like to try one small grounding step with me right now?"
-  ],
-  "solution_suggestion_stress": [
-    "When stress gets heavy, it can help to make the next step very small. What is one small thing that feels manageable for you today?"
-  ],
-  "solution_suggestion_general": [
-    "When this feels overwhelming, grounding can sometimes create a little space. Would you be open to trying a short calming step right now?"
-  ],
-  "anxiety_body_or_thoughts_followup": [
-    "That unpredictability can make it feel even harder to manage. When it starts, do you notice it more in your thoughts, your body, or both?",
-    "That sounds really unsettling. What do you usually notice first when the anxiety starts?",
-    "When it comes on, does it feel more like racing thoughts, chest tightness, or something else first?"
-  ],
-  "topic_exploration_anxiety": [
-    "Anxiety can feel intense when it hits. Does it feel more like racing thoughts or physical tension?",
-    "That sounds frightening in the moment. Where do you usually feel it in your body?",
-    "When it comes up, is it mostly in your mind, your body, or both?"
-  ],
-  "topic_exploration_general": [
-    "It makes sense why this feels overwhelming. Has anything made it feel stronger today?",
-    "I can understand how difficult that is. What part of this has felt the hardest lately?"
-  ],
-  "graceful_close_or_continue": [
-    "You’re welcome. I’m glad you stayed with it for a moment. We can pause here, or you can tell me how you’re feeling now.",
-    "You’re welcome. You did well to slow things down a little. We can stop here for now, or keep going if you need.",
-    "You’re welcome. I’m here with you. We can leave it here for a moment, or keep talking if that would help."
-  ],
-  "crisis": [
-    "Your safety matters a lot. Please reach out to a trusted adult, local emergency support, or a crisis helpline in your area right now. You deserve immediate human support."
-  ],
-  "persistent_no_relief_support": [
-  "I hear you. When nothing seems to shift, that can feel really discouraging. Let's stop trying to fix it for now — can we just sit together here for a moment?",
-  "That sounds really hard. When the feeling won't move, sometimes the kindest thing is to stop pushing and just let yourself be with it. You're not alone in this.",
-  "It's okay. We don't have to keep trying steps right now. Sometimes just being heard is the most important thing. What's weighing on you most underneath all of this?"
-],
-"negative_checkin_support": [
-  "I'm sorry it feels that way today. What has been weighing on you most?",
-  "That sounds like a rough day. Do you know what has been affecting you most?",
-  "I hear you. Things sound heavy right now. What feels hardest at the moment?",
-  "That doesn't sound easy. You don't have to explain it perfectly — what part feels most difficult right now?"
-],
-"friendship_pressure_support": [
-  "Friendship problems can hurt a lot, especially when you feel left out or misunderstood. What happened with your friend?",
-  "That sounds painful. Is it more about being ignored, conflict, or feeling like you don't belong anymore?",
-  "I hear you. Friendships can feel really fragile when something breaks the trust. What's been happening?"
-],
-"social_anxiety_support": [
-  "That sounds really uncomfortable. Being around people can feel heavy when you keep worrying about how they see you. What situation makes you feel this most?",
-  "I hear you. Social anxiety can make even normal conversations feel like a test. Is it more fear of being judged, or not knowing what to say?",
-  "That sounds tiring. What kind of situation brings this up the most for you?"
-],
-"self_esteem_support": [
-  "That sounds really heavy to carry. When you feel not good enough, it can make everything harder. What made you feel this way today?",
-  "I hear you. Feeling like a failure can be painful, but that doesn't mean it's the truth about you. What happened that triggered this feeling?",
-  "That sounds exhausting. Where do you feel like you fall short the most — with others, with yourself, or both?"
-],
-"future_uncertainty_support": [
-  "Feeling unsure about the future can be really scary. You don't have to figure everything out at once. What part feels most unclear right now?",
-  "That sounds overwhelming. When the future feels uncertain, it helps to focus on one small next step. Is this more about study, career, relationship, or direction in general?",
-  "I hear you. Not knowing where things are headed can make you feel stuck. What's causing the most uncertainty right now?"
-],
-"anger_frustration_support": [
-  "That anger sounds heavy. What do you think triggered it most?",
-  "I hear that you feel frustrated. Is it more anger, hurt, or feeling misunderstood right now?",
-  "That sounds really frustrating. What part of this feels most unfair or upsetting?",
-  "Anger can feel exhausting to carry. What has been building up for you?"
-],
-"sadness_support": [
-  "That sounds painful. What has been making you feel this sad lately?",
-  "I hear you. That sadness sounds heavy to carry. Do you know what brought it up?",
-  "That sounds really hard. Would it help to talk about what's been hurting most?",
-  "I'm here with you in this. Sadness doesn't need to be explained perfectly — what's sitting heaviest right now?"
-],
-"confusion_support": [
-  "That's okay. You don't need to understand everything immediately. What part feels most confusing right now?",
-  "Feeling confused can be really unsettling. Is it more about your emotions, your situation, or what to do next?",
-  "I hear you. When everything feels unclear, we can slow it down. What is one thing you're most unsure about?"
-],
-"guilt_shame_support": [
-  "That sounds heavy to carry. Guilt can feel really painful when you keep turning it inward. What are you blaming yourself for?",
-  "I hear that you feel responsible. Would it help to look at what happened more gently, step by step?",
-  "That sounds painful. Feeling ashamed can make you want to withdraw — but you don't have to hold this alone here.",
-  "I'm here with you. Sometimes we are much harder on ourselves than we would ever be on anyone else. What happened?"
-],
-"emptiness_support": [
-  "That empty feeling can be really hard to explain. Has it been there today only, or for a while?",
-  "I hear you. Feeling numb or empty can be exhausting in its own quiet way. What has the day felt like for you?",
-  "That sounds lonely and heavy. When you say empty, does it feel more like sadness, tiredness, or just numbness?",
-  "Sometimes emptiness is what exhaustion looks like on the inside. How long has it been feeling this way?"
-],
-"relationship_loss_support": [
-  "That sounds really painful to worry about. What has been making you feel like the relationship might end?",
-  "Relationship worries can feel very heavy. What happened recently that made you feel this way?",
-  "That sounds scary to carry. Are you afraid something changed between you two, or is it more the fear of losing them?",
-  "I hear you. Relationships can feel so fragile when something shifts. What's been going on between you?"
-],
-"body_symptom_action": [
-  "That sounds really uncomfortable. Since it's showing up strongly in your body, let's focus on easing that first. Would you like to try one slow breathing step with me?",
-  "That sounds hard to sit with. Because it's showing up physically, we can help your body settle first. Would you like to do one grounding step together now?",
-  "That physical feeling sounds intense. Let's slow it down gently. Would it help to try one small calming step together?"
-],
-"slow_down_support": [
-  "It sounds like your body is still holding onto a lot right now. We don't have to keep forcing it. We can slow down and stay with one very small step.",
-  "That makes sense. If it's not shifting much yet, we don't need to push harder. We can just stay with something gentler for a moment.",
-  "It sounds like this is still sitting strongly in you. We don't have to solve it all at once. Let's keep things very small and steady."
-],
-"topic_exploration_burnout": [
-  "Burnout can drain everything. Are you finding it harder to start things, or do you feel more mentally exhausted than anything else?",
-  "That sounds heavy. Is it more like emotional exhaustion, or like your motivation has completely gone?"
-],
-"topic_exploration_stress": [
-  "Stress can make everything feel crowded at once. What's been putting the most pressure on you lately?",
-  "That sounds overwhelming. Is the stress coming from one main thing, or is it a lot of things piling up?"
-],
-"topic_exploration_loneliness": [
-  "That kind of loneliness can feel really isolating. Has it been more recent, or has it been there for a while?",
-  "I hear you. Feeling alone can be really painful. What makes it feel most lonely?"
-],
-"greeting": [
-  "Hello! I'm here with you. How have you been feeling lately?",
-  "Hey, I'm glad you're here. How are you doing today?",
-  "Hi there. I'm with you. What's on your mind right now?"
-],
-"close": [
-  "Thank you for sharing with me today. Please be gentle with yourself and take care.",
-  "It was good to be with you today. Take things one small step at a time, and be kind to yourself.",
-  "Thank you for trusting me with this. Rest well, and remember — one moment at a time."
-],
-"soft_idk_response": [
-  "That's okay. You don't need to have the perfect words. What feels heaviest right now?",
-  "That's alright. Sometimes there are no words for it — what is your body doing right now?"
-],
-"pure_validation": [
-  "Living with that for a while can feel really exhausting.",
-  "That sounds really tiring, especially when it keeps returning.",
-  "It makes sense that this feels heavy.",
-  "I hear you. You don't have to explain it any more than this."
-],
-"next_calming_step": [
-  "Okay, let's try one more gentle step. Let your shoulders drop, unclench your jaw, and breathe out slowly for longer than you breathe in. Tell me if that eases anything even a little.",
-  "Alright, one more small step. Put a hand on your chest if that feels okay, take one slow breath in and a longer breath out. What do you notice after that?",
-  "Okay. This time, let your hands rest, soften your shoulders, and take one slow inhale followed by a longer exhale. Tell me if your body feels any softer after that.",
-  "Let's make this step even smaller. Notice your feet touching the floor, then slowly relax your hands. Stay there for one breath.",
-  "Okay, try gently pressing your feet into the ground for a few seconds, then release. Notice whether your body feels even slightly steadier.",
-  "This time, look around slowly and name one colour you can see, one sound you can hear, and one thing your body is touching right now."
-]
+    "chronic_shift_to_body_or_thoughts": [
+        "The fact that it's so unpredictable makes it even more draining. When it suddenly starts, do you notice it more as a physical sensation, or as a rush of thoughts?",
+        "That sounds incredibly frustrating. When it hits you out of nowhere, what is usually the very first thing you notice?",
+        "That can feel really unsettling and unfair. Does it usually begin with your mind racing, or does your chest get tight first?"
+    ],
+    "random_pattern_anxiety_support": [
+        "Anxiety that strikes without warning is truly unsettling. Since it's showing up so strongly in your body, let's focus on helping your body realize it's safe right now. Would you like to try a quick grounding step?",
+        "That sounds terrifying, especially when you have no idea how long it will last. Because your hands are shaking and your heart is racing, it makes sense to calm your physical body first. Can we try that together?",
+        "That unpredictability makes anxiety feel a thousand times more overwhelming. Because it's hitting you physically, let's start with one small, calming step."
+    ],
+    "looping_thoughts_support": [
+        "That sounds absolutely exhausting. When a thought keeps circling and won't let you go, you feel trapped. Would you rather talk about the thought itself, or focus on calming your mind down first?",
+        "I hear you. When something keeps replaying in your head on a loop, rest feels impossible. Would you like to try to untangle the thought, or try a short grounding step to step away from it?",
+        "That sounds so tiring. Repeating thoughts can feel sticky and suffocating. What feels worse right now\u2014the thought itself, or the anxiety and panic it's creating?"
+    ],
+    "random_pattern_followup": [
+        "That unpredictability can make it even more draining. When it starts, do you notice it more in your thoughts, your body, or both?",
+        "That sounds frustrating, especially when it feels random. What do you usually notice first when it starts?",
+        "That can feel really unsettling. Does it usually begin with racing thoughts, chest tightness, or something else?"
+    ],
+    "coping_alternative": [
+        "I know it's incredibly frustrating when it keeps coming back no matter what you do. Since forcing it away isn't working, maybe we can just let it be there while we focus on making your body comfortable. How does that sound?",
+        "That sounds so discouraging. When coping steps don't seem to work, it can help to stop fighting the feeling and try something gentler. Would you be open to a slow, grounding breath with me instead?"
+    ],
+    "smart_clarification": [
+        "I want to understand you properly. Could you tell me which feeling is strongest right now?",
+        "It can be hard to find the words sometimes. What feels heaviest for you right now?"
+    ],
+    "coding_pressure_support": [
+        "Coding pressure is uniquely frustrating because one tiny bug can block hours of progress. What feels hardest right now\u2014understanding the logic, fixing the errors, or just not knowing where to begin?",
+        "That makes complete sense. Coding can feel so heavy when the solution isn't obvious. Is your stress coming more from the bugs, the impending deadline, or feeling stuck with the logic?",
+        "I hear you. When a codebase feels overwhelming, the best thing to do is isolate the problem. Are you stuck because of a specific error, confusing logic, or is the overall workload just too much?",
+        "Coding can make you want to pull your hair out when things refuse to work. Is it a bug in your [topic], or the logic itself that's failing?",
+        "I totally understand. Staring at a screen of code all day will drain anyone's soul. Have you taken a screen break yet? Even 5 minutes makes a difference.",
+        "Syntax errors and bugs in your [topic] can drive absolutely anyone crazy. What specific part of the code is failing?",
+        "Sometimes walking away from the keyboard is the most powerful debugging tool you have. Is the [topic] completely broken, or just one specific function?",
+        "I promise you will figure this out. Every single programmer in the world feels stuck and stupid sometimes. What is the main error message you're getting?"
+    ],
+    "exam_pressure_support": [
+        "Exam stress can feel intense because there is pressure and uncertainty at the same time. What feels hardest right now \u2014 remembering content, lack of time, or fear of failing?",
+        "That sounds heavy. Is the stress more about preparation, confidence, or the result?",
+        "I hear you. Exams can make everything feel urgent. What part is weighing on you most?"
+    ],
+    "deadline_pressure_support": [
+        "Deadlines can trigger a deep sense of panic so quickly. What feels the heaviest right now\u2014having way too much work, running out of time, or simply not knowing where to start?",
+        "That sounds incredibly stressful. Is the anxiety more about the clock ticking down, the amount of unfinished work, or are you just feeling completely mentally drained?",
+        "I hear you. When deadlines pile up, the only way through is to focus on one single step. What is the absolute most urgent task right now?",
+        "Deadlines can make everything feel like a full-blown emergency. Is this tight deadline for your [topic]?",
+        "When time is running out, looking at the big picture causes panic. Let's just focus on what you can get done in the next 10 minutes on your [topic].",
+        "That 'ticking clock' feeling in your chest is exhausting. What is the absolute bare minimum you need to get done for this to be acceptable?",
+        "I hear you. The pressure of a deadline can literally freeze your brain. Let's not try to do it all\u2014let's just tackle one tiny, microscopic part of your [topic].",
+        "It's going to be okay. I know the deadline is close, but panicking won't speed up the clock. Take a deep breath. What is the very first thing you can do right now?"
+    ],
+    "presentation_pressure_support": [
+        "Presentations are terrifying because you are incredibly vulnerable and being evaluated. Is the hardest part the fear of speaking in front of people, the fear of making a mistake, or the pressure to get a perfect grade?",
+        "That makes total sense. Presentation anxiety is one of the most common fears in the world. What part of it feels the most terrifying right now?",
+        "I hear you. Standing up there is hard. Is the stress more about physical nervousness, a lack of confidence in the material, or worrying about what your classmates think?"
+    ],
+    "family_pressure_support": [
+        "Family pressure is uniquely heavy because it follows you into what should be your safe space. What feels hardest right now\u2014their high expectations, the constant arguments, or just feeling deeply misunderstood?",
+        "That sounds incredibly draining. Is the pressure mostly coming from their expectations of you, conflicts at home, or feeling like your family just doesn't truly see or hear you?",
+        "I hear you. Family stress is exhausting and you can't easily escape it. What part of it feels the most difficult to deal with today?"
+    ],
+    "money_stress_support": [
+        "Money stress is a very heavy, real burden because it impacts your safety and daily life. What part of it feels the most urgent right now?",
+        "That sounds so stressful. Is the anxiety more about not having enough for daily things, upcoming bills, or a general fear of the future?",
+        "I hear you. Financial pressure can make your entire world feel tighter and scarier. What specific part is weighing on your mind the most?"
+    ],
+    "self_comparison_support": [
+        "Comparing yourself to others is a painful trap that makes you feel like you are always behind, no matter how hard you try. What specific comparison has been hurting your heart the most lately?",
+        "That sounds really painful. It's incredibly hard when it feels like everyone else is succeeding and leaving you behind. What makes you feel like you aren't 'enough' right now?",
+        "I hear you. Feeling behind your peers can be deeply discouraging and isolating. What specific area are you comparing yourself to them in?"
+    ],
+    "low_motivation_support": [
+        "That sounds draining. Sometimes zero motivation isn't laziness\u2014it's a sign that your brain and body have been carrying way too much for too long. What feels the hardest to start right now?",
+        "I hear you. When your energy is that low, even brushing your teeth can feel like a heavy chore. What feels the most 'stuck' for you today?",
+        "That makes perfect sense. Instead of forcing yourself to be productive, we can start incredibly small. What is one tiny task you wish felt easier to do?"
+    ],
+    "focus_problem_support": [
+        "Focus can be hard when your mind is overloaded. What usually pulls your attention away the most?",
+        "That sounds frustrating. Is it more like mental tiredness, distractions, or anxious thoughts interrupting you?",
+        "I hear you. When focus drops, it helps to reduce the task first. What are you trying to focus on right now?"
+    ],
+    "strong_negative_support": [
+        "That sounds really, really rough. I am so sorry you're feeling this way, but I am right here with you. Did something specific happen to trigger this, or did it just hit you?",
+        "I hear you. That sounds like an incredibly heavy moment to be in. Do you want to talk about what brought this on?",
+        "That sounds so painful to sit with. I'm listening. What part of today has been hitting you the absolute hardest?"
+    ],
+    "group_work_pressure_support": [
+        "Group work can be soul-draining when the responsibility is uneven. Is the hardest part carrying an unfair workload, terrible communication, or straight-up conflict with your teammates?",
+        "That sounds incredibly frustrating. Group stress usually comes from feeling like you have to carry everyone else. What is happening with your team right now?",
+        "I hear you. Is the stress more about teammates refusing to help, the looming deadline, or awkward tension in the group?"
+    ],
+    "reflective_validation": [
+        "It sounds like this is still sitting really heavily on your chest.",
+        "I can hear how difficult and painful this still feels for you right now.",
+        "That makes complete sense. Both your body and your mind sound so worn down from carrying this."
+    ],
+    "solution_suggestion_anxiety": [
+        "When anxiety peaks, it can help to anchor your body first. Would you like to try one small grounding step with me right now?"
+    ],
+    "solution_suggestion_stress": [
+        "When stress gets heavy, it can help to make the next step very small. What is one small thing that feels manageable for you today?",
+        "When [topic] makes you feel stressed, it helps to pause. Want to try a 10-second breathing exercise?",
+        "Stress tightens the whole body. Drop your shoulders away from your ears. Does that feel a tiny bit better?",
+        "I hear how stressed you are about [topic]. Let's just focus on getting through today.",
+        "That is a lot to deal with. Remember, you only have to do the next right thing.",
+        "It makes complete sense that you are stressed. Do you want to vent more, or try to solve it?"
+    ],
+    "solution_suggestion_general": [
+        "When this feels overwhelming, grounding can sometimes create a little space. Would you be open to trying a short calming step right now?"
+    ],
+    "anxiety_body_or_thoughts_followup": [
+        "That unpredictability can make it feel even harder to manage. When it starts, do you notice it more in your thoughts, your body, or both?",
+        "That sounds really unsettling. What do you usually notice first when the anxiety starts?",
+        "When it comes on, does it feel more like racing thoughts, chest tightness, or something else first?"
+    ],
+    "topic_exploration_anxiety": [
+        "Anxiety can feel intense when it hits. Does it feel more like racing thoughts or physical tension?",
+        "That sounds frightening in the moment. Where do you usually feel it in your body?",
+        "When it comes up, is it mostly in your mind, your body, or both?"
+    ],
+    "topic_exploration_general": [
+        "It makes sense why this feels overwhelming. Has anything made it feel stronger today?",
+        "I can understand how difficult that is. What part of this has felt the hardest lately?"
+    ],
+    "acknowledge_and_continue": [
+        "Glad to hear that. How is everything else going?",
+        "That makes sense. Is there anything else on your mind?",
+        "Got it. What else has been happening lately?"
+    ],
+    "graceful_close_or_continue": [
+        "You\u2019re welcome. I\u2019m glad you stayed with it for a moment. We can pause here, or you can tell me how you\u2019re feeling now.",
+        "You\u2019re welcome. You did well to slow things down a little. We can stop here for now, or keep going if you need.",
+        "You\u2019re welcome. I\u2019m here with you. We can leave it here for a moment, or keep talking if that would help."
+    ],
+    "crisis": [
+        "I hear how much pain you are in, and your safety matters to me more than anything. Please, please reach out to a trusted adult, a local emergency support, or a crisis helpline right now. You do not have to endure this alone, and there are people who want to help you."
+    ],
+    "persistent_no_relief_support": [
+        "I hear you. When absolutely nothing seems to shift, it can feel so discouraging and isolating. Let's stop trying to 'fix' it for a minute. Can we just sit together in this moment?",
+        "That sounds really hard. When the heavy feeling refuses to move, sometimes the kindest thing we can do is to stop fighting it and just let yourself be with it. I'm right here. You aren't alone.",
+        "It's okay. We don't have to force any more exercises or steps right now. Sometimes just being heard is what matters most. What's weighing on you the most underneath all this anxiety?"
+    ],
+    "negative_checkin_support": [
+        "I'm really sorry it feels that way today. What has been weighing on your mind the most?",
+        "That sounds like a genuinely rough day. Do you know what has been dragging you down the most?",
+        "I hear you. Things sound incredibly heavy right now. What feels the absolute hardest at this moment?",
+        "That doesn't sound easy at all. You don't have to explain it perfectly or have the right words\u2014what part feels the most difficult right now?"
+    ],
+    "friendship_pressure_support": [
+        "Friendship problems can hurt so deeply, especially when you feel left out or completely misunderstood by people you care about. What happened with your friend?",
+        "That sounds deeply painful. Is it more about being ignored, an active conflict, or just feeling like you don't belong with them anymore?",
+        "I hear you. Friendships can feel so fragile and scary when trust is broken. What's been going on between you?"
+    ],
+    "social_anxiety_support": [
+        "That sounds really uncomfortable. Being around people can feel exhausting when your brain is constantly worrying about how they perceive you. What specific situation makes you feel this the most?",
+        "I completely hear you. Social anxiety can make even a normal conversation feel like a high-stakes test. Is it more a fear of being judged, or a fear of just not knowing what to say?",
+        "That sounds so tiring. Constantly monitoring yourself around others is exhausting. What kind of situation triggers this the most for you?"
+    ],
+    "self_esteem_support": [
+        "That sounds like a really heavy burden to carry. When you feel like you aren't good enough, it colors everything else and makes life so much harder. What made you feel this way today?",
+        "I hear you. Feeling like a failure is a deeply painful emotion, but please know that feeling is not the objective truth about who you are. What happened that triggered this?",
+        "That sounds absolutely exhausting. Where do you feel like you fall short the most\u2014in the eyes of others, or in your own expectations of yourself?"
+    ],
+    "future_uncertainty_support": [
+        "Feeling completely unsure about the future can be terrifying. Please remember that you do not have to have everything figured out today. What part of the future feels the most unclear right now?",
+        "That sounds incredibly overwhelming. When the whole future feels like a foggy, scary place, it helps to just focus on the ground right in front of you. Is this uncertainty mostly about your studies, your career, or your life direction in general?",
+        "I hear you. Not knowing where your life is headed can make you feel paralyzed and stuck. What specific thing is causing you the most uncertainty right now?"
+    ],
+    "anger_frustration_support": [
+        "That anger sounds incredibly heavy, and it's completely valid to feel it. What do you think triggered it the most?",
+        "I hear how frustrated you are. Underneath the frustration, is it more anger, hurt, or feeling completely misunderstood right now?",
+        "That sounds deeply frustrating. What part of this situation feels the most unfair or upsetting to you?",
+        "Anger is an exhausting emotion to carry around. What has been building up inside you lately?"
+    ],
+    "sadness_support": [
+        "That sounds deeply painful. What has been making your heart feel this sad lately?",
+        "I hear you. That sadness sounds like such a heavy blanket to carry. Do you know what brought these feelings to the surface?",
+        "That sounds really hard. I'm here for you. Would it help to talk about what's been hurting the most?",
+        "I am right here with you in this. Sadness doesn't need to be perfectly explained or justified\u2014what's sitting heaviest on your chest right now?",
+        "It is completely okay to feel sad. You do not have to force yourself to be happy or pretend you're okay right now.",
+        "I hear the deep sadness in your words. I am here with you, and I am sitting with you in this darkness.",
+        "That sounds like a profound, heavy feeling. Please cry if you need to; I am listening and I care.",
+        "Sadness can drain all your energy. Have you been feeling this way about [topic] for a long time?",
+        "I am so, so sorry you're hurting. You do not have to carry this all by yourself."
+    ],
+    "confusion_support": [
+        "That's completely okay. You do not need to understand everything or have all the answers immediately. What part feels the most confusing right now?",
+        "Feeling confused and lost can be deeply unsettling. Is the confusion more about your own emotions, your current situation, or what you're supposed to do next?",
+        "I hear you. When everything feels muddy and unclear, the best thing to do is slow down. What is the one thing you're the most unsure about right now?"
+    ],
+    "guilt_shame_support": [
+        "That sounds incredibly heavy to carry. Guilt is a painful emotion, especially when you keep turning it inward like a weapon. What specifically are you blaming yourself for?",
+        "I hear that you feel deeply responsible. Would it help if we look at what happened more gently, step by step, without judging you?",
+        "That sounds so painful. Feeling ashamed makes us want to hide and withdraw from the world\u2014but you do not have to hold this alone here with me.",
+        "I am here with you. Sometimes we are a thousand times harder on ourselves than we would ever be on our worst enemy. Tell me what happened."
+    ],
+    "emptiness_support": [
+        "That empty, hollow feeling is sometimes the hardest thing to explain. Have you felt this way just today, or has it been lingering for a while?",
+        "I hear you. Feeling numb or completely empty is exhausting in its own quiet, heavy way. What has today felt like for you overall?",
+        "That sounds lonely and incredibly heavy. When you say 'empty', does it feel more like deep sadness, extreme tiredness, or just a total numbness to everything?",
+        "Sometimes emptiness is just what severe burnout and exhaustion look like on the inside. How long have you been feeling this way?"
+    ],
+    "relationship_loss_support": [
+        "That sounds incredibly painful and terrifying to worry about. What has been making you feel like the relationship might be coming to an end?",
+        "Relationship worries can feel so heavy because they involve someone you deeply care about. What happened recently that made you feel this disconnect?",
+        "That sounds terrifying to carry. Are you afraid something fundamental changed between the two of you, or is it mostly just your own fear of losing them?",
+        "I hear you. Relationships can feel so fragile and scary when the dynamic shifts even a little. What's been going on between you two lately?"
+    ],
+    "body_symptom_action": [
+        "That sounds deeply uncomfortable. Since the panic is showing up so strongly in your physical body, let's focus on easing that tension first. Would you like to try one slow breathing step with me?",
+        "That sounds incredibly hard to sit with. Because it's showing up physically, we can help your nervous system settle first. Would you like to do one quick grounding step together?",
+        "That physical sensation sounds intense and scary. Let's slow it down gently. Would it help to try one small, calming step together right now?"
+    ],
+    "slow_down_support": [
+        "It sounds like your body is still holding onto a massive amount of tension right now. We do not have to keep forcing it away. Let's just slow down and stay with one very small, easy step.",
+        "That makes complete sense. If the feeling isn't shifting much yet, we don't need to push harder. We can just stay with something much gentler for a moment.",
+        "It sounds like this anxiety is still sitting very strongly inside you. We don't have to solve it all at once today. Let's keep things very small, steady, and safe."
+    ],
+    "topic_exploration_burnout": [
+        "Burnout can literally drain the color from everything. Are you finding it physically harder to start things, or do you feel a deep, heavy mental exhaustion more than anything else?",
+        "That sounds so heavy. Is it more like emotional exhaustion where you just don't care anymore, or like your physical motivation has completely evaporated?"
+    ],
+    "topic_exploration_stress": [
+        "Stress can make everything in your life feel crowded and loud all at once. What's been putting the absolute most pressure on your shoulders lately?",
+        "That sounds incredibly overwhelming. Is the stress mostly coming from one giant thing, or is it a million little things piling up until you can't breathe?"
+    ],
+    "topic_exploration_loneliness": [
+        "That kind of deep loneliness can feel so cold and isolating. Has this feeling been more recent, or has it been quietly sitting there for a long time?",
+        "I completely hear you. Feeling alone in a crowded room is incredibly painful. What specifically makes it feel the most lonely for you right now?"
+    ],
+    "greeting": [
+        "Hello! I am right here with you. How have you been feeling in your mind and body lately?",
+        "Hey there. I'm really glad you reached out today. How are you holding up?",
+        "Hi. I'm here, and I'm listening. What's on your mind right now?",
+        "Hello! It is so good to see you. Take a breath. How are you doing today?",
+        "Hi there. I'm here for you, no matter what it is. What's been going on?",
+        "Welcome back. Let's take a slow, deep breath together. How are you feeling in this exact moment?",
+        "Hey. I'm listening, without judgment. How has your day been treating you so far?",
+        "Hi! Whatever heavy things you're carrying today, we can talk about them. How are you?"
+    ],
+    "close": [
+        "Thank you so much for sharing your heart with me today. Please be very gentle with yourself and take care.",
+        "It was really good to spend this time with you today. Take things one small step at a time, and remember to be kind to yourself.",
+        "Thank you for trusting me with these heavy feelings. Rest well tonight, and remember\u2014just take it one moment at a time.",
+        "You did incredibly well today. Please remember to rest your mind and body, and be gentle with yourself.",
+        "Thank you for sharing your thoughts with me. I'll be right here whenever you need to talk again.",
+        "Take a deep breath. You are doing the absolute best you can, and that is enough. See you next time.",
+        "It takes so much courage to talk about these painful things. Please take care of yourself, okay?",
+        "I am always here for you. I hope you have a restful, peaceful day ahead."
+    ],
+    "soft_idk_response": [
+        "That's completely okay. You do not need to have the perfect words or understand it all. What feels the heaviest to you right now?",
+        "That's alright. Sometimes there are simply no words for how much it hurts\u2014what is your physical body feeling right now?"
+    ],
+    "pure_validation": [
+        "I understand.",
+        "That makes sense.",
+        "I hear you.",
+        "Got it."
+    ],
+    "next_calming_step": [
+        "Okay, let's try one more gentle step. Let your shoulders drop away from your ears, unclench your jaw, and breathe out slowly for longer than you breathe in. Tell me if that eases anything, even a tiny bit.",
+        "Alright, just one more small step. Put a hand over your heart if that feels comfortable, take one slow breath in, and a much longer breath out. What do you notice after that?",
+        "Okay. This time, let your hands rest completely, soften your shoulders, and take one slow inhale followed by a very long exhale. Tell me if your body feels any softer.",
+        "Let's make this step even smaller and easier. Notice your feet touching the floor, then slowly relax your hands. Stay there for one full breath.",
+        "Okay, try gently pressing your feet into the ground for a few seconds, feeling the solid floor beneath you, then release. Notice whether your body feels even slightly steadier.",
+        "This time, look around the room slowly. Name one color you can see, one sound you can hear right now, and one physical thing your body is touching."
+    ],
+    "general_activity_support": [
+        "Got it. What part of your {activity} are you working on?",
+        "Oh, nice! How is the {activity} going so far? Are you making good progress?",
+        "I see. Is the {activity} taking up a lot of your time today?"
+    ],
+    "activity_followup": [
+        "Glad to hear that. How is the {activity} progressing?",
+        "Nice. What's been the most interesting part of it recently?",
+        "Got it. Is there anything else you're focusing on besides your {activity}?"
+    ],
+    "simple_acknowledge": [
+        "Great.",
+        "Good to hear.",
+        "Nice.",
+        "Got it."
+    ],
+    "academic_follow_up_strategy": [
+        "Got it \u2014 sounds like there's quite a bit on your plate. What part of the {activity} is taking most of your time right now?",
+        "I understand. Having a lot to do can definitely feel heavy. Are you focusing on a specific part of your {activity} today?",
+        "That makes sense. When there are a lot of things going on, it can be hard to know where to start. How are you prioritizing your {activity}?",
+        "I hear you. Balancing a heavy workload isn't easy. What's the main task you're trying to tackle for your {activity} right now?",
+        "It sounds like you have a busy schedule ahead. How is the progress on your {activity} going overall?"
+    ],
+    "academic_stage_2_strategy": [
+        "Got it. What kind of project are you building for your {activity}?",
+        "I see. Is your {activity} more research-focused or practical?",
+        "Alright. What is the main goal or outcome you're aiming for in your {activity}?"
+    ],
+    "academic_stage_3_strategy": [
+        "That makes sense. What part of the project are you working on right now?",
+        "Got it. Are you currently focusing more on the research, or the actual implementation?",
+        "I see. What specific component of the project is taking up your time today?"
+    ],
+    "academic_stage_4_strategy": [
+        "Oh, I see. What are you building or researching specifically regarding the {project_part}?",
+        "Since you're working on the {project_part}, are there any specific tools, APIs, or databases you're using?",
+        "Got it. How is the implementation for the {project_part} coming along?"
+    ],
+    "academic_stage_5_strategy": [
+        "That sounds intricate. What has been the most challenging part of it so far?",
+        "I understand. Are you running into any frustrating roadblocks with the {project_part}?",
+        "With all that in motion, what is the biggest hurdle you're trying to overcome right now?"
+    ],
+    "chronic_distress_validation": [
+        "Living with that kind of weight for a while can feel absolutely exhausting.",
+        "That sounds incredibly tiring, especially when the feeling just keeps returning.",
+        "It makes total sense why this feels so incredibly heavy for you.",
+        "I hear you. You do not have to explain or justify it any more than this. It's valid."
+    ],
+    "panic_validate_confirm": [
+        "I'm with you, I promise. What's the strongest feeling you're noticing right now?",
+        "Got it. You're not alone in this. Where is it showing up most\u2014in your thoughts, or in your body?"
+    ],
+    "clarify_uncertain": [
+        "I want to make sure I understand you properly. Could you tell me a bit more?",
+        "I'm not completely sure I'm following. Could you rephrase that for me?",
+        "I'm with you, but could you share a little more about what you mean?"
+    ]
 }

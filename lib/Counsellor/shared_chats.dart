@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
+import '../User/report_generator_service.dart';
 
 class SharedChatsScreen extends StatelessWidget {
   const SharedChatsScreen({super.key});
@@ -90,6 +91,12 @@ class SharedChatsScreen extends StatelessWidget {
                         final data = sharedData[index].data() as Map<String, dynamic>;
                         final userName = data['userName'] ?? 'User';
                         final sharedAt = (data['sharedAt'] as Timestamp).toDate();
+                        final type = data['type'] ?? 'chat';
+
+                        if (type == 'report') {
+                          return _buildReportCard(context, data, userName, sharedAt);
+                        }
+
                         final summary = data['aiSummary'] ?? 'No summary provided.';
                         final emotionTags = List<String>.from(data['emotionTags'] ?? []);
 
@@ -186,6 +193,99 @@ class SharedChatsScreen extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildReportCard(BuildContext context, Map<String, dynamic> data, String userName, DateTime sharedAt) {
+    final Color primaryGreen = const Color(0xFF7C9C84);
+    final Color textColorMain = const Color(0xFF333333);
+    final reportType = data['reportType'] ?? 'Activity Summary';
+    
+    return GestureDetector(
+      onTap: () async {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Generating $reportType...', style: GoogleFonts.outfit()), 
+          backgroundColor: primaryGreen, 
+        ));
+        
+        DateTimeRange? dateRange;
+        if (data['dateRangeStart'] != null && data['dateRangeEnd'] != null) {
+          dateRange = DateTimeRange(
+            start: (data['dateRangeStart'] as Timestamp).toDate(),
+            end: (data['dateRangeEnd'] as Timestamp).toDate(),
+          );
+        }
+
+        await ReportGeneratorService.generateActivitySummaryReport(
+          userName: userName,
+          dateRange: dateRange ?? DateTimeRange(start: DateTime.now().subtract(const Duration(days: 7)), end: DateTime.now()),
+          stats: Map<String, dynamic>.from(data['stats'] ?? {
+            'diary': 0, 'chatbot': 0, 'resources': 0, 'appointments': 0, 'xp': 0
+          }),
+        );
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(28),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.02),
+              blurRadius: 20,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Center(
+                    child: Icon(Icons.summarize_rounded, color: Colors.blue),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        userName,
+                        style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 16, color: textColorMain),
+                      ),
+                      Text(
+                        'Shared ${DateFormat('MMM dd, hh:mm a').format(sharedAt)}',
+                        style: GoogleFonts.outfit(fontSize: 12, color: Colors.grey[400]),
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.chevron_right_rounded, color: Colors.grey),
+              ],
+            ),
+            const SizedBox(height: 20),
+            Text(
+              'Patient Report',
+              style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.blue, letterSpacing: 1.1),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              reportType,
+              style: GoogleFonts.outfit(fontSize: 14, color: textColorMain, height: 1.5),
+            ),
+          ],
         ),
       ),
     );

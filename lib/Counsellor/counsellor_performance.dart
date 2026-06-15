@@ -27,52 +27,111 @@ class _CounsellorPerformanceScreenState extends State<CounsellorPerformanceScree
   );
   bool _isLoading = false;
 
+  DateTime _parseAnyDate(dynamic val) {
+    if (val == null) return DateTime.now();
+    if (val is Timestamp) return val.toDate();
+    String s = val.toString();
+    try {
+      return DateTime.parse(s);
+    } catch (_) {
+      try {
+        return DateFormat('dd MMM yyyy').parse(s);
+      } catch (_) {
+        try {
+          return DateFormat('d MMM yyyy').parse(s);
+        } catch (_) {
+          return DateTime.now();
+        }
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: backgroundColor,
-      appBar: AppBar(
-        toolbarHeight: 0, // Removes the height of the AppBar
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        surfaceTintColor: Colors.transparent,
-        automaticallyImplyLeading: false, 
-      ),
-      body: _isLoading 
-          ? Center(child: CircularProgressIndicator(color: primaryGreen))
-          : SingleChildScrollView(
-              padding: const EdgeInsets.only(left: 24, right: 24, top: 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildMainTitleRow(),
-                  const SizedBox(height: 24),
-                  _buildTimeFilter(),
-                  const SizedBox(height: 32),
-                  _buildSummaryCards(),
-                  const SizedBox(height: 32),
-                  _buildSuccessMetricsRow(),
-                  const SizedBox(height: 32),
-                  _buildRatingDistribution(),
-                  const SizedBox(height: 32),
-                  _buildRecentCommentsSection(),
-                  const SizedBox(height: 32),
-                  _buildSessionTrendChart(),
-                  const SizedBox(height: 32),
-                  _buildFeedbackInsights(),
-                  const SizedBox(height: 100),
-                ],
-              ),
+      body: SafeArea(
+        top: true,
+        child: _isLoading 
+            ? Center(child: CircularProgressIndicator(color: primaryGreen))
+            : SingleChildScrollView(
+                padding: const EdgeInsets.only(left: 24, right: 24, top: 20),
+                child: StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance
+                      .collection('counsellor_bookings')
+                      .where('counsellorId', isEqualTo: FirebaseAuth.instance.currentUser?.uid)
+                      .snapshots(),
+                  builder: (context, snapshotBookings) {
+                    return StreamBuilder<QuerySnapshot>(
+                      stream: FirebaseFirestore.instance
+                          .collection('counsellor_reviews')
+                          .where('counsellorId', isEqualTo: FirebaseAuth.instance.currentUser?.uid)
+                          .snapshots(),
+                      builder: (context, snapshotReviews) {
+                        if (snapshotBookings.connectionState == ConnectionState.waiting || snapshotReviews.connectionState == ConnectionState.waiting) {
+                          return const Center(child: CircularProgressIndicator());
+                        }
+
+                        List<Map<String, dynamic>> allBookings = [];
+                        if (snapshotBookings.hasData) {
+                          allBookings = snapshotBookings.data!.docs.map((doc) => doc.data() as Map<String, dynamic>).toList();
+                        }
+                        
+                        List<Map<String, dynamic>> allReviews = [];
+                        if (snapshotReviews.hasData) {
+                          allReviews = snapshotReviews.data!.docs.map((doc) => doc.data() as Map<String, dynamic>).toList();
+                        }
+
+                    // Filter by date range
+                    List<Map<String, dynamic>> rangeBookings = allBookings.where((b) {
+                      if (b['startTime'] == null && b['date'] == null) return false;
+                      DateTime date = b['startTime'] != null ? _parseAnyDate(b['startTime']) : _parseAnyDate(b['date']);
+                      return date.isAfter(_selectedDateRange.start.subtract(const Duration(days: 1))) &&
+                             date.isBefore(_selectedDateRange.end.add(const Duration(days: 1)));
+                    }).toList();
+
+                    List<Map<String, dynamic>> completedRangeBookings = rangeBookings.where((b) => b['status']?.toString().toUpperCase() == 'COMPLETED').toList();
+                    List<Map<String, dynamic>> allCompletedBookings = allBookings.where((b) => b['status']?.toString().toUpperCase() == 'COMPLETED').toList();
+
+                    List<Map<String, dynamic>> rangeReviews = allReviews.where((r) {
+                      if (r['timestamp'] == null) return true;
+                      DateTime date = r['timestamp'] is Timestamp ? (r['timestamp'] as Timestamp).toDate() : DateTime.parse(r['timestamp'].toString());
+                      return date.isAfter(_selectedDateRange.start.subtract(const Duration(days: 1))) &&
+                             date.isBefore(_selectedDateRange.end.add(const Duration(days: 1)));
+                    }).toList();
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildMainTitleRow(completedRangeBookings.length, rangeReviews, rangeBookings),
+                        const SizedBox(height: 24),
+                        _buildTimeFilter(),
+                        const SizedBox(height: 32),
+                        _buildSummaryCards(rangeBookings, completedRangeBookings, rangeReviews),
+                        const SizedBox(height: 16),
+                        _buildSecondaryMetricsRow(rangeBookings),
+                        const SizedBox(height: 32),
+                        _buildSessionTrendChart(allBookings),
+                        const SizedBox(height: 32),
+                        const SizedBox(height: 32),
+                        _buildRatingDistribution(allReviews),
+                        const SizedBox(height: 32),
+                        _ClientVoiceSection(reviews: allReviews, parseDate: _parseAnyDate),
+                        const SizedBox(height: 32),
+                        _buildFeedbackInsights(),
+                        const SizedBox(height: 100),
+                      ],
+                    );
+                  },
+                );
+              },
             ),
+              ),
+      ),
     );
   }
 
-  Widget _buildMainTitleRow() {
-    final days = _selectedDateRange.duration.inDays.clamp(1, 100);
-    final sessions = (days * 1.5).toInt() + 2;
-    final feedback = (sessions * 0.7).toInt();
-    final hours = (sessions * 0.8).toStringAsFixed(1);
-
+  Widget _buildMainTitleRow(int sessions, List<Map<String, dynamic>> rangeReviews, List<Map<String, dynamic>> rangeBookings) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -80,48 +139,95 @@ class _CounsellorPerformanceScreenState extends State<CounsellorPerformanceScree
           'Clinical Performance',
           style: GoogleFonts.playfairDisplay(
             fontSize: 28,
-            fontWeight: FontWeight.bold,
+            fontWeight: FontWeight.w600,
             color: textColorMain,
           ),
         ),
-        Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            shape: BoxShape.circle,
-            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 10, offset: const Offset(0, 4))],
-          ),
-          child: IconButton(
-            onPressed: () async {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Generating report...', style: GoogleFonts.outfit()),
-                  backgroundColor: primaryGreen,
-                  duration: const Duration(seconds: 2),
-                ),
-              );
+        GestureDetector(
+          onTap: () async {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Generating report...', style: GoogleFonts.outfit()),
+                backgroundColor: primaryGreen,
+                duration: const Duration(seconds: 2),
+              ),
+            );
 
-              final uid = FirebaseAuth.instance.currentUser?.uid;
-              String counsellorName = 'Expert';
-              if (uid != null) {
-                final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
-                if (doc.exists) {
-                  counsellorName = doc.data()?['fullName'] ?? 'Expert';
-                }
+            final uid = FirebaseAuth.instance.currentUser?.uid;
+            String counsellorName = 'Expert';
+            if (uid != null) {
+              final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+              if (doc.exists) {
+                counsellorName = doc.data()?['fullName'] ?? 'Expert';
               }
+            }
 
-              await ReportGeneratorService.generateCounsellorPerformanceReport(
-                counsellorName: counsellorName,
-                totalSessions: sessions.toString(),
-                avgRating: '4.8',
-                feedbackCount: feedback.toString(),
-                clinicalHours: hours,
-                completionRate: '94%',
-                retentionRate: '82%',
-                rangeLabel: _rangeLabel,
-                dateRange: _selectedDateRange,
-              );
-            },
-            icon: Icon(Icons.ios_share_rounded, size: 20, color: primaryGreen),
+            // ── Compute real stats for the PDF ───────────────────
+            final bookingsSnap = await FirebaseFirestore.instance
+                .collection('counsellor_bookings')
+                .where('counsellorId', isEqualTo: uid)
+                .get();
+
+            final allDocs = bookingsSnap.docs.map((d) => d.data()).toList();
+
+            final rangeDocs = allDocs.where((b) {
+              if (b['startTime'] == null && b['date'] == null) return false;
+              DateTime dt = b['startTime'] != null ? _parseAnyDate(b['startTime']) : _parseAnyDate(b['date']);
+              return dt.isAfter(_selectedDateRange.start.subtract(const Duration(days: 1))) &&
+                     dt.isBefore(_selectedDateRange.end.add(const Duration(days: 1)));
+            }).toList();
+
+            final completedRange = rangeBookings.where((b) => b['status']?.toString().toUpperCase() == 'COMPLETED').toList();
+
+            // Avg rating
+            double totalRating = 0;
+            for (final r in rangeReviews) {
+              totalRating += ((r['rating'] ?? 5) as num).toDouble();
+            }
+            final computedAvgRating = rangeReviews.isEmpty
+                ? 'N/A'
+                : (totalRating / rangeReviews.length).toStringAsFixed(1);
+
+            // Completion rate
+            final completionPct = rangeBookings.isEmpty
+                ? '0'
+                : ((completedRange.length / rangeBookings.length) * 100).toStringAsFixed(0);
+
+            // Retention rate (patients with >1 booking in range)
+            final Map<String, int> patientCounts = {};
+            for (final b in rangeBookings) {
+              final pid = b['patientId']?.toString() ?? b['userId']?.toString() ?? 'unknown';
+              patientCounts[pid] = (patientCounts[pid] ?? 0) + 1;
+            }
+            final retentionCount = patientCounts.values.where((c) => c > 1).length;
+            final retentionPct = patientCounts.isEmpty
+                ? '0'
+                : ((retentionCount / patientCounts.length) * 100).toStringAsFixed(0);
+
+            // Clinical hours (assume 1h per session)
+            final computedHours = completedRange.length.toStringAsFixed(1);
+            // ─────────────────────────────────────────────────────
+
+            await ReportGeneratorService.generateCounsellorPerformanceReport(
+              counsellorName: counsellorName,
+              totalSessions: sessions.toString(),
+              avgRating: computedAvgRating,
+              feedbackCount: rangeReviews.length.toString(),
+              clinicalHours: computedHours,
+              completionRate: '$completionPct%',
+              retentionRate: '$retentionPct%',
+              rangeLabel: _rangeLabel,
+              dateRange: _selectedDateRange,
+            );
+          },
+          child: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4))],
+            ),
+            child: Icon(Icons.ios_share_outlined, color: primaryGreen, size: 24),
           ),
         ),
       ],
@@ -165,35 +271,73 @@ class _CounsellorPerformanceScreenState extends State<CounsellorPerformanceScree
     );
   }
 
-  Widget _buildSummaryCards() {
-    final days = _selectedDateRange.duration.inDays.clamp(1, 100);
-    final sessions = (days * 1.5).toInt() + 2;
-    final rating = 4.8;
-    final feedback = (sessions * 0.7).toInt();
-    final hours = sessions * 0.8;
+  Widget _buildSummaryCards(List<Map<String, dynamic>> allRangeBookings, List<Map<String, dynamic>> completedRangeBookings, List<Map<String, dynamic>> reviews) {
+    final sessions = completedRangeBookings.length;
+    double hours = sessions * 1.0; 
+    
+    double rating = 0.0;
+    if (reviews.isNotEmpty) {
+      double totalRating = 0;
+      for (var r in reviews) {
+        totalRating += (r['rating'] ?? 5).toDouble();
+      }
+      rating = totalRating / reviews.length;
+    }
+
+    double completionRate = allRangeBookings.isEmpty ? 0 : (completedRangeBookings.length / allRangeBookings.length) * 100;
+
+    Map<String, int> patientCounts = {};
+    for (var b in allRangeBookings) {
+      String pId = b['patientId'] ?? b['userId'] ?? 'unknown';
+      patientCounts[pId] = (patientCounts[pId] ?? 0) + 1;
+    }
+    int retentionCount = patientCounts.values.where((c) => c > 1).length;
+    double retentionRate = patientCounts.isEmpty ? 0 : (retentionCount / patientCounts.length) * 100;
 
     return GridView.count(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       crossAxisCount: 2, crossAxisSpacing: 16, mainAxisSpacing: 16, childAspectRatio: 1.3,
       children: [
-        _buildMetricCard(Icons.star_rounded, 'Avg Rating', rating.toString(), color: accentGold),
-        _buildMetricCard(Icons.trending_up_rounded, 'Peak Day', 'Tuesday', color: Colors.blue),
-        _buildMetricCard(Icons.forum_rounded, 'Feedbacks', feedback.toString()),
-        _buildMetricCard(Icons.timer_rounded, 'Clinical Hours', '${hours.toStringAsFixed(1)}h'),
+        _buildMetricCard(Icons.star_rounded, 'Client Satisfaction', rating > 0 ? rating.toStringAsFixed(1) : 'N/A', color: accentGold),
+        _buildMetricCard(Icons.timer_rounded, 'Clinical Hours', '${hours.toStringAsFixed(1)}h', color: primaryGreen),
+        _buildMetricCard(Icons.check_circle_outline_rounded, 'Completion Rate', '${completionRate.toStringAsFixed(0)}%', color: Colors.blue),
+        _buildMetricCard(Icons.replay_circle_filled_rounded, 'Client Retention', '${retentionRate.toStringAsFixed(0)}%', color: Colors.purple),
       ],
     );
   }
 
-  Widget _buildSuccessMetricsRow() {
+  Widget _buildSecondaryMetricsRow(List<Map<String, dynamic>> allRangeBookings) {
+    int cancelledCount = allRangeBookings.where((b) => b['status']?.toString().toUpperCase() == 'CANCELLED').length;
+    double cancelRate = allRangeBookings.isEmpty ? 0 : (cancelledCount / allRangeBookings.length) * 100;
+
+    Map<int, int> dayCounts = {};
+    for (var b in allRangeBookings) {
+      if (b['status']?.toString().toUpperCase() == 'COMPLETED') {
+        if (b['startTime'] != null || b['date'] != null) {
+          DateTime date = b['startTime'] != null ? _parseAnyDate(b['startTime']) : _parseAnyDate(b['date']);
+          int weekday = date.weekday;
+          dayCounts[weekday] = (dayCounts[weekday] ?? 0) + 1;
+        }
+      }
+    }
+    
+    String peakDayStr = 'N/A';
+    if (dayCounts.isNotEmpty) {
+      int peakDay = dayCounts.entries.reduce((a, b) => a.value > b.value ? a : b).key;
+      peakDayStr = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][peakDay - 1];
+    }
+
     return Row(
       children: [
-        _buildSuccessChip('94% Completion', Icons.check_circle_outline_rounded),
+        _buildSuccessChip('Peak Day: $peakDayStr', Icons.trending_up_rounded),
         const SizedBox(width: 12),
-        _buildSuccessChip('82% Retention', Icons.replay_circle_filled_rounded),
+        _buildSuccessChip('${cancelRate.toStringAsFixed(1)}% Cancel Rate', Icons.cancel_outlined),
       ],
     );
   }
+
+
 
   Widget _buildSuccessChip(String text, IconData icon) {
     return Container(
@@ -230,7 +374,19 @@ class _CounsellorPerformanceScreenState extends State<CounsellorPerformanceScree
     );
   }
 
-  Widget _buildRatingDistribution() {
+  Widget _buildRatingDistribution(List<Map<String, dynamic>> reviews) {
+    double avgRating = 0;
+    List<int> starCounts = [0, 0, 0, 0, 0];
+    if (reviews.isNotEmpty) {
+      double total = 0;
+      for (var f in reviews) {
+        double r = (f['rating'] ?? 5).toDouble();
+        total += r;
+        if (r >= 1 && r <= 5) starCounts[(r.round()) - 1]++;
+      }
+      avgRating = total / reviews.length;
+    }
+
     return Container(
       padding: const EdgeInsets.all(28),
       decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(32)),
@@ -243,21 +399,21 @@ class _CounsellorPerformanceScreenState extends State<CounsellorPerformanceScree
             children: [
               Column(
                 children: [
-                  Text('4.8', style: GoogleFonts.outfit(fontSize: 48, fontWeight: FontWeight.bold, color: textColorMain)),
-                  Row(children: List.generate(5, (i) => Icon(Icons.star_rounded, color: i < 4 ? accentGold : Colors.grey[200], size: 16))),
+                  Text(avgRating > 0 ? avgRating.toStringAsFixed(1) : '0.0', style: GoogleFonts.outfit(fontSize: 48, fontWeight: FontWeight.bold, color: textColorMain)),
+                  Row(children: List.generate(5, (i) => Icon(Icons.star_rounded, color: i < avgRating.floor() ? accentGold : Colors.grey[200], size: 16))),
                   const SizedBox(height: 4),
-                  Text('124 reviews', style: GoogleFonts.outfit(fontSize: 12, color: Colors.grey)),
+                  Text('${reviews.length} reviews', style: GoogleFonts.outfit(fontSize: 12, color: Colors.grey)),
                 ],
               ),
               const SizedBox(width: 32),
               Expanded(
-                child: Column(
+                child: reviews.isEmpty ? const Text('No ratings yet') : Column(
                   children: [
-                    _buildRatingBar(5, 0.85),
-                    _buildRatingBar(4, 0.10),
-                    _buildRatingBar(3, 0.03),
-                    _buildRatingBar(2, 0.01),
-                    _buildRatingBar(1, 0.01),
+                    _buildRatingBar(5, starCounts[4] / reviews.length),
+                    _buildRatingBar(4, starCounts[3] / reviews.length),
+                    _buildRatingBar(3, starCounts[2] / reviews.length),
+                    _buildRatingBar(2, starCounts[1] / reviews.length),
+                    _buildRatingBar(1, starCounts[0] / reviews.length),
                   ],
                 ),
               ),
@@ -268,18 +424,7 @@ class _CounsellorPerformanceScreenState extends State<CounsellorPerformanceScree
     );
   }
 
-  Widget _buildRecentCommentsSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('Client Voice', style: GoogleFonts.playfairDisplay(fontSize: 22, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 16),
-        _buildCommentCard("The sessions felt very safe and I felt heard for the first time.", "Oct 12", 5),
-        _buildCommentCard("Active listening was great, but I'd love more homework exercises.", "Oct 09", 4),
-        _buildCommentCard("Always professional and calm. Highly recommended.", "Oct 05", 5),
-      ],
-    );
-  }
+
 
   Widget _buildCommentCard(String text, String date, int stars) {
     return Container(
@@ -325,7 +470,42 @@ class _CounsellorPerformanceScreenState extends State<CounsellorPerformanceScree
     );
   }
 
-  Widget _buildSessionTrendChart() {
+  Widget _buildSessionTrendChart(List<Map<String, dynamic>> allBookings) {
+    bool isShortRange = _rangeLabel == 'Weekly' || (_rangeLabel == 'Custom' && _selectedDateRange.duration.inDays <= 14);
+
+    List<double> counts = isShortRange ? List.filled(7, 0) : List.filled(6, 0);
+    List<String> labels = [];
+
+    if (isShortRange) {
+      List<String> dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      for (int i = 6; i >= 0; i--) {
+        DateTime d = _selectedDateRange.end.subtract(Duration(days: i));
+        labels.add(dayNames[d.weekday % 7]);
+
+        int count = allBookings.where((b) {
+          if (b['status']?.toString().toUpperCase() != 'COMPLETED') return false;
+          if (b['startTime'] == null && b['date'] == null) return false;
+          DateTime bd = b['startTime'] != null ? _parseAnyDate(b['startTime']) : _parseAnyDate(b['date']);
+          return bd.year == d.year && bd.month == d.month && bd.day == d.day;
+        }).length;
+        counts[6 - i] = count.toDouble();
+      }
+    } else {
+      List<String> monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      for (int i = 5; i >= 0; i--) {
+        DateTime d = DateTime(_selectedDateRange.end.year, _selectedDateRange.end.month - i, 1);
+        labels.add(monthNames[d.month - 1]);
+
+        int count = allBookings.where((b) {
+          if (b['status']?.toString().toUpperCase() != 'COMPLETED') return false;
+          if (b['startTime'] == null && b['date'] == null) return false;
+          DateTime bd = b['startTime'] != null ? _parseAnyDate(b['startTime']) : _parseAnyDate(b['date']);
+          return bd.year == d.year && bd.month == d.month;
+        }).length;
+        counts[5 - i] = count.toDouble();
+      }
+    }
+
     return Container(
       padding: const EdgeInsets.all(28),
       decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(32)),
@@ -344,7 +524,6 @@ class _CounsellorPerformanceScreenState extends State<CounsellorPerformanceScree
                   rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                   topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                   bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, getTitlesWidget: (v, m) {
-                    const labels = ['Week 1', 'Week 2', 'Week 3', 'Week 4'];
                     if (v.toInt() >= 0 && v.toInt() < labels.length) {
                       return Text(labels[v.toInt()], style: GoogleFonts.outfit(fontSize: 10, color: Colors.grey));
                     }
@@ -352,12 +531,9 @@ class _CounsellorPerformanceScreenState extends State<CounsellorPerformanceScree
                   })),
                 ),
                 borderData: FlBorderData(show: false),
-                barGroups: [
-                  _makeGroup(0, 12, primaryGreen),
-                  _makeGroup(1, 18, primaryGreen),
-                  _makeGroup(2, 15, primaryGreen),
-                  _makeGroup(3, 22, accentGold),
-                ],
+                barGroups: List.generate(labels.length, (index) {
+                  return _makeGroup(index, counts[index], counts[index] > 0 ? primaryGreen : Colors.grey[300]!);
+                }),
               ),
             ),
           ),
@@ -562,6 +738,105 @@ class _CounsellorPerformanceScreenState extends State<CounsellorPerformanceScree
           ),
         );
       },
+    );
+  }
+}
+
+class _ClientVoiceSection extends StatefulWidget {
+  final List<Map<String, dynamic>> reviews;
+  final Function(dynamic) parseDate;
+
+  const _ClientVoiceSection({Key? key, required this.reviews, required this.parseDate}) : super(key: key);
+
+  @override
+  _ClientVoiceSectionState createState() => _ClientVoiceSectionState();
+}
+
+class _ClientVoiceSectionState extends State<_ClientVoiceSection> {
+  int _currentPage = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    List<Map<String, dynamic>> feedbacks = widget.reviews.where((r) => r['comment'] != null && r['comment'].toString().isNotEmpty).toList();
+    feedbacks.sort((a, b) {
+      DateTime getBDate(Map<String, dynamic> bk) {
+        if (bk['timestamp'] != null) return bk['timestamp'] is Timestamp ? (bk['timestamp'] as Timestamp).toDate() : DateTime.parse(bk['timestamp'].toString());
+        return DateTime.now();
+      }
+      return getBDate(b).compareTo(getBDate(a));
+    });
+
+    if (feedbacks.isEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Client Voice', style: GoogleFonts.playfairDisplay(fontSize: 22, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 16),
+          Text('No comments yet.', style: GoogleFonts.outfit(color: Colors.grey)),
+        ],
+      );
+    }
+
+    int itemsPerPage = 5;
+    int totalPages = (feedbacks.length / itemsPerPage).ceil();
+    
+    // Ensure current page is valid
+    if (_currentPage >= totalPages) {
+      _currentPage = totalPages - 1 > 0 ? totalPages - 1 : 0;
+    }
+    
+    int startIdx = _currentPage * itemsPerPage;
+    int endIdx = (startIdx + itemsPerPage > feedbacks.length) ? feedbacks.length : startIdx + itemsPerPage;
+    List<Map<String, dynamic>> currentFeedbacks = feedbacks.sublist(startIdx, endIdx);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('Client Voice', style: GoogleFonts.playfairDisplay(fontSize: 22, fontWeight: FontWeight.bold)),
+            if (totalPages > 1)
+              Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.chevron_left),
+                    onPressed: _currentPage > 0 ? () => setState(() => _currentPage--) : null,
+                  ),
+                  Text('${_currentPage + 1} / $totalPages', style: GoogleFonts.outfit(fontSize: 12, color: Colors.grey)),
+                  IconButton(
+                    icon: const Icon(Icons.chevron_right),
+                    onPressed: _currentPage < totalPages - 1 ? () => setState(() => _currentPage++) : null,
+                  ),
+                ],
+              ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        ...currentFeedbacks.map((f) {
+          DateTime date = f['timestamp'] != null ? (f['timestamp'] is Timestamp ? (f['timestamp'] as Timestamp).toDate() : DateTime.parse(f['timestamp'].toString())) : DateTime.now();
+          return Container(
+            width: double.infinity,
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(children: List.generate(5, (i) => Icon(Icons.star_rounded, color: i < (f['rating'] ?? 5).toInt() ? const Color(0xFFD97706) : Colors.grey[100], size: 10))),
+                    Text(DateFormat('MMM dd').format(date), style: GoogleFonts.outfit(fontSize: 10, color: Colors.grey)),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(f['comment'], style: GoogleFonts.outfit(fontSize: 13, height: 1.4, color: const Color(0xFF2d3748).withOpacity(0.8))),
+              ],
+            ),
+          );
+        }).toList(),
+      ],
     );
   }
 }

@@ -67,6 +67,13 @@ export function useCounsellorApplications() {
 }
 
 /**
+ * Hook: fetch counsellor bookings (collection: 'counsellor_bookings')
+ */
+export function useCounsellorBookings() {
+  return useCollection('counsellor_bookings');
+}
+
+/**
  * Hook: fetch articles (collection: 'articles')
  */
 export function useArticles() {

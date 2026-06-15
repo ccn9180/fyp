@@ -19,13 +19,13 @@ class CounsellorDetailScreen extends StatefulWidget {
   const CounsellorDetailScreen({
     super.key,
     required this.counsellorId,
-    this.name = 'Dr. Sarah Eunoia',
-    this.specialty = 'Licensed Clinical Psychologist',
-    this.rating = '4.9',
-    this.experience = '12 yrs',
-    this.patients = '500+',
-    this.imageUrl = 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&q=80&w=2000',
-    this.about = 'Dr. Sarah specializes in mindful-based cognitive therapy and trauma recovery...',
+    this.name = 'Counsellor',
+    this.specialty = 'Professional Counsellor',
+    this.rating = '-',
+    this.experience = '-',
+    this.patients = '-',
+    this.imageUrl = 'https://ui-avatars.com/api/?name=Counsellor&background=random',
+    this.about = 'Professional counsellor dedicated to providing a safe and supportive space.',
     this.price = 'Free',
   });
 
@@ -300,11 +300,12 @@ class _CounsellorDetailScreenState extends State<CounsellorDetailScreen> {
 
                     // Stats Row
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        _buildStatCard('PATIENTS', widget.patients),
-                        _buildStatCard('EXPERIENCE', widget.experience),
-                        _buildStatCard('RATING', widget.rating, isRating: true),
+                        Expanded(child: _buildStatCard('PATIENTS', widget.patients)),
+                        const SizedBox(width: 12),
+                        Expanded(child: _buildStatCard('EXPERIENCE', widget.experience)),
+                        const SizedBox(width: 12),
+                        Expanded(child: _buildStatCard('RATING', widget.rating, isRating: true)),
                       ],
                     ),
                   ],
@@ -383,94 +384,6 @@ class _CounsellorDetailScreenState extends State<CounsellorDetailScreen> {
                       ],
                     ),
 
-                    const SizedBox(height: 32),
-
-                    // Reviews Header
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Patient Reviews',
-                          style: GoogleFonts.playfairDisplay(
-                            fontSize: 22,
-                            fontWeight: FontWeight.w600,
-                            color: textColorMain,
-                          ),
-                        ),
-                        Text(
-                          'View All',
-                          style: GoogleFonts.outfit(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                            color: const Color(0xFF98B3A1),
-                          ),
-                        ),
-                      ],
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    // Review Card (Single Example)
-                    Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(24),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.02),
-                            blurRadius: 10,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              CircleAvatar(
-                                radius: 20,
-                                backgroundColor: const Color(0xFFEEF3F0),
-                                child: Text(
-                                  'M',
-                                  style: GoogleFonts.outfit(
-                                    color: const Color(0xFF98B3A1),
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Michael R.',
-                                    style: GoogleFonts.outfit(
-                                      fontWeight: FontWeight.w600,
-                                      color: textColorMain,
-                                    ),
-                                  ),
-                                  Row(
-                                    children: List.generate(5, (index) => const Icon(Icons.star_rounded, color: Color(0xFFFFB800), size: 16)),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            '"Dr. Sarah has a unique way of making you feel heard and understood from the very first session."',
-                            style: GoogleFonts.outfit(
-                              fontSize: 14,
-                              fontStyle: FontStyle.italic,
-                              color: textColorSub,
-                              height: 1.5,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
                     const SizedBox(height: 100), // Space for button
                   ],
                 ),
@@ -575,8 +488,7 @@ class _CounsellorDetailScreenState extends State<CounsellorDetailScreen> {
 
   Widget _buildStatCard(String label, String value, {bool isRating = false}) {
     return Container(
-      width: 100,
-      padding: const EdgeInsets.symmetric(vertical: 20),
+      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 4),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
@@ -597,15 +509,18 @@ class _CounsellorDetailScreenState extends State<CounsellorDetailScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               if (isRating) ...[
-                const Icon(Icons.star_rounded, color: Color(0xFFFFB800), size: 18),
-                const SizedBox(width: 4),
+                const Icon(Icons.star_rounded, color: Color(0xFFFFB800), size: 16),
+                const SizedBox(width: 2),
               ],
-              Text(
-                value,
-                style: GoogleFonts.outfit(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  color: const Color(0xFF333333),
+              Flexible(
+                child: Text(
+                  value,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.outfit(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFF333333),
+                  ),
                 ),
               ),
             ],

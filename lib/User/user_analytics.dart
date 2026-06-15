@@ -27,7 +27,99 @@ class _UserAnalyticsScreenState extends State<UserAnalyticsScreen> {
     start: DateTime.now().subtract(const Duration(days: 7)),
     end: DateTime.now(),
   );
-  final bool _isLoading = false;
+  bool _isLoading = true;
+
+  int _chatCount = 0;
+  int _diaryCount = 0;
+  int _resourceCount = 0;
+  int _counselCount = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchData();
+  }
+
+  Future<void> _fetchData() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    
+    if (mounted) setState(() => _isLoading = true);
+    
+    try {
+      final start = Timestamp.fromDate(_selectedDateRange.start);
+      final end = Timestamp.fromDate(_selectedDateRange.end.add(const Duration(days: 1)));
+
+      // Diary - fallback to client side filtering if no composite index
+      int dCount = 0;
+      try {
+        final diarySnap = await FirebaseFirestore.instance.collection('users').doc(uid).collection('diary_entries')
+            .where('timestamp', isGreaterThanOrEqualTo: start)
+            .where('timestamp', isLessThanOrEqualTo: end)
+            .get();
+        dCount = diarySnap.docs.length;
+      } catch (e) {
+        final allDiary = await FirebaseFirestore.instance.collection('users').doc(uid).collection('diary_entries').get();
+        dCount = allDiary.docs.where((doc) {
+          final ts = doc.data()['timestamp'] as Timestamp?;
+          if (ts == null) return false;
+          return ts.compareTo(start) >= 0 && ts.compareTo(end) <= 0;
+        }).length;
+      }
+      
+      // Chat - using createdAt instead of startedAt
+      int chCount = 0;
+      try {
+        final chatSnap = await FirebaseFirestore.instance.collection('chat_sessions')
+            .where('userId', isEqualTo: uid)
+            .where('createdAt', isGreaterThanOrEqualTo: start)
+            .where('createdAt', isLessThanOrEqualTo: end)
+            .get();
+        chCount = chatSnap.docs.length;
+      } catch (e) {
+        final allChats = await FirebaseFirestore.instance.collection('chat_sessions')
+            .where('userId', isEqualTo: uid)
+            .get();
+        chCount = allChats.docs.where((doc) {
+          final ts = doc.data()['createdAt'] as Timestamp?;
+          if (ts == null) return false;
+          return ts.compareTo(start) >= 0 && ts.compareTo(end) <= 0;
+        }).length;
+      }
+
+      // Counseling sessions
+      final counselSnap = await FirebaseFirestore.instance.collection('counsellor_bookings')
+          .where('patientId', isEqualTo: uid)
+          .get();
+          
+      int cCount = 0;
+      for (var doc in counselSnap.docs) {
+        final dData = doc.data();
+        if (dData.containsKey('startTime')) {
+          final ts = dData['startTime'] as Timestamp?;
+          if (ts != null && ts.compareTo(start) >= 0 && ts.compareTo(end) <= 0) {
+            cCount++;
+          }
+        }
+      }
+      
+      // Resource (Favorites approximation)
+      final resSnap = await FirebaseFirestore.instance.collection('users').doc(uid).collection('favorited_resources').get();
+
+      if (mounted) {
+        setState(() {
+          _diaryCount = dCount;
+          _chatCount = chCount;
+          _counselCount = cCount;
+          _resourceCount = resSnap.docs.length;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint("Error fetching analytics: $e");
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -113,6 +205,7 @@ class _UserAnalyticsScreenState extends State<UserAnalyticsScreen> {
                       _selectedDateRange = DateTimeRange(start: DateTime.now().subtract(const Duration(days: 30)), end: DateTime.now());
                     }
                   });
+                  _fetchData();
                 }
               },
               child: Container(
@@ -211,6 +304,7 @@ class _UserAnalyticsScreenState extends State<UserAnalyticsScreen> {
                            _selectedDateRange = DateTimeRange(start: start!, end: end!);
                            _rangeLabel = 'Custom';
                          });
+                         _fetchData();
                          Navigator.pop(context);
                       } : null,
                       child: Text('Apply Filter', style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold)),
@@ -265,23 +359,16 @@ class _UserAnalyticsScreenState extends State<UserAnalyticsScreen> {
   }
 
   Widget _buildCombinedDataStream() {
-    // Hardcoded data for consistent presentation
-    // Scale data based on the difference in days
-    final days = _selectedDateRange.duration.inDays.clamp(1, 100);
-    final int chatCount = (days * 2.1).toInt() + 3;
-    final int diaryCount = (days * 0.8).toInt() + 1;
-    final int resourceCount = (days * 0.5).toInt() + 2;
-    final int counselCount = (days / 14).floor();
 
     return Column(
       children: [
-        _buildMetricsGrid(chatCount, diaryCount, resourceCount, counselCount),
+        _buildMetricsGrid(_chatCount, _diaryCount, _resourceCount, _counselCount),
         const SizedBox(height: 32),
-        _buildComparisonChart(chatCount, diaryCount, resourceCount, counselCount),
+        _buildComparisonChart(_chatCount, _diaryCount, _resourceCount, _counselCount),
         const SizedBox(height: 32),
-        _buildAIInsightsSection(chatCount, diaryCount),
+        _buildAIInsightsSection(_chatCount, _diaryCount),
         const SizedBox(height: 32),
-        _buildDetailedList(chatCount, diaryCount, resourceCount, counselCount),
+        _buildDetailedList(_chatCount, _diaryCount, _resourceCount, _counselCount),
       ],
     );
   }
@@ -475,10 +562,148 @@ class _UserAnalyticsScreenState extends State<UserAnalyticsScreen> {
             _buildExportOption(Icons.summarize_rounded, 'Activity Summary', 'Detailed engagement audit'),
             const SizedBox(height: 16),
             _buildExportOption(Icons.image_rounded, 'Activity Snapshot', 'Export as captured image'),
+            const SizedBox(height: 16),
+            _buildShareOption(),
           ],
         ),
       ),
     );
+  }
+
+  Widget _buildShareOption() {
+    return InkWell(
+      onTap: () async {
+        Navigator.pop(context);
+        _showCounsellorSelectionDialog();
+      },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(color: primaryGreen.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
+              child: Icon(Icons.send_rounded, color: primaryGreen),
+            ),
+            const SizedBox(width: 20),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Share with Counsellor', style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold)),
+                Text('Directly send data to your counsellor', style: GoogleFonts.outfit(fontSize: 12, color: Colors.grey)),
+              ],
+            ),
+            const Spacer(),
+            const Icon(Icons.chevron_right_rounded, color: Colors.grey, size: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showCounsellorSelectionDialog() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      final snap = await FirebaseFirestore.instance.collection('counsellor_bookings')
+          .where('patientId', isEqualTo: uid)
+          .get();
+          
+      Navigator.pop(context); // pop loading
+      
+      final Map<String, String> counsellors = {};
+      for (var doc in snap.docs) {
+        if (doc.data().containsKey('counsellorId') && doc.data().containsKey('counsellorName')) {
+          counsellors[doc.data()['counsellorId']] = doc.data()['counsellorName'];
+        }
+      }
+      
+      if (counsellors.isEmpty) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('No past counsellors found to share with.', style: GoogleFonts.outfit())));
+        return;
+      }
+      
+      if (!mounted) return;
+      showModalBottomSheet(
+        context: context,
+        backgroundColor: Colors.white,
+        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+        builder: (context) {
+          return Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Select Counsellor', style: GoogleFonts.playfairDisplay(fontSize: 22, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 16),
+                ...counsellors.entries.map((e) => ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: CircleAvatar(backgroundColor: primaryGreen.withOpacity(0.2), child: Icon(Icons.person, color: primaryGreen)),
+                  title: Text(e.value, style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+                  trailing: const Icon(Icons.send_rounded, size: 20),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _shareReportWithCounsellor(e.key, e.value);
+                  },
+                )).toList(),
+                const SizedBox(height: 16),
+              ],
+            ),
+          );
+        }
+      );
+
+    } catch (e) {
+      Navigator.pop(context);
+      debugPrint('Error loading counsellors: $e');
+    }
+  }
+
+  Future<void> _shareReportWithCounsellor(String counsellorId, String counsellorName) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    
+    String userName = user.displayName ?? 'Patient Recovery';
+    final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+    if (doc.exists) userName = doc.data()?['fullName'] ?? userName;
+
+    try {
+      await FirebaseFirestore.instance.collection('shared_chats').add({
+        'counsellorId': counsellorId,
+        'patientId': user.uid,
+        'userName': userName,
+        'sharedAt': FieldValue.serverTimestamp(),
+        'type': 'report',
+        'reportType': 'Activity Summary',
+        'dateRangeStart': Timestamp.fromDate(_selectedDateRange.start),
+        'dateRangeEnd': Timestamp.fromDate(_selectedDateRange.end),
+        'stats': {
+          'diary': _diaryCount,
+          'chatbot': _chatCount,
+          'resources': _resourceCount,
+          'appointments': _counselCount,
+          'xp': 450,
+        }
+      });
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Report successfully shared with $counsellorName', style: GoogleFonts.outfit()),
+          backgroundColor: primaryGreen,
+        ));
+      }
+    } catch (e) {
+      debugPrint('Share error: $e');
+    }
   }
 
   Widget _buildExportOption(IconData icon, String title, String sub) {
@@ -505,10 +730,10 @@ class _UserAnalyticsScreenState extends State<UserAnalyticsScreen> {
             userName: userName,
             dateRange: _selectedDateRange,
             stats: {
-              'diary': 24,
-              'chatbot': 18,
-              'resources': 15,
-              'appointments': 4,
+              'diary': _diaryCount,
+              'chatbot': _chatCount,
+              'resources': _resourceCount,
+              'appointments': _counselCount,
               'xp': 450,
             },
           );

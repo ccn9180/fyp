@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { signInWithEmailAndPassword, signInWithPopup, sendPasswordResetEmail } from 'firebase/auth';
 import { auth, googleProvider } from '../firebase';
 import { Eye, EyeOff, Lock, Mail } from 'lucide-react';
@@ -51,7 +51,7 @@ const s = {
     width: '100%', 
     maxWidth: '960px', 
     minHeight: '420px', 
-    background: 'white', 
+    background: 'var(--bg-card)', 
     borderRadius: '24px', 
     boxShadow: '0 24px 64px rgba(124,156,132,0.15)', // Soft green shadow
     display: 'flex',
@@ -73,7 +73,7 @@ const s = {
   },
   logoIcon: {
     width: '130px', height: '130px', borderRadius: '50%',
-    background: 'white', display: 'flex', alignItems: 'center',
+    background: 'var(--bg-card)', display: 'flex', alignItems: 'center',
     justifyContent: 'center', marginBottom: '20px',
     boxShadow: '0 20px 50px rgba(0,0,0,0.15)',
     zIndex: 2
@@ -97,7 +97,7 @@ const s = {
   // Right Panel
   rightPanel: {
     flex: '1',
-    background: 'white',
+    background: 'var(--bg-card)',
     display: 'flex',
     flexDirection: 'column',
     justifyContent: 'center',
@@ -138,7 +138,7 @@ const s = {
   dividerText: { fontFamily: 'Outfit, sans-serif', fontSize: '11px', color: '#88928b' },
   
   googleBtn: { 
-    width: '100%', background: 'white', border: '1px solid #E5EDE8', color: '#4a5750', 
+    width: '100%', background: 'var(--bg-card)', border: '1px solid var(--border-color)', color: 'var(--text-darker)', 
     fontFamily: 'Outfit, sans-serif', fontWeight: 600, fontSize: '13px', padding: '12px', 
     borderRadius: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', 
     justifyContent: 'center', gap: '12px', transition: 'all 0.2s ease'
@@ -156,7 +156,7 @@ const FIREBASE_ERRORS = {
   'auth/popup-blocked': 'The sign-in popup was blocked by your browser. Please allow popups for this site.',
 };
 
-export default function Login() {
+export default function Login({ unauthorized, onClearUnauthorized }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPw, setShowPw] = useState(false);
@@ -164,6 +164,16 @@ export default function Login() {
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+
+  // Catch unauthorized error from App.jsx
+  useEffect(() => {
+    if (unauthorized) {
+      setError('Access Denied: This portal is strictly for registered counsellors.');
+      if (onClearUnauthorized) {
+        onClearUnauthorized();
+      }
+    }
+  }, [unauthorized, onClearUnauthorized]);
 
   const handleForgotPassword = async () => {
     setError('');
@@ -270,7 +280,7 @@ export default function Login() {
                   value={email}
                   onChange={e => setEmail(e.target.value)}
                   autoComplete="email"
-                  onFocus={e => { e.target.style.borderColor = '#7C9C84'; e.target.style.boxShadow = '0 0 0 4px rgba(124,156,132,0.1)'; e.target.style.background = 'white'; }}
+                  onFocus={e => { e.target.style.borderColor = 'var(--primary-color)'; e.target.style.boxShadow = '0 0 0 4px rgba(124,156,132,0.1)'; e.target.style.background = 'var(--bg-card)'; }}
                   onBlur={e => { e.target.style.borderColor = '#E5E4E0'; e.target.style.boxShadow = 'none'; e.target.style.background = '#Fbfbfb'; }}
                 />
               </div>
@@ -288,7 +298,7 @@ export default function Login() {
                   value={password}
                   onChange={e => setPassword(e.target.value)}
                   autoComplete="current-password"
-                  onFocus={e => { e.target.style.borderColor = '#7C9C84'; e.target.style.boxShadow = '0 0 0 4px rgba(124,156,132,0.1)'; e.target.style.background = 'white'; }}
+                  onFocus={e => { e.target.style.borderColor = 'var(--primary-color)'; e.target.style.boxShadow = '0 0 0 4px rgba(124,156,132,0.1)'; e.target.style.background = 'var(--bg-card)'; }}
                   onBlur={e => { e.target.style.borderColor = '#E5E4E0'; e.target.style.boxShadow = 'none'; e.target.style.background = '#Fbfbfb'; }}
                 />
                 <button type="button" style={s.eyeBtn} onClick={() => setShowPw(p => !p)}>
@@ -337,11 +347,11 @@ export default function Login() {
             disabled={loading || googleLoading} 
             style={{
               ...s.googleBtn,
-              background: (loading || googleLoading) ? '#F5F5F5' : 'white',
+              background: (loading || googleLoading) ? 'var(--bg-secondary)' : 'var(--bg-card)',
               cursor: (loading || googleLoading) ? 'not-allowed' : 'pointer'
             }} 
             onMouseEnter={e => { if (!(loading || googleLoading)) { e.currentTarget.style.background = '#Fbfbfb'; e.currentTarget.style.borderColor = '#A3BBA9'; } }} 
-            onMouseLeave={e => { if (!(loading || googleLoading)) { e.currentTarget.style.background = 'white'; e.currentTarget.style.borderColor = '#E5EDE8'; } }}
+            onMouseLeave={e => { if (!(loading || googleLoading)) { e.currentTarget.style.background = 'var(--bg-card)'; e.currentTarget.style.borderColor = 'var(--border-color)'; } }}
           >
             {googleLoading ? (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>

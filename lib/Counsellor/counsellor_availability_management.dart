@@ -30,34 +30,21 @@ class _CounsellorAvailabilityManagementState extends State<CounsellorAvailabilit
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        scrolledUnderElevation: 0,
-        leading: Center(
-          child: Padding(
-            padding: const EdgeInsets.only(left: 12),
-            child: GestureDetector(
-              onTap: () => Navigator.pop(context),
-              child: Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.04),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Icon(Icons.arrow_back_ios_new_rounded, color: textColorMain, size: 18),
-              ),
-            ),
-          ),
+        surfaceTintColor: Colors.transparent,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF333333), size: 20),
+          onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          'Manage Availability',
-          style: GoogleFonts.playfairDisplay(fontSize: 22, fontWeight: FontWeight.bold, color: textColorMain),
+          'MANAGE AVAILABILITY',
+          style: GoogleFonts.outfit(
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 1.2,
+            color: textColorMain,
+          ),
         ),
+        centerTitle: true,
       ),
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
@@ -72,6 +59,13 @@ class _CounsellorAvailabilityManagementState extends State<CounsellorAvailabilit
           final List<Map<String, dynamic>> allAvailability = snapshot.hasData
               ? snapshot.data!.docs.map((d) => {...(d.data() as Map<String, dynamic>), 'id': d.id}).toList()
               : [];
+              
+          allAvailability.sort((a, b) {
+            final aTs = a['sortTimestamp'] as Timestamp?;
+            final bTs = b['sortTimestamp'] as Timestamp?;
+            if (aTs == null || bTs == null) return 0;
+            return aTs.compareTo(bTs);
+          });
 
           return SingleChildScrollView(
             padding: const EdgeInsets.all(24),
@@ -452,6 +446,7 @@ class _CounsellorAvailabilityManagementState extends State<CounsellorAvailabilit
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) {
+        bool initialValidationDone = false;
         return StatefulBuilder(
             builder: (context, setModalState) {
 
@@ -460,7 +455,7 @@ class _CounsellorAvailabilityManagementState extends State<CounsellorAvailabilit
                 setModalState(() => isChecking = true);
                 final now = DateTime.now();
                 final bool past = dt.isBefore(now);
-                final bool tooSoon = !past && dt.isBefore(now.add(const Duration(hours: 3)));
+                final bool tooSoon = !past && dt.isBefore(now.add(const Duration(hours: 1)));
 
                 final String timeStr = DateFormat('hh:mm a').format(dt);
                 final user = FirebaseAuth.instance.currentUser;
@@ -482,8 +477,8 @@ class _CounsellorAvailabilityManagementState extends State<CounsellorAvailabilit
 
                   final DateTime existingDT = DateFormat('hh:mm a').parse(existingTimeStr);
                   final DateTime selectedTimeOnly = DateFormat('hh:mm a').parse(timeStr);
-                  final diff = selectedTimeOnly.difference(existingDT).inHours.abs();
-                  if (diff < 3) {
+                  final int diffMinutes = selectedTimeOnly.difference(existingDT).inMinutes.abs();
+                  if (diffMinutes < 180) {
                     tooClose = true;
                     break;
                   }
@@ -498,6 +493,11 @@ class _CounsellorAvailabilityManagementState extends State<CounsellorAvailabilit
                 });
               }
 
+              if (!initialValidationDone) {
+                initialValidationDone = true;
+                Future.microtask(() => performValidations(currentSelectedDT));
+              }
+
               return Container(
                 padding: EdgeInsets.fromLTRB(24, 24, 24, 24 + MediaQuery.of(context).viewInsets.bottom),
                 decoration: BoxDecoration(color: backgroundColor, borderRadius: const BorderRadius.vertical(top: Radius.circular(36))),
@@ -510,6 +510,8 @@ class _CounsellorAvailabilityManagementState extends State<CounsellorAvailabilit
                       const SizedBox(height: 16),
                       Text(isEditing ? 'Edit Session Slot' : 'Add Availability', style: GoogleFonts.playfairDisplay(fontSize: 24, fontWeight: FontWeight.bold, color: textColorMain)),
                       const SizedBox(height: 24),
+
+
 
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -550,13 +552,13 @@ class _CounsellorAvailabilityManagementState extends State<CounsellorAvailabilit
 
                       const SizedBox(height: 16),
                       if (isPastTime) _buildErrorText('Cannot select past time'),
-                      if (!isPastTime && isTooSoon) _buildErrorText('Slots must be set at least 3 hours in advance'),
+                      if (!isPastTime && isTooSoon) _buildErrorText('Slots must be set at least 1 hour in advance'),
                       if (isDuplicate) _buildErrorText('Slot already exists for this time'),
                       if (!isDuplicate && isTooClose) _buildErrorText('Must have at least a 3-hour gap between slots'),
 
                       const SizedBox(height: 16),
                       Text(
-                        '* Scroll to choose your start time. System enforces a 3-hour lead time and 3-hour gap from other sessions.',
+                        '* Scroll to choose your start time. System enforces a 1-hour lead time and 3-hour gap from other sessions.',
                         style: GoogleFonts.outfit(fontSize: 12, color: Colors.grey[400], height: 1.4),
                       ),
 
