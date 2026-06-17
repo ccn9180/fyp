@@ -18,7 +18,6 @@ import ChatbotMonitoring from './pages/monitoring/ChatbotMonitoring.jsx';
 import ContentMonitoring from './pages/monitoring/ContentMonitoring.jsx';
 import GamificationMonitoring from './pages/monitoring/GamificationMonitoring.jsx';
 import Engagement from './pages/gamification/Engagement.jsx';
-import Rewards from './pages/gamification/Rewards.jsx';
 import AccountSettings from './pages/account/AccountSettings.jsx';
 import CrisisCenter from './pages/monitoring/CrisisCenter.jsx';
 import CommunityMonitoring from './pages/monitoring/CommunityMonitoring.jsx';
@@ -149,7 +148,6 @@ export default function App() {
           <Route path="/monitoring/post-feeds" element={<CommunityMonitoring />} />
           <Route path="/monitoring/add-feed" element={<AddFeed />} />
           <Route path="/gamification/engagement" element={<Engagement />} />
-          <Route path="/gamification/rewards" element={<Rewards />} />
           <Route path="/account" element={<AccountSettings />} />
           <Route path="/settings" element={<SystemSettings />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />

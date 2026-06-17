@@ -656,6 +656,7 @@ class _CommunityScreenState extends State<CommunityScreen> with AutomaticKeepAli
                 child: const Icon(Icons.add, color: Colors.white, size: 28),
               ),
               body: SafeArea(
+                bottom: false,
                 child: CustomScrollView(
                   controller: _scrollController,
                   slivers: [
@@ -1002,13 +1003,12 @@ class _CommunityScreenState extends State<CommunityScreen> with AutomaticKeepAli
                           String emptyMessage = _searchQuery.isEmpty
                               ? (_activeFilter == 'All' || _activeFilter == 'MyPosts' ? 'Be the first to share your thoughts.' : 'No posts in this category yet.')
                               : 'Try adjusting your search terms or filters.';
-                          return SliverFillRemaining(
-                            hasScrollBody: false,
+                          return SliverToBoxAdapter(
                             child: Center(
                               child: Padding(
                                 padding: const EdgeInsets.symmetric(vertical: 40.0, horizontal: 24.0),
                                 child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  mainAxisSize: MainAxisSize.min,
                                   children: [
                                     Container(
                                       padding: const EdgeInsets.all(16),
@@ -1053,7 +1053,7 @@ class _CommunityScreenState extends State<CommunityScreen> with AutomaticKeepAli
                                 (context, index) {
                               final post = filteredPosts[index];
                               return Padding(
-                                padding: EdgeInsets.only(bottom: index == filteredPosts.length - 1 ? 100 : 0),
+                                padding: EdgeInsets.only(bottom: index == filteredPosts.length - 1 ? 32 : 0),
                                 child: _buildPostCard(
                                   post,
                                   isFollowing: following.contains(post.authorId),
@@ -1069,7 +1069,6 @@ class _CommunityScreenState extends State<CommunityScreen> with AutomaticKeepAli
                     );
                   },
                 ),
-                const SliverToBoxAdapter(child: SizedBox(height: 32)),
               ],
             ),
           ),

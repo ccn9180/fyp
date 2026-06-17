@@ -54,6 +54,7 @@ export default function Engagement() {
   const [processing, setProcessing] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(null); // 'tasks' | 'badges' | 'rewards' | null
   const [editingItem, setEditingItem] = useState(null); // Doc object to edit
+  const [viewingItem, setViewingItem] = useState(null); // Doc object to view
 
   // Form states
   const [taskForm, setTaskForm] = useState({ title: '', description: '', xp_reward: 10, coin_reward: 5, task_type: 'mood', frequency: 'daily', icon: 'mood' });
@@ -147,17 +148,24 @@ export default function Engagement() {
 
   const handleSaveTask = async (e) => {
     e.preventDefault();
+    if (!taskForm.title?.trim() || !taskForm.description?.trim()) {
+      customAlert("Title and description cannot be empty.", "Validation Error");
+      return;
+    }
     setProcessing(true);
     try {
       if (editingItem) {
         await updateDoc(doc(db, 'tasks', editingItem.id), taskForm);
+        await customAlert("Quest updated successfully!", "Success");
       } else {
         await addDoc(collection(db, 'tasks'), taskForm);
+        await customAlert("Quest created successfully!", "Success");
       }
       setIsModalOpen(null);
       setEditingItem(null);
     } catch (e) {
       console.error(e);
+      await customAlert("Failed to save quest.", "Error");
     } finally {
       setProcessing(false);
     }
@@ -165,17 +173,24 @@ export default function Engagement() {
 
   const handleSaveBadge = async (e) => {
     e.preventDefault();
+    if (!badgeForm.name?.trim() || !badgeForm.description?.trim()) {
+      customAlert("Name and description cannot be empty.", "Validation Error");
+      return;
+    }
     setProcessing(true);
     try {
       if (editingItem) {
         await updateDoc(doc(db, 'badges', editingItem.id), badgeForm);
+        await customAlert("Badge updated successfully!", "Success");
       } else {
         await addDoc(collection(db, 'badges'), badgeForm);
+        await customAlert("Badge created successfully!", "Success");
       }
       setIsModalOpen(null);
       setEditingItem(null);
     } catch (e) {
       console.error(e);
+      await customAlert("Failed to save badge.", "Error");
     } finally {
       setProcessing(false);
     }
@@ -183,17 +198,24 @@ export default function Engagement() {
 
   const handleSaveReward = async (e) => {
     e.preventDefault();
+    if (!rewardForm.name?.trim() || !rewardForm.description?.trim()) {
+      customAlert("Name and description cannot be empty.", "Validation Error");
+      return;
+    }
     setProcessing(true);
     try {
       if (editingItem) {
         await updateDoc(doc(db, 'rewards', editingItem.id), rewardForm);
+        await customAlert("Reward updated successfully!", "Success");
       } else {
         await addDoc(collection(db, 'rewards'), rewardForm);
+        await customAlert("Reward created successfully!", "Success");
       }
       setIsModalOpen(null);
       setEditingItem(null);
     } catch (e) {
       console.error(e);
+      await customAlert("Failed to save reward.", "Error");
     } finally {
       setProcessing(false);
     }
@@ -319,7 +341,11 @@ export default function Engagement() {
                 </thead>
                 <tbody>
                   {filteredTasks.map((task, idx) => (
-                    <tr key={task.id} className={`${idx === filteredTasks.length - 1 ? 'border-none' : 'border-b border-cream-darker'}`}>
+                    <tr 
+                      key={task.id} 
+                      onClick={() => setViewingItem({type: 'tasks', data: task})} 
+                      className={`cursor-pointer hover:bg-black/5 transition-colors ${idx === filteredTasks.length - 1 ? 'border-none' : 'border-b border-cream-darker'}`}
+                    >
                       <td className="p-4 px-3">
                         <div className="flex items-center gap-3">
                           <span className="text-xl">
@@ -342,8 +368,8 @@ export default function Engagement() {
                       </td>
                       <td className="p-4 px-3">
                         <div className="flex gap-2">
-                          <button onClick={() => openEdit('tasks', task)} className="p-1.5 border-none bg-transparent text-muted cursor-pointer hover:text-primary"><Pencil size={14} /></button>
-                          <button onClick={() => handleDelete('tasks', task.id)} className="p-1.5 border-none bg-transparent text-red-400 cursor-pointer hover:text-red-500"><Trash2 size={14} /></button>
+                          <button onClick={(e) => { e.stopPropagation(); openEdit('tasks', task); }} className="p-1.5 border-none bg-transparent text-muted cursor-pointer hover:text-primary"><Pencil size={14} /></button>
+                          <button onClick={(e) => { e.stopPropagation(); handleDelete('tasks', task.id); }} className="p-1.5 border-none bg-transparent text-red-400 cursor-pointer hover:text-red-500"><Trash2 size={14} /></button>
                         </div>
                       </td>
                     </tr>
@@ -365,7 +391,7 @@ export default function Engagement() {
           <div className="bg-white rounded-[20px] shadow-[0_2px_16px_rgba(0,0,0,0.06)] p-6">
             <div className="flex items-center justify-between mb-6">
               <div>
-                <h3 className="font-outfit text-lg font-semibold text-charcoal m-0">Achievements & Badges</h3>
+                <h3 className="font-outfit text-lg font-semibold text-charcoal m-0">Achievements and Badges</h3>
                 <p className="text-xs text-muted font-outfit mt-1">User milestone definitions and criteria</p>
               </div>
               <button
@@ -378,14 +404,14 @@ export default function Engagement() {
 
             <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-5">
               {filteredBadges.map(b => (
-                <div key={b.id} className="border border-cream-darker rounded-[20px] p-5 flex flex-col gap-3 relative">
+                <div key={b.id} onClick={() => setViewingItem({type: 'badges', data: b})} className="border border-cream-darker rounded-[20px] p-5 flex flex-col gap-3 relative cursor-pointer hover:border-primary hover:bg-white/5 hover:shadow-md transition-all">
                   <div className="flex justify-between items-start">
                     <div className="w-12 h-12 rounded-full bg-cream flex items-center justify-center text-[22px] border border-cream-darker overflow-hidden">
-                      {b.icon?.startsWith('http') ? <img src={b.icon} alt="" className="w-full h-full object-cover" /> : b.icon === 'directions_walk_rounded' ? '🚶' : b.icon === 'calendar_month_rounded' ? '📅' : b.icon === 'local_fire_department_rounded' ? '🔥' : '🌸'}
+                      {b.icon?.startsWith('http') ? <img src={b.icon} alt="" className="w-full h-full object-cover" /> : b.icon === 'directions_walk_rounded' ? '🚶' : b.icon === 'calendar_month_rounded' ? '📅' : b.icon === 'local_fire_department_rounded' ? '🔥' : b.icon === 'journal' ? '📓' : b.icon === 'counsellor' ? '🤝' : b.icon === 'chat' ? '💬' : b.icon === 'meditation' ? '🧘' : b.icon === 'book' ? '📖' : '🌸'}
                     </div>
                     <div className="flex gap-1">
-                      <button onClick={() => openEdit('badges', b)} className="p-1.5 border-none bg-transparent text-muted cursor-pointer hover:text-primary"><Pencil size={14} /></button>
-                      <button onClick={() => handleDelete('badges', b.id)} className="p-1.5 border-none bg-transparent text-red-400 cursor-pointer hover:text-red-500"><Trash2 size={14} /></button>
+                      <button onClick={(e) => { e.stopPropagation(); openEdit('badges', b); }} className="p-1.5 border-none bg-transparent text-muted cursor-pointer hover:text-primary"><Pencil size={14} /></button>
+                      <button onClick={(e) => { e.stopPropagation(); handleDelete('badges', b.id); }} className="p-1.5 border-none bg-transparent text-red-400 cursor-pointer hover:text-red-500"><Trash2 size={14} /></button>
                     </div>
                   </div>
                   <div>
@@ -395,7 +421,7 @@ export default function Engagement() {
                   <div className="mt-auto pt-3 border-t border-cream-darker flex justify-between items-center">
                     <span className="text-[10px] font-bold px-2 py-1 rounded-md bg-sage-100 text-primary">{b.tier}</span>
                     <span className="text-[11px] font-semibold text-charcoal">
-                      Req: {b.condition_value} {b.condition_type}
+                      Req: {b.condition_type === 'features_used' ? 'All Features' : `${b.condition_value} ${b.condition_type.replace('_', ' ')}`}
                     </span>
                   </div>
                 </div>
@@ -428,14 +454,14 @@ export default function Engagement() {
 
             <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-5">
               {filteredRewards.map(r => (
-                <div key={r.id} className="border border-cream-darker rounded-[20px] p-5 flex flex-col gap-3 relative">
+                <div key={r.id} onClick={() => setViewingItem({type: 'rewards', data: r})} className="border border-cream-darker rounded-[20px] p-5 flex flex-col gap-3 relative cursor-pointer hover:border-primary hover:bg-white/5 hover:shadow-md transition-all">
                   <div className="flex justify-between items-start">
                     <span className="text-2xl">
                       {r.icon?.startsWith('http') ? <img src={r.icon} alt="" className="w-10 h-10 object-contain rounded-md" /> : r.icon === 'voucher' ? '🎫' : r.icon === 'theme' ? '🎨' : r.icon === 'profile' ? '💮' : '🧩'}
                     </span>
                     <div className="flex gap-1">
-                      <button onClick={() => openEdit('rewards', r)} className="p-1.5 border-none bg-transparent text-muted cursor-pointer hover:text-primary"><Pencil size={14} /></button>
-                      <button onClick={() => handleDelete('rewards', r.id)} className="p-1.5 border-none bg-transparent text-red-400 cursor-pointer hover:text-red-500"><Trash2 size={14} /></button>
+                      <button onClick={(e) => { e.stopPropagation(); openEdit('rewards', r); }} className="p-1.5 border-none bg-transparent text-muted cursor-pointer hover:text-primary"><Pencil size={14} /></button>
+                      <button onClick={(e) => { e.stopPropagation(); handleDelete('rewards', r.id); }} className="p-1.5 border-none bg-transparent text-red-400 cursor-pointer hover:text-red-500"><Trash2 size={14} /></button>
                     </div>
                   </div>
                   <div>
@@ -580,6 +606,11 @@ export default function Engagement() {
                           <option value="calendar_month_rounded">Calendar Icon</option>
                           <option value="local_fire_department_rounded">Fire Icon</option>
                           <option value="psychology_rounded">Psychology Icon</option>
+                          <option value="journal">Journal Icon</option>
+                          <option value="counsellor">Counsellor Icon</option>
+                          <option value="chat">Chat Icon</option>
+                          <option value="meditation">Meditation Icon</option>
+                          <option value="book">Book Icon</option>
                           {badgeForm.icon?.startsWith('http') && <option value={badgeForm.icon}>Custom Uploaded Icon</option>}
                         </select>
                         <div className="flex items-center gap-3">
@@ -608,6 +639,11 @@ export default function Engagement() {
                         <option value="level">Level</option>
                         <option value="streak">Streak Days</option>
                         <option value="xp_total">Total Lifetime XP</option>
+                        <option value="chat_count">Total Chats</option>
+                        <option value="diary_count">Total Diaries</option>
+                        <option value="meditation_count">Total Meditations</option>
+                        <option value="article_count">Total Articles</option>
+                        <option value="features_used">All Features Used</option>
                       </select>
                     </div>
                     <div>
@@ -685,6 +721,89 @@ export default function Engagement() {
           </div>
         </div>
       )}
+
+      {/* Viewing Item Details Modal */}
+      {viewingItem && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[1000] flex items-center justify-center p-5" onClick={() => setViewingItem(null)}>
+          <div className="w-full max-w-[400px] bg-white rounded-3xl overflow-hidden flex flex-col shadow-2xl relative animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
+            <div className="p-6 border-b border-cream-darker flex justify-between items-start">
+              <div className="flex items-center gap-4">
+                 <div className="w-14 h-14 rounded-2xl bg-cream flex items-center justify-center text-3xl border border-cream-darker shrink-0">
+                   {viewingItem.type === 'tasks' ? (viewingItem.data.icon?.startsWith('http') ? <img src={viewingItem.data.icon} alt="" className="w-full h-full object-cover rounded-2xl" /> : viewingItem.data.icon === 'mood' ? '🎭' : viewingItem.data.icon === 'chat' ? '💬' : viewingItem.data.icon === 'journal' ? '📓' : '🧘') :
+                    viewingItem.type === 'badges' ? (viewingItem.data.icon?.startsWith('http') ? <img src={viewingItem.data.icon} alt="" className="w-full h-full object-cover rounded-2xl" /> : viewingItem.data.icon === 'directions_walk_rounded' ? '🚶' : viewingItem.data.icon === 'calendar_month_rounded' ? '📅' : viewingItem.data.icon === 'local_fire_department_rounded' ? '🔥' : viewingItem.data.icon === 'journal' ? '📓' : viewingItem.data.icon === 'counsellor' ? '🤝' : viewingItem.data.icon === 'chat' ? '💬' : viewingItem.data.icon === 'meditation' ? '🧘' : viewingItem.data.icon === 'book' ? '📖' : '🌸') :
+                    (viewingItem.data.icon?.startsWith('http') ? <img src={viewingItem.data.icon} alt="" className="w-full h-full object-cover rounded-2xl" /> : viewingItem.data.icon === 'voucher' ? '🎫' : viewingItem.data.icon === 'theme' ? '🎨' : viewingItem.data.icon === 'profile' ? '💮' : '🧩')}
+                 </div>
+                 <div>
+                   <h3 className="m-0 font-outfit text-lg font-bold text-charcoal leading-tight">{viewingItem.data.title || viewingItem.data.name}</h3>
+                   <span className="inline-block mt-2 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-widest bg-sage-100 text-primary">
+                     {viewingItem.type === 'tasks' ? 'Quest Details' : viewingItem.type === 'badges' ? 'Badge Details' : 'Reward Details'}
+                   </span>
+                 </div>
+              </div>
+              <button onClick={() => setViewingItem(null)} className="p-2 bg-transparent border-none text-charcoal-muted cursor-pointer hover:bg-cream rounded-full transition-colors shrink-0"><X size={20} /></button>
+            </div>
+            
+            <div className="p-6 flex flex-col gap-5">
+              <div>
+                <p className="font-outfit text-sm text-charcoal leading-relaxed m-0">{viewingItem.data.description}</p>
+              </div>
+
+              {viewingItem.type === 'tasks' && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-cream/50 p-4 rounded-2xl border border-cream-darker text-center flex flex-col items-center justify-center">
+                    <p className="text-[10px] font-bold text-muted uppercase tracking-widest m-0 mb-1">XP Reward</p>
+                    <p className="font-outfit text-2xl font-bold text-primary m-0">+{viewingItem.data.xp_reward}</p>
+                  </div>
+                  <div className="bg-cream/50 p-4 rounded-2xl border border-cream-darker text-center flex flex-col items-center justify-center">
+                    <p className="text-[10px] font-bold text-muted uppercase tracking-widest m-0 mb-1">Coin Reward</p>
+                    <p className="font-outfit text-2xl font-bold text-amber-500 m-0">+{viewingItem.data.coin_reward}</p>
+                  </div>
+                  <div className="bg-cream/50 p-3 rounded-2xl border border-cream-darker text-center">
+                     <p className="text-[10px] font-bold text-muted uppercase tracking-widest m-0 mb-1">Task Type</p>
+                     <p className="font-outfit text-sm font-bold text-charcoal m-0 capitalize">{viewingItem.data.task_type}</p>
+                  </div>
+                  <div className="bg-cream/50 p-3 rounded-2xl border border-cream-darker text-center">
+                     <p className="text-[10px] font-bold text-muted uppercase tracking-widest m-0 mb-1">Frequency</p>
+                     <p className="font-outfit text-sm font-bold text-charcoal m-0 capitalize">{viewingItem.data.frequency}</p>
+                  </div>
+                </div>
+              )}
+
+              {viewingItem.type === 'badges' && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-cream/50 p-4 rounded-2xl border border-cream-darker text-center">
+                    <p className="text-[10px] font-bold text-muted uppercase tracking-widest m-0 mb-1">Tier Level</p>
+                    <p className="font-outfit text-lg font-bold text-primary m-0">{viewingItem.data.tier}</p>
+                  </div>
+                  <div className="bg-cream/50 p-4 rounded-2xl border border-cream-darker text-center">
+                    <p className="text-[10px] font-bold text-muted uppercase tracking-widest m-0 mb-1">Requirement</p>
+                    <p className="font-outfit text-sm font-bold text-charcoal m-0 mt-1">{viewingItem.data.condition_value} {viewingItem.data.condition_type.replace('_', ' ')}</p>
+                  </div>
+                </div>
+              )}
+
+              {viewingItem.type === 'rewards' && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-cream/50 p-4 rounded-2xl border border-cream-darker text-center">
+                    <p className="text-[10px] font-bold text-muted uppercase tracking-widest m-0 mb-1">Coin Cost</p>
+                    <p className="font-outfit text-2xl font-bold text-amber-500 m-0">{viewingItem.data.coin_cost} <span className="text-sm">Coins</span></p>
+                  </div>
+                  <div className="bg-cream/50 p-4 rounded-2xl border border-cream-darker text-center">
+                    <p className="text-[10px] font-bold text-muted uppercase tracking-widest m-0 mb-1">Category</p>
+                    <p className="font-outfit text-sm font-bold text-charcoal m-0 mt-2">{viewingItem.data.category}</p>
+                  </div>
+                  <div className="col-span-2 bg-cream/50 p-4 rounded-2xl border border-cream-darker flex justify-between items-center px-6">
+                     <p className="text-[10px] font-bold text-muted uppercase tracking-widest m-0">Store Status</p>
+                     <p className={`font-outfit text-xs font-bold m-0 px-2 py-1 rounded ${viewingItem.data.active ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-500'}`}>{viewingItem.data.active ? 'ACTIVE' : 'INACTIVE'}</p>
+                  </div>
+                </div>
+              )}
+
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

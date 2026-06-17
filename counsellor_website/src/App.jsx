@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { auth, db } from './firebase';
 import CounsellorLayout from './components/CounsellorLayout';
 import Dashboard from './pages/Dashboard';
@@ -16,14 +16,27 @@ import Settings from './pages/Settings';
 import Notifications from './pages/Notifications';
 import SupportPage from './pages/SupportPage';
 
+if (localStorage.getItem('counsellorDarkMode') === 'true') {
+  document.body.classList.add('dark-mode');
+}
+
 function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [loggingOut, setLoggingOut] = useState(false);
   const [unauthorized, setUnauthorized] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [isMaintenance, setIsMaintenance] = useState(false);
 
   useEffect(() => {
+    const unsubMaintenance = onSnapshot(doc(db, 'system', 'settings'), (snapshot) => {
+      if (snapshot.exists() && snapshot.data().maintenanceMode) {
+        setIsMaintenance(true);
+      } else {
+        setIsMaintenance(false);
+      }
+    });
+
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
         try {
@@ -34,8 +47,10 @@ function App() {
             setUnauthorized(false);
             if (data.preferences?.darkMode) {
               document.body.classList.add('dark-mode');
+              localStorage.setItem('counsellorDarkMode', 'true');
             } else {
               document.body.classList.remove('dark-mode');
+              localStorage.setItem('counsellorDarkMode', 'false');
             }
           } else {
             // User is not a counsellor
@@ -43,20 +58,42 @@ function App() {
             setUser(null);
             setUnauthorized(true);
             document.body.classList.remove('dark-mode');
+            localStorage.setItem('counsellorDarkMode', 'false');
           }
         } catch (error) {
           console.error("Error verifying counsellor role:", error);
           await signOut(auth);
           setUser(null);
           document.body.classList.remove('dark-mode');
+          localStorage.setItem('counsellorDarkMode', 'false');
         }
       } else {
         setUser(null);
       }
       setLoading(false);
     });
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      unsubMaintenance();
+    };
   }, []);
+
+  if (isMaintenance) {
+    return (
+      <div style={{ display: 'flex', minHeight: '100vh', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', backgroundColor: '#F9F6F0', padding: '20px', textAlign: 'center' }}>
+        <div style={{ backgroundColor: 'white', padding: '40px', borderRadius: '24px', boxShadow: '0 20px 40px rgba(0,0,0,0.05)', maxWidth: '500px', width: '100%' }}>
+          <div style={{ width: '80px', height: '80px', backgroundColor: '#FFF7ED', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px auto', color: '#EA580C' }}>
+            <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+          </div>
+          <h1 style={{ fontFamily: 'Playfair Display, serif', color: '#333', fontSize: '28px', margin: '0 0 16px 0' }}>System Maintenance</h1>
+          <p style={{ fontFamily: 'Outfit, sans-serif', color: '#666', fontSize: '16px', lineHeight: '1.6', margin: 0 }}>
+            Eunoia is currently undergoing scheduled maintenance. 
+            The Counsellor Portal is temporarily unavailable. Please check back later.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   if (loggingOut) {
     return (
@@ -100,6 +137,7 @@ function App() {
       await new Promise(resolve => setTimeout(resolve, 1000));
       await signOut(auth);
       document.body.classList.remove('dark-mode');
+      localStorage.setItem('counsellorDarkMode', 'false');
     } catch (error) {
       console.error('Signout error:', error);
     } finally {

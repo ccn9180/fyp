@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 class ChangePasswordScreen extends StatefulWidget {
   const ChangePasswordScreen({super.key});
@@ -135,7 +136,11 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                     color: const Color(0xFFE3E8E4),
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.g_mobiledata_rounded, size: 60, color: Color(0xFF7C9C84)),
+                  child: SvgPicture.asset(
+                    'assets/google.svg',
+                    width: 60,
+                    height: 60,
+                  ),
                 ),
                 const SizedBox(height: 24),
                 Text(

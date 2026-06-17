@@ -16,15 +16,16 @@ import { customAlert } from '../../utils/dialogUtils';
 import ReportPreview from '../../components/ReportPreview';
 
 const C = {
-  primary: '#7C9C84',
-  primaryDark: '#66826D',
-  primaryLight: '#BBCBC2',
-  sage100: '#E5EDE8', // Synced with CounsellorMonitoring
-  cream: '#F6F5F2',
-  creamDarker: '#E5E4E0',
-  charcoal: '#333',
-  charcoalMuted: '#666',
-  muted: '#888',
+  primary: 'var(--primary-color, #7C9C84)',
+  primaryDark: 'var(--color-primary-dark, #66826D)',
+  primaryLight: 'var(--primary-light, #BBCBC2)',
+  sage100: 'var(--color-sage-100, #E5EDE8)',
+  cream: 'var(--bg-main, #F6F5F2)',
+  creamDarker: 'var(--border-color, #E5E4E0)',
+  charcoal: 'var(--text-darker, #333)',
+  charcoalMuted: 'var(--text-muted, #666)',
+  muted: 'var(--text-muted, #888)',
+  bgCard: 'var(--bg-card, white)',
   amber: '#d97706',
   blue: '#3b82f6',
   rose: '#f43f5e'
@@ -44,7 +45,7 @@ const sLabel = {
 };
 
 const cardStyle = {
-  background: 'white',
+  background: C.bgCard,
   borderRadius: '24px',
   padding: '32px',
   border: `1px solid ${C.creamDarker}`,
@@ -60,6 +61,8 @@ export default function GamificationMonitoring() {
   const paperRef = useRef(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [xpFilter, setXpFilter] = useState('all');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [selectedUser, setSelectedUser] = useState(null);
   const [isDateOpen, setIsDateOpen] = useState(false);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -79,7 +82,7 @@ export default function GamificationMonitoring() {
         scale: 2,
         useCORS: true,
         logging: false,
-        backgroundColor: '#FFFFFF',
+        backgroundColor: C.bgCard,
         width: 794
       });
 
@@ -169,8 +172,7 @@ export default function GamificationMonitoring() {
         else if (xpFilter === 'low') matchesXP = xp < 500;
 
         return matchesSearch && matchesXP;
-      })
-      .slice(0, 10);
+      });
   }, [filteredUsers, searchQuery, xpFilter]);
 
   // Process XP Sources dynamically from database
@@ -304,6 +306,24 @@ export default function GamificationMonitoring() {
     ];
   }, [xpEntries]);
 
+  const userRedemptions = useMemo(() => {
+    if (!selectedUser || !xpEntries || !rewards) return [];
+    
+    const rewardMap = {};
+    rewards.forEach(r => { rewardMap[r.id] = r.name; });
+    
+    const claimed = [];
+    xpEntries.forEach(e => {
+      if ((e.user_id === selectedUser.id || e.parentId === selectedUser.id) && e.source === 'reward_redeemed' && e.reward_id) {
+         claimed.push({
+           name: rewardMap[e.reward_id] || 'Premium Reward',
+           date: e.earned_at?.toDate ? e.earned_at.toDate() : (e.earned_at ? new Date(e.earned_at) : null)
+         });
+      }
+    });
+    return claimed.sort((a, b) => (b.date || 0) - (a.date || 0));
+  }, [selectedUser, xpEntries, rewards]);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -332,7 +352,7 @@ export default function GamificationMonitoring() {
               onClick={() => setIsDateOpen(!isDateOpen)}
               style={{
                 display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 16px',
-                background: 'white', border: `1px solid ${isDateOpen ? C.primary : C.creamDarker}`,
+                background: C.bgCard, border: `1px solid ${isDateOpen ? C.primary : C.creamDarker}`,
                 borderRadius: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.02)', cursor: 'pointer',
                 fontFamily: 'Outfit', fontSize: '13px', fontWeight: 600, color: C.charcoalMuted,
                 transition: 'all 0.2s'
@@ -350,7 +370,7 @@ export default function GamificationMonitoring() {
             {isDateOpen && (
               <>
                 <div style={{ position: 'fixed', inset: 0, zIndex: 40 }} onClick={() => setIsDateOpen(false)} />
-                <div style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, width: '280px', background: 'white', border: `1px solid ${C.creamDarker}`, borderRadius: '24px', boxShadow: '0 15px 40px rgba(0,0,0,0.12)', zIndex: 50, padding: '24px', animation: 'fadeInDown 0.2s cubic-bezier(0.16, 1, 0.3, 1)' }}>
+                <div style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, width: '280px', background: C.bgCard, border: `1px solid ${C.creamDarker}`, borderRadius: '24px', boxShadow: '0 15px 40px rgba(0,0,0,0.12)', zIndex: 50, padding: '24px', animation: 'fadeInDown 0.2s cubic-bezier(0.16, 1, 0.3, 1)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                     <p style={{ ...sLabel, marginBottom: 0 }}>Activity periods</p>
                     {(startDate || endDate) && (
@@ -457,7 +477,10 @@ export default function GamificationMonitoring() {
                   <CartesianGrid strokeDasharray="3 3" stroke="#EEEDE9" vertical={false} />
                   <XAxis dataKey="name" tick={{ fontFamily: 'Outfit', fontSize: 10, fill: C.muted, fontWeight: 600 }} axisLine={false} tickLine={false} />
                   <YAxis tick={{ fontFamily: 'Outfit', fontSize: 10, fill: C.muted, fontWeight: 600 }} axisLine={false} tickLine={false} />
-                  <Tooltip contentStyle={{ borderRadius: '16px', border: '1px solid #EEEDE9', boxShadow: '0 8px 32px rgba(0,0,0,0.06)', fontSize: '12px', fontFamily: 'Outfit' }} />
+                  <Tooltip 
+                    cursor={{ fill: 'rgba(124, 156, 132, 0.1)', rx: 10 }}
+                    contentStyle={{ borderRadius: '16px', border: '1px solid #EEEDE9', boxShadow: '0 8px 32px rgba(0,0,0,0.06)', fontSize: '12px', fontFamily: 'Outfit' }} 
+                  />
                   <Bar dataKey="value" fill={C.primary} radius={[10, 10, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
@@ -486,14 +509,15 @@ export default function GamificationMonitoring() {
                       ))}
                     </Pie>
                     <Tooltip
-                      contentStyle={{ borderRadius: '16px', border: `1px solid ${C.creamDarker}`, boxShadow: '0 8px 32px rgba(0,0,0,0.06)', fontSize: '12px' }}
+                      wrapperStyle={{ zIndex: 1000 }}
+                      contentStyle={{ borderRadius: '16px', border: `1px solid ${C.creamDarker}`, boxShadow: '0 8px 32px rgba(0,0,0,0.12)', fontSize: '12px', background: C.bgCard }}
                     />
                     <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{ fontFamily: 'Outfit', fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', color: C.muted, paddingTop: '15px' }} />
                   </PieChart>
                 </ResponsiveContainer>
 
                 {/* Central Label for Donut */}
-                <div style={{ position: 'absolute', top: '42%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center', pointerEvents: 'none' }}>
+                <div style={{ position: 'absolute', top: '42%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center', pointerEvents: 'none', zIndex: 0 }}>
                   <p style={{ margin: 0, fontSize: '28px', fontWeight: 800, color: C.charcoal, fontFamily: 'Outfit', lineHeight: 1 }}>{totalRedemptions}</p>
                   <p style={{ margin: 0, fontSize: '10px', fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: '4px' }}>Total Claims</p>
                 </div>
@@ -513,8 +537,8 @@ export default function GamificationMonitoring() {
                     type="text"
                     placeholder="Search performers..."
                     value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    style={{ padding: '8px 16px 8px 36px', width: '220px', background: 'white', border: `1px solid ${C.creamDarker}`, borderRadius: '12px', fontSize: '13px', fontFamily: 'Outfit', outline: 'none' }}
+                    onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+                    style={{ padding: '8px 16px 8px 36px', width: '220px', background: C.bgCard, border: `1px solid ${C.creamDarker}`, borderRadius: '12px', fontSize: '13px', fontFamily: 'Outfit', outline: 'none' }}
                   />
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: C.cream, padding: '4px', borderRadius: '12px', border: `1px solid ${C.creamDarker}` }}>
@@ -526,7 +550,7 @@ export default function GamificationMonitoring() {
                   ].map(f => (
                     <button
                       key={f.id}
-                      onClick={() => setXpFilter(f.id)}
+                      onClick={() => { setXpFilter(f.id); setCurrentPage(1); }}
                       style={{
                         padding: '6px 12px',
                         borderRadius: '8px',
@@ -559,15 +583,22 @@ export default function GamificationMonitoring() {
                   </tr>
                 </thead>
                 <tbody>
-                  {leaderboard.map((u, i) => {
+                  {leaderboard.length === 0 ? (
+                    <tr>
+                      <td colSpan="5" style={{ padding: '40px', textAlign: 'center', color: C.muted, fontSize: '13px', fontFamily: 'Outfit' }}>
+                        No performers found for the selected filters.
+                      </td>
+                    </tr>
+                  ) : leaderboard.slice((currentPage - 1) * 6, currentPage * 6).map((u, i) => {
+                    const actualIndex = (currentPage - 1) * 6 + i;
                     const maxXP = (leaderboard[0]?.xp || 1);
                     const profileStrength = Math.round(((u.xp || 0) / maxXP) * 100);
 
                     return (
-                      <tr key={u.id || i} style={{ borderBottom: `1px solid ${C.creamDarker}`, cursor: 'pointer' }} onMouseEnter={e => e.currentTarget.style.background = C.sage100 + '44'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                      <tr onClick={() => setSelectedUser(u)} key={u.id || i} style={{ borderBottom: `1px solid ${C.creamDarker}`, cursor: 'pointer' }} onMouseEnter={e => e.currentTarget.style.background = C.sage100 + '44'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                         <td style={{ padding: '16px 12px', textAlign: 'center' }}>
-                          <div style={{ width: '28px', height: '28px', borderRadius: '8px', background: i === 0 ? '#FEF3C7' : i === 1 ? '#F3F4F6' : i === 2 ? '#FFEDD5' : C.cream, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 800, color: i < 3 ? '#92400E' : C.charcoalMuted }}>
-                            {i === 0 ? '👑' : i + 1}
+                          <div style={{ margin: '0 auto', width: '28px', height: '28px', borderRadius: '8px', background: actualIndex === 0 ? '#FEF3C7' : actualIndex === 1 ? '#F3F4F6' : actualIndex === 2 ? '#FFEDD5' : C.cream, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 800, color: actualIndex < 3 ? '#92400E' : C.charcoalMuted }}>
+                            {actualIndex === 0 ? '👑' : actualIndex + 1}
                           </div>
                         </td>
                         <td style={{ padding: '16px 0' }}>
@@ -605,12 +636,45 @@ export default function GamificationMonitoring() {
                 </tbody>
               </table>
             </div>
+
+            {leaderboard.length > 0 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 0 0 0', borderTop: `1px solid ${C.creamDarker}` }}>
+                <span style={{ fontSize: '12px', color: C.muted, fontFamily: 'Outfit', fontWeight: 600 }}>
+                  Showing {leaderboard.slice((currentPage - 1) * 6, currentPage * 6).length} of {leaderboard.length} performers
+                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <button
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    style={{ padding: '6px 14px', borderRadius: '10px', border: `1px solid ${C.creamDarker}`, background: C.bgCard, fontFamily: 'Outfit', fontSize: '12px', fontWeight: 600, color: C.charcoal, cursor: currentPage === 1 ? 'default' : 'pointer', opacity: currentPage === 1 ? 0.4 : 1 }}
+                  >
+                    Previous
+                  </button>
+                  {[...Array(Math.max(1, Math.ceil(leaderboard.length / 6)))].map((_, i) => (
+                    <button 
+                      key={i}
+                      onClick={() => setCurrentPage(i + 1)}
+                      style={{ width: '32px', height: '32px', borderRadius: '10px', border: currentPage === i + 1 ? `1px solid ${C.primary}` : `1px solid ${C.creamDarker}`, background: currentPage === i + 1 ? C.primary : C.bgCard, fontFamily: 'Outfit', fontSize: '12px', fontWeight: 700, color: currentPage === i + 1 ? 'white' : C.charcoal, cursor: 'pointer', transition: 'all 0.2s' }}
+                    >
+                      {i + 1}
+                    </button>
+                  ))}
+                  <button
+                    onClick={() => setCurrentPage(p => Math.min(Math.max(1, Math.ceil(leaderboard.length / 6)), p + 1))}
+                    disabled={currentPage >= Math.ceil(leaderboard.length / 6)}
+                    style={{ padding: '6px 14px', borderRadius: '10px', border: `1px solid ${C.creamDarker}`, background: C.bgCard, fontFamily: 'Outfit', fontSize: '12px', fontWeight: 600, color: C.charcoal, cursor: currentPage >= Math.ceil(leaderboard.length / 6) ? 'default' : 'pointer', opacity: currentPage >= Math.ceil(leaderboard.length / 6) ? 0.4 : 1 }}
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
       {/* --- HIDDEN FORMAL PAPER REPORT (PRINT-ONLY CAPTURE) --- */}
       <div style={{ position: 'fixed', left: '-2000px', top: '0', width: '794px', pointerEvents: 'none', zIndex: -1 }}>
-        <div ref={paperRef} style={{ background: 'white' }}>
+        <div ref={paperRef} style={{ background: C.bgCard }}>
           <ReportContent
             leaderboard={leaderboard}
             filteredUsers={filteredUsers}
@@ -620,6 +684,7 @@ export default function GamificationMonitoring() {
             levelDistribution={levelDistribution}
             activeRate={activeRate}
             dailyEarningTrend={dailyEarningTrend}
+            isPreview={false}
           />
         </div>
       </div>
@@ -629,7 +694,7 @@ export default function GamificationMonitoring() {
         onClose={() => setIsPreviewOpen(false)}
         onDownload={handleExportPDF}
         isExporting={isExporting}
-        title="Engagement & Gamification Audit"
+        title="Engagement and Gamification Audit"
       >
         <ReportContent
           leaderboard={leaderboard}
@@ -640,8 +705,62 @@ export default function GamificationMonitoring() {
           levelDistribution={levelDistribution}
           activeRate={activeRate}
           dailyEarningTrend={dailyEarningTrend}
+          isPreview={true}
         />
       </ReportPreview>
+
+      {/* Selected User Modal */}
+      {selectedUser && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.3)', backdropFilter: 'blur(4px)' }} onClick={() => setSelectedUser(null)}>
+          <div style={{ ...cardStyle, width: '500px', padding: '40px', position: 'relative' }} onClick={e => e.stopPropagation()}>
+            <button onClick={() => setSelectedUser(null)} style={{ position: 'absolute', top: '20px', right: '20px', background: 'none', border: 'none', cursor: 'pointer', color: C.muted, fontSize: '18px' }}>✕</button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '24px' }}>
+              <div style={{ width: '56px', height: '56px', borderRadius: '16px', background: C.sage100, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: C.primary, fontSize: '24px' }}>
+                {(selectedUser.fullName || selectedUser.displayName || selectedUser.name || '?').charAt(0).toUpperCase()}
+              </div>
+              <div style={{ flex: 1 }}>
+                <h3 style={{ margin: 0, fontFamily: 'Outfit', fontSize: '20px', fontWeight: 700, color: C.charcoal }}>{selectedUser.fullName || selectedUser.displayName || selectedUser.name || 'Anonymous'}</h3>
+                <p style={{ margin: 0, fontSize: '12px', color: C.muted }}>{selectedUser.email || 'Private User'}</p>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <p style={{ margin: 0, fontSize: '10px', color: C.muted, textTransform: 'uppercase', fontWeight: 800 }}>Joined</p>
+                <p style={{ margin: 0, fontSize: '12px', color: C.charcoal, fontWeight: 600 }}>
+                  {selectedUser.createdAt?.toDate ? selectedUser.createdAt.toDate().toLocaleDateString() : (selectedUser.createdAt ? new Date(selectedUser.createdAt).toLocaleDateString() : 'Unknown')}
+                </p>
+              </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '24px' }}>
+              <div style={{ background: C.cream, padding: '16px', borderRadius: '12px', textAlign: 'center' }}>
+                <p style={{ margin: '0 0 4px 0', fontSize: '10px', fontWeight: 800, color: C.muted, textTransform: 'uppercase' }}>Level</p>
+                <p style={{ margin: 0, fontSize: '24px', fontWeight: 700, color: C.charcoal, fontFamily: 'Outfit' }}>{typeof selectedUser.level === 'number' ? selectedUser.level : selectedUser.level || 1}</p>
+              </div>
+              <div style={{ background: C.cream, padding: '16px', borderRadius: '12px', textAlign: 'center' }}>
+                <p style={{ margin: '0 0 4px 0', fontSize: '10px', fontWeight: 800, color: C.muted, textTransform: 'uppercase' }}>Total XP</p>
+                <p style={{ margin: 0, fontSize: '24px', fontWeight: 700, color: C.primary, fontFamily: 'Outfit' }}>{(selectedUser.xp || 0).toLocaleString()}</p>
+              </div>
+            </div>
+            
+            <div style={{ background: C.cream, padding: '16px', borderRadius: '12px', border: `1px solid ${C.creamDarker}`, maxHeight: '260px', overflowY: 'auto' }}>
+              <p style={{ margin: '0 0 12px 0', fontSize: '12px', fontWeight: 700, color: C.charcoal, display: 'flex', justifyContent: 'space-between' }}>
+                <span>Redeemed Rewards</span>
+                <span style={{ background: C.sage100, color: C.primary, padding: '2px 8px', borderRadius: '10px', fontSize: '10px' }}>{userRedemptions.length}</span>
+              </p>
+              {userRedemptions.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {userRedemptions.map((r, i) => (
+                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: C.bgCard, padding: '8px 12px', borderRadius: '8px', border: `1px solid ${C.creamDarker}` }}>
+                      <span style={{ fontSize: '12px', fontWeight: 600, color: C.charcoal }}>{r.name}</span>
+                      <span style={{ fontSize: '10px', color: C.muted }}>{r.date ? r.date.toLocaleDateString() : ''}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p style={{ margin: 0, fontSize: '12px', color: C.muted, textAlign: 'center', padding: '12px 0' }}>No rewards redeemed yet.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -654,7 +773,8 @@ function ReportContent({
   xpSourcesData,
   levelDistribution,
   activeRate,
-  dailyEarningTrend
+  dailyEarningTrend,
+  isPreview
 }) {
   const totalXP = filteredUsers.reduce((acc, u) => acc + (u.xp || 0), 0);
   const avgXP = Math.round(totalXP / (filteredUsers.length || 1));
@@ -693,12 +813,12 @@ function ReportContent({
   const growthRateText = growthRate >= 0 ? `+${growthRate}%` : `${growthRate}%`;
 
   return (
-    <div style={{ padding: '96px 96px 160px 96px', background: 'white', fontFamily: 'Outfit, sans-serif', color: '#1a1a1a' }}>
+    <div style={{ padding: '96px 96px 160px 96px', background: '#FFFFFF', fontFamily: 'Outfit, sans-serif', color: '#1a1a1a' }}>
       {/* Institutional Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '2px solid #7C9C84', paddingBottom: '20px', marginBottom: '40px' }}>
         <div>
           <h1 style={{ margin: 0, color: '#7C9C84', fontSize: '28px', fontWeight: 800 }}>Eunoia</h1>
-          <p style={{ margin: '4px 0 0 0', textTransform: 'uppercase', letterSpacing: '0.12em', fontSize: '10px', color: '#666', fontWeight: 700 }}>Gamification Analytics & Engagement Report</p>
+          <p style={{ margin: '4px 0 0 0', textTransform: 'uppercase', letterSpacing: '0.12em', fontSize: '10px', color: '#666', fontWeight: 700 }}>Gamification Analytics and Engagement Report</p>
         </div>
         <div style={{ textAlign: 'right' }}>
           <p style={{ margin: 0, fontSize: '11px', fontWeight: 800 }}>REF: ES-AUDIT-GAM-{new Date().getFullYear()}</p>
@@ -734,7 +854,7 @@ function ReportContent({
 
       {/* 2. XP & Economy Analysis */}
       <div style={sectionStyle}>
-        <h2 style={headingStyle}>2. XP & Economy Analysis</h2>
+        <h2 style={headingStyle}>2. XP and Economy Analysis</h2>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px' }}>
           <div style={{ background: '#FAFAF9', padding: '15px', borderRadius: '15px' }}>
             <p style={{ fontSize: '9px', fontWeight: 800, color: '#666', textTransform: 'uppercase', marginBottom: '15px' }}>XP Source Distribution</p>
@@ -786,8 +906,15 @@ function ReportContent({
            </ResponsiveContainer>
         </div>
         
-        {/* Force push metrics to next page by adding appropriate spacer for A4 segmentation */}
-        <div style={{ height: '180px' }} /> 
+        {/* Visual Page Break */}
+        {isPreview ? (
+          <div style={{ height: '200px', position: 'relative', display: 'flex', justifyContent: 'center', paddingTop: '40px' }}>
+            <div style={{ position: 'absolute', top: '45px', width: 'calc(100% + 192px)', left: '-96px', borderBottom: '2px dashed #BBCBC2' }}></div>
+            <span style={{ background: '#FFFFFF', padding: '0 15px', color: '#BBCBC2', fontSize: '10px', fontWeight: 800, letterSpacing: '0.1em', zIndex: 1, position: 'relative', height: '14px', lineHeight: '14px' }}>PAGE BREAK</span>
+          </div>
+        ) : (
+          <div style={{ height: '200px' }} />
+        )}
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px' }}>
            <div style={highlightBox}>

@@ -24,6 +24,38 @@ class _CounsellorProfileScreenState extends State<CounsellorProfileScreen> {
   final Color textColorMain = const Color(0xFF333333);
 
   bool _isLoggingOut = false;
+  String? _fallbackSpecialty;
+  String? _fallbackImageUrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchFallbackSpecialty();
+  }
+
+  Future<void> _fetchFallbackSpecialty() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    try {
+      final snap = await FirebaseFirestore.instance.collection('counsellor_applications').doc(user.uid).get();
+      if (snap.exists) {
+        final specs = snap.data()!['specializations'];
+        final photo = snap.data()!['profilePhotoUrl'];
+        if (mounted) {
+          setState(() {
+            if (specs != null && specs is List && specs.isNotEmpty) {
+              _fallbackSpecialty = specs[0].toString();
+            }
+            if (photo != null) {
+              _fallbackImageUrl = photo;
+            }
+          });
+        }
+      }
+    } catch (e) {
+      // Ignore
+    }
+  }
 
   Future<void> _signOut() async {
     setState(() => _isLoggingOut = true);
@@ -87,12 +119,12 @@ class _CounsellorProfileScreenState extends State<CounsellorProfileScreen> {
 
           final data = snapshot.data?.data() as Map<String, dynamic>? ?? {};
           final String name = data['fullName'] ?? user?.displayName ?? 'Expert Counselor';
-          final List<dynamic> specs = data['specializations'] ?? ['Mental Health Specialist'];
-          final String specialty = specs.isNotEmpty ? specs[0].toString() : 'Mental Health Specialist';
-          final String? profileImageUrl = data['counsellorImageUrl'] ?? data['profileImageUrl'] ?? data['image'] ?? user?.photoURL;
+          final List<dynamic>? specs = data['specializations'];
+          final String specialty = (specs != null && specs.isNotEmpty) ? specs[0].toString() : (_fallbackSpecialty ?? 'Mental Health Specialist');
+          final String? profileImageUrl = data['counsellorImageUrl'] ?? _fallbackImageUrl ?? data['profileImageUrl'] ?? data['image'] ?? user?.photoURL;
 
           return SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+            padding: const EdgeInsets.fromLTRB(24, 30, 24, 10),
             child: Column(
               children: [
                 // Expert Header (Clean Centered Identity)
@@ -102,8 +134,8 @@ class _CounsellorProfileScreenState extends State<CounsellorProfileScreen> {
                       alignment: Alignment.bottomRight,
                       children: [
                         Container(
-                          width: 100,
-                          height: 100,
+                          width: 130,
+                          height: 130,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             border: Border.all(color: Colors.white, width: 4),
@@ -116,19 +148,25 @@ class _CounsellorProfileScreenState extends State<CounsellorProfileScreen> {
                                 : DecorationImage(image: NetworkImage(profileImageUrl), fit: BoxFit.cover))
                                 : null,
                           ),
-                          child: profileImageUrl == null ? const Icon(Icons.person, size: 50, color: Color(0xFFBDBDBD)) : null,
+                          child: profileImageUrl == null
+                              ? const Icon(Icons.person, size: 65, color: Color(0xFFBBCBC2))
+                              : null,
                         ),
                         Container(
                           padding: const EdgeInsets.all(4),
-                          decoration: const BoxDecoration(color: Color(0xFF7C9C84), shape: BoxShape.circle),
-                          child: const Icon(Icons.verified_user_rounded, color: Colors.white, size: 16),
+                          decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                          child: const Icon(Icons.verified, color: Color(0xFF7C9C84), size: 28),
                         ),
                       ],
                     ),
                     const SizedBox(height: 16),
                     Text(
                       name,
-                      style: GoogleFonts.playfairDisplay(fontSize: 26, fontWeight: FontWeight.bold, color: textColorMain),
+                      style: GoogleFonts.outfit(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: textColorMain,
+                      ),
                     ),
                     Text(
                       specialty.toUpperCase(),

@@ -16,15 +16,18 @@ import { customConfirm } from '../../utils/dialogUtils';
 import ReportPreview from '../../components/ReportPreview';
 
 const C = {
-  primary: '#7C9C84',
-  primaryLight: '#BBCBC2',
-  cream: '#F6F5F2',
-  creamDarker: '#E5E4E0',
-  sage100: '#E5EDE8',
-  charcoal: '#333',
-  charcoalMuted: '#666',
-  muted: '#888',
+  primary: 'var(--primary-color, #7C9C84)',
+  primaryDark: 'var(--color-primary-dark, #66826D)',
+  primaryLight: 'var(--primary-light, #BBCBC2)',
+  sage100: 'var(--color-sage-100, #E5EDE8)',
+  cream: 'var(--bg-main, #F6F5F2)',
+  creamDarker: 'var(--border-color, #E5E4E0)',
+  charcoal: 'var(--text-darker, #333)',
+  charcoalMuted: 'var(--text-muted, #666)',
+  muted: 'var(--text-muted, #888)',
+  bgCard: 'var(--bg-card, white)',
   amber: '#d97706',
+  blue: '#3b82f6',
   rose: '#f43f5e'
 };
 
@@ -310,7 +313,7 @@ export default function CommunityMonitoring() {
       )}
 
       <div style={{ position: 'fixed', left: '-2000px', top: '0', width: '794px', pointerEvents: 'none', zIndex: -1 }}>
-        <div ref={paperRef} style={{ background: 'white' }}>
+        <div ref={paperRef} style={{ background: C.bgCard }}>
           <ReportContent 
             processedPosts={processedPosts} 
             chartData={chartData} 
@@ -342,7 +345,7 @@ export default function CommunityMonitoring() {
 
 function ReportContent({ processedPosts, chartData, stats, topPerformers, underPerformers }) {
   return (
-    <div style={{ padding: '96px 96px 160px 96px', background: '#FFFFFF', fontFamily: 'Outfit, sans-serif', color: '#333' }}>
+    <div style={{ padding: '96px 96px 160px 96px', background: C.bgCard, fontFamily: 'Outfit, sans-serif', color: '#333' }}>
       {/* Paper Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '2px solid #7C9C84', paddingBottom: '20px', marginBottom: '30px' }}>
         <div>

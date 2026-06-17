@@ -38,6 +38,9 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
     _tabController = TabController(length: 2, vsync: this);
     _tabController.addListener(() {
       if (_tabController.indexIsChanging) {
+        // Rebuild so the newly selected tab's slivers replace the old ones
+        // (no more TabBarView -- one continuous CustomScrollView now).
+        setState(() {});
         // Reset scroll position to top when tab changes
         if (_scrollController.hasClients) {
           _scrollController.animateTo(
@@ -262,10 +265,10 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
         child: const Icon(Icons.arrow_upward, color: Colors.white),
       ) : null,
       body: SafeArea(
-        child: NestedScrollView(
+        bottom: false,
+        child: CustomScrollView(
           controller: _scrollController,
-          headerSliverBuilder: (BuildContext context, bool innerBoxIsScrolled) {
-            return [
+          slivers: [
               // Header
               SliverToBoxAdapter(
                 child: Padding(
@@ -560,14 +563,8 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
                   ),
                 ),
               ),
-            ];
-          },
-          body: TabBarView(
-            controller: _tabController,
-            children: [
-              // --- MEDITATIONS TAB CONTENT ---
-              CustomScrollView(
-                slivers: [
+              if (_tabController.index == 0) ...[
+                // --- MEDITATIONS TAB CONTENT ---
                   const SliverToBoxAdapter(child: SizedBox(height: 24)),
                   SliverToBoxAdapter(
                     child: SingleChildScrollView(
@@ -865,12 +862,8 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
                     },
                   ),
                   const SliverToBoxAdapter(child: SizedBox(height: 32)),
-                ],
-              ),
-
-              // --- ARTICLES TAB CONTENT ---
-              CustomScrollView(
-                slivers: [
+              ] else ...[
+                // --- ARTICLES TAB CONTENT ---
                   const SliverToBoxAdapter(child: SizedBox(height: 24)),
                   SliverToBoxAdapter(
                     child: SingleChildScrollView(
@@ -1179,10 +1172,8 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
                     },
                   ),
                   const SliverToBoxAdapter(child: SizedBox(height: 32)),
-                ],
-              ),
-            ],
-          ),
+              ],
+          ],
         ),
       ),
     );

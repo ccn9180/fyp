@@ -3,10 +3,11 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, FileText, Music, Tag, Users, MessageSquare,
   BarChart2, Gift, Award, Settings, LogOut, ChevronDown, ChevronRight,
-  Menu, Bell, ShieldCheck, AlertTriangle
+  Menu, Bell, ShieldCheck, AlertTriangle, ShieldAlert, CheckCircle
 } from 'lucide-react';
 import { auth, db } from '../firebase';
 import { doc, getDoc, collection, query, where, getDocs, limit } from 'firebase/firestore';
+import { useCounsellorApplications, useChatSessions } from '../hooks/useFirestore';
 import logo from '../assets/leaf.png';
 
 const C = { primary: '#7C9C84', cream: '#F6F5F2', creamDarker: '#E5E4E0', charcoal: '#333', muted: '#888' };
@@ -41,7 +42,6 @@ const NAV = [
   {
     label: 'Gamification Hub', icon: Gift, children: [
       { label: 'Gamification Management', path: '/gamification/engagement', icon: Award },
-      { label: 'Reward System Settings', path: '/gamification/rewards', icon: Settings },
       { label: 'Gamification Metrics', path: '/monitoring/gamification', icon: BarChart2 },
     ]
   }
@@ -108,6 +108,92 @@ export default function AdminLayout({ children, onLogout }) {
   const [collapsed, setCollapsed] = useState(false);
   const [adminUser, setAdminUser] = useState({ name: 'Eunoia Admin', role: 'Super Admin', photo: null });
   const [showNotify, setShowNotify] = useState(false);
+  const [lastSeen, setLastSeen] = useState(() => parseInt(localStorage.getItem('adminLastSeenNotif')) || 0);
+  const navigate = useNavigate();
+
+  const { data: apps } = useCounsellorApplications();
+  const { data: chats } = useChatSessions();
+
+  const notifications = [];
+
+  // Map Pending Applications to Notifications
+  (apps || []).forEach(a => {
+    if ((a.status || '').toLowerCase() === 'pending') {
+      notifications.push({
+        id: a.id,
+        type: 'app',
+        title: 'New Application',
+        message: `${a.name || a.fullName || 'Anonymous'} applied.`,
+        time: a.submittedAt?.toDate ? a.submittedAt.toDate() : new Date(),
+        link: '/monitoring/applications',
+        color: '#d97706',
+        bg: '#fef3c7'
+      });
+    }
+  });
+
+  // Map Crisis Alerts to Notifications
+  (chats || []).forEach(c => {
+    if (c.crisisDetected || c.crisis_detected) {
+      notifications.push({
+        id: c.id,
+        type: 'crisis',
+        title: 'Crisis Alert',
+        message: `Crisis detected for ${c.userName || 'User'}.`,
+        time: c.createdAt?.toDate ? c.createdAt.toDate() : new Date(),
+        link: '/monitoring/crisis-center',
+        color: '#ef4444',
+        bg: '#fee2e2'
+      });
+    }
+  });
+
+  // Fallback Mock Data to match dashboard state
+  if (!apps || apps.length === 0) {
+    const MOCK_APPS = [
+      { id: 'm1', name: 'Dr. Elizabeth Chen', submittedAt: { toDate: () => new Date('2026-03-28') } },
+      { id: 'm2', name: 'Dr. Marcus Thorne', submittedAt: { toDate: () => new Date('2026-03-30') } },
+      { id: 'm3', name: 'Dr. Sarah Winters', submittedAt: { toDate: () => new Date('2026-03-15') } }
+    ];
+    MOCK_APPS.forEach(a => {
+       notifications.push({
+         id: a.id,
+         type: 'app',
+         title: 'New Application',
+         message: `${a.name} applied.`,
+         time: a.submittedAt.toDate(),
+         link: '/monitoring/applications',
+         color: '#d97706',
+         bg: '#fef3c7'
+       });
+    });
+  }
+
+  notifications.sort((a, b) => b.time - a.time);
+  const unreadCount = notifications.filter(n => n.time.getTime() > lastSeen).length;
+
+  const handleBellClick = () => {
+    if (showNotify) {
+      if (unreadCount > 0) {
+        const now = Date.now();
+        setLastSeen(now);
+        localStorage.setItem('adminLastSeenNotif', now.toString());
+      }
+      setShowNotify(false);
+    } else {
+      setShowNotify(true);
+    }
+  };
+
+  const handleNotificationClick = (link) => {
+    if (unreadCount > 0) {
+      const now = Date.now();
+      setLastSeen(now);
+      localStorage.setItem('adminLastSeenNotif', now.toString());
+    }
+    setShowNotify(false);
+    navigate(link);
+  };
 
   useEffect(() => {
     const fetchAdmin = async () => {
@@ -233,7 +319,7 @@ export default function AdminLayout({ children, onLogout }) {
               border: collapsed ? 'none' : `1px solid var(--border-color)`,
             }}>
               {adminUser.photo ? (
-                <img src={adminUser.photo} alt="P" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                <img src={adminUser.photo} alt="P" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={() => setAdminUser(prev => ({ ...prev, photo: null }))} />
               ) : (
                 <span style={{ color: 'white', fontWeight: 'bold', fontSize: '13px' }}>{adminUser.name?.charAt(0)}</span>
               )}
@@ -256,18 +342,50 @@ export default function AdminLayout({ children, onLogout }) {
           <div className="flex items-center gap-3">
             <div className="relative">
               <button
-                onClick={() => setShowNotify(!showNotify)}
+                onClick={handleBellClick}
                 className={`relative p-2 border-none cursor-pointer rounded-xl transition-all ${showNotify ? 'bg-[#E8ECE9]' : 'bg-transparent'}`}
               >
                 <Bell size={18} className={showNotify ? "text-primary" : "text-muted"} />
-                <span className="absolute top-2 right-2 w-2 h-2 bg-red-400 rounded-full border-2 border-white" />
+                {unreadCount > 0 && <span className="absolute top-2 right-2 w-2 h-2 bg-red-400 rounded-full border-2 border-white" />}
               </button>
 
               {showNotify && (
-                <div className="absolute top-full right-0 mt-3 w-72 bg-white rounded-2xl shadow-[0_15px_50px_rgba(0,0,0,0.12)] p-5 z-[100]">
-                  <p className="font-body font-semibold text-sm mb-2">Recent Activity</p>
-                  <div className="text-xs text-muted text-center py-3">No new system notifications.</div>
-                </div>
+                <>
+                  <style>{`
+                    .notify-scroll-hidden::-webkit-scrollbar { width: 4px; }
+                    .notify-scroll-hidden::-webkit-scrollbar-track { background: transparent; }
+                    .notify-scroll-hidden::-webkit-scrollbar-thumb { background: rgba(138, 150, 143, 0.2); border-radius: 10px; }
+                    .notify-scroll-hidden:hover::-webkit-scrollbar-thumb { background: rgba(138, 150, 143, 0.4); }
+                  `}</style>
+                  <div className="absolute top-full right-0 mt-3 w-80 bg-white rounded-2xl shadow-[0_15px_50px_rgba(0,0,0,0.12)] p-5 z-[100] border border-cream-darker">
+                    <div className="flex justify-between items-center mb-4">
+                      <p className="font-body font-semibold text-charcoal">Recent Activity</p>
+                      {unreadCount > 0 && <span className="text-[10px] font-bold bg-primary text-white px-2 py-0.5 rounded-full">{unreadCount} New</span>}
+                    </div>
+                    
+                    {notifications.length === 0 ? (
+                      <div className="text-xs text-muted text-center py-6 flex flex-col items-center">
+                        <CheckCircle size={24} className="text-cream-darker mb-2" />
+                        <p>No new system notifications.</p>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col gap-3 max-h-[300px] overflow-y-auto notify-scroll-hidden pr-2 -mr-2">
+                      {notifications.map(n => (
+                        <div key={n.id} className="flex gap-3 items-start p-2 rounded-xl hover:bg-cream transition-colors cursor-pointer" onClick={() => handleNotificationClick(n.link)}>
+                          <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-0.5" style={{ background: n.bg, color: n.color }}>
+                            {n.type === 'crisis' ? <ShieldAlert size={14} /> : <FileText size={14} />}
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold text-charcoal mb-0.5">{n.title}</p>
+                            <p className="text-[11px] text-muted leading-tight mb-1">{n.message}</p>
+                            <p className="text-[9px] font-semibold text-muted/60">{n.time.toLocaleDateString()} {n.time.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
+                          </div>
+                        </div>
+                      ))}
+                      </div>
+                    )}
+                  </div>
+                </>
               )}
             </div>
 

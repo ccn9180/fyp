@@ -176,6 +176,7 @@ class _CounsellorScreenState extends State<CounsellorScreen> {
               }
 
               return SafeArea(
+                bottom: false,
                 child: CustomScrollView(
                   controller: _scrollController,
                   physics: const AlwaysScrollableScrollPhysics(),
@@ -547,28 +548,43 @@ class _CounsellorScreenState extends State<CounsellorScreen> {
                                 final name = data['fullName'] ?? 'Expert Counselor';
                                 final specs = data['specializations'] as List<dynamic>? ?? ['Mental Health Specialist'];
                                 final specialty = specs.isNotEmpty ? specs[0].toString() : 'Expert Therapist';
-                                final rating = data['rating']?.toString() ?? '5.0';
+                                final rating = data['rating']?.toString() ?? '0.0';
                                 final reviews = data['reviews']?.toString() ?? '0';
                                 final price = data['price']?.toString() ?? 'Free';
                                 final imageUrl = data['counsellorImageUrl'] ?? data['profileImageUrl'];
                                 final isOnline = data['isOnline'] ?? true;
 
-                                 return Padding(
-                                  padding: const EdgeInsets.only(bottom: 16),
-                                  child: _buildRecommendedCard(
-                                    context,
-                                    name: name,
-                                    specialty: specialty,
-                                    rating: rating,
-                                    reviews: reviews,
-                                    price: (price.toLowerCase() == 'free' || price == '0' || price.trim().isEmpty) ? 'Free' : (price.startsWith('RM') ? price : 'RM$price/hr'),
-                                    imageUrl: imageUrl ?? 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&q=80&w=2000',
-                                    isOnline: isOnline,
-                                    isFavorite: _userFavorites.contains(doc.id),
-                                    bgColor: const Color(0xFFF3E7C9),
-                                    data: {...data, 'id': doc.id}, 
-                                  ),
-                                );
+                                 return FutureBuilder<DocumentSnapshot?>(
+                                   future: (data['counsellorImageUrl'] == null) 
+                                      ? FirebaseFirestore.instance.collection('counsellor_applications').doc(doc.id).get()
+                                      : Future.value(null),
+                                   builder: (context, appSnap) {
+                                     String? finalImageUrl = imageUrl;
+                                     if (appSnap.hasData && appSnap.data != null && appSnap.data!.exists) {
+                                       final appData = appSnap.data!.data() as Map<String, dynamic>?;
+                                       if (appData != null && appData['profilePhotoUrl'] != null) {
+                                         finalImageUrl = appData['profilePhotoUrl'];
+                                       }
+                                     }
+
+                                     return Padding(
+                                      padding: const EdgeInsets.only(bottom: 16),
+                                      child: _buildRecommendedCard(
+                                        context,
+                                        name: name,
+                                        specialty: specialty,
+                                        rating: rating,
+                                        reviews: reviews,
+                                        price: (price.toLowerCase() == 'free' || price == '0' || price.trim().isEmpty) ? 'Free' : (price.startsWith('RM') ? price : 'RM$price/hr'),
+                                        imageUrl: finalImageUrl ?? 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&q=80&w=2000',
+                                        isOnline: isOnline,
+                                        isFavorite: _userFavorites.contains(doc.id),
+                                        bgColor: const Color(0xFFF3E7C9),
+                                        data: {...data, 'id': doc.id}, 
+                                      ),
+                                    );
+                                   }
+                                 );
                               },
                               childCount: filteredCounsellors.length,
                             ),
@@ -1006,20 +1022,6 @@ class _CounsellorScreenState extends State<CounsellorScreen> {
                     ),
                   ),
                 ),
-                if (isOnline)
-                  Positioned(
-                    right: 0,
-                    bottom: 0,
-                    child: Container(
-                      width: 14,
-                      height: 14,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF5AB46E), // online green
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 2),
-                      ),
-                    ),
-                  ),
               ],
             ),
             const SizedBox(width: 16),

@@ -160,7 +160,7 @@ export default function CrisisCenter() {
       <div className="flex flex-row items-center justify-between gap-4 mb-2">
         <div>
           <p className="section-label mb-0.5">Safety Oversight</p>
-          <h2 className="font-display font-semibold text-2xl text-charcoal whitespace-nowrap">Crisis & Safety Center</h2>
+          <h2 className="font-display font-semibold text-2xl text-charcoal whitespace-nowrap">Crisis and Safety Center</h2>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
@@ -376,7 +376,7 @@ export default function CrisisCenter() {
                         </td>
                         <td className="py-4 px-4">
                           <div className="flex items-center gap-2">
-                            <div className="w-7 h-7 rounded-full bg-cream-darker flex items-center justify-center text-charcoal font-bold text-xs border border-white shadow-sm">
+                            <div className="w-9 h-9 rounded-full bg-primary flex items-center justify-center text-white font-bold text-sm border-2 border-white shadow-md">
                               {alert.userName.charAt(0)}
                             </div>
                             <span className="font-semibold text-charcoal">{alert.userName}</span>
@@ -451,7 +451,7 @@ export default function CrisisCenter() {
 
       {/* Alert Viewing Modal (Simplified for now) */}
       {viewingAlert && (
-        <div className="fixed inset-0 bg-charcoal/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
+        <div className="fixed inset-0 bg-charcoal/70 z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-[32px] w-full max-w-lg overflow-hidden shadow-2xl border border-red-100 flex flex-col animate-in zoom-in-95 duration-200">
             <div className="p-8 pb-4 flex justify-between items-start border-b border-cream-darker">
               <div>
@@ -504,7 +504,7 @@ export default function CrisisCenter() {
       )}
       {/* --- HIDDEN FORMAL PAPER REPORT (PRINT-ONLY CAPTURE) --- */}
       <div style={{ position: 'fixed', left: '-2000px', top: '0', width: '794px', pointerEvents: 'none', zIndex: -1 }}>
-        <div ref={paperRef} style={{ background: 'white' }}>
+        <div ref={paperRef} style={{ background: '#FFFFFF' }}>
           <ReportContent chartData={chartData} unifiedAlerts={unifiedAlerts} totalAlerts={totalAlerts} chatAlerts={chatAlerts} diaryAlerts={diaryAlerts} />
         </div>
       </div>
@@ -514,7 +514,7 @@ export default function CrisisCenter() {
         onClose={() => setIsPreviewOpen(false)}
         onDownload={handleExportPDF}
         isExporting={isExporting}
-        title="Crisis & Safety Centre Audit"
+        title="Crisis and Safety Center Audit"
       >
         <ReportContent chartData={chartData} unifiedAlerts={unifiedAlerts} totalAlerts={totalAlerts} chatAlerts={chatAlerts} diaryAlerts={diaryAlerts} />
       </ReportPreview>
@@ -539,7 +539,7 @@ function ReportContent({ chartData, unifiedAlerts, totalAlerts, chatAlerts, diar
   ];
 
   return (
-    <div style={{ padding: '96px 96px 160px 96px', background: 'white', fontFamily: 'Outfit, sans-serif', color: '#1a1a1a' }}>
+    <div style={{ padding: '96px 96px 160px 96px', background: '#FFFFFF', fontFamily: 'Outfit, sans-serif', color: '#1a1a1a' }}>
       {/* Formal Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '2px solid #7C9C84', paddingBottom: '20px', marginBottom: '40px' }}>
         <div>

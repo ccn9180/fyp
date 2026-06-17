@@ -6,9 +6,23 @@ import 'resource_preview_screen.dart';
 import 'meditation_player.dart';
 import 'article_detail.dart';
 
-class DetailedHistoryScreen extends StatelessWidget {
+class DetailedHistoryScreen extends StatefulWidget {
   final String? filterType;
   const DetailedHistoryScreen({super.key, this.filterType});
+
+  @override
+  State<DetailedHistoryScreen> createState() => _DetailedHistoryScreenState();
+}
+
+class _DetailedHistoryScreenState extends State<DetailedHistoryScreen> {
+  final Color primaryGreen = const Color(0xFF7C9C84);
+  late String? _selectedFilter;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedFilter = widget.filterType;
+  }
 
   String _formatDateHeader(DateTime date) {
     final now = DateTime.now();
@@ -39,11 +53,12 @@ class DetailedHistoryScreen extends StatelessWidget {
       backgroundColor: const Color(0xFFF2F1EC),
       appBar: AppBar(
         title: Text(
-          'Your Journey History',
-          style: GoogleFonts.playfairDisplay(
+          'YOUR JOURNEY HISTORY',
+          style: GoogleFonts.outfit(
             color: const Color(0xFF333333),
-            fontSize: 24,
-            fontWeight: FontWeight.w600,
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 1.5,
           ),
         ),
         backgroundColor: const Color(0xFFF2F1EC),
@@ -61,7 +76,57 @@ class DetailedHistoryScreen extends StatelessWidget {
           style: GoogleFonts.outfit(fontSize: 16, color: Colors.grey),
         ),
       )
-          : StreamBuilder<QuerySnapshot>(
+          : _buildHistoryList(currentUser),
+    );
+  }
+
+  Widget _buildFilterRow() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 24),
+      child: Row(
+        children: [
+          _buildFilterChip('All', null),
+          const SizedBox(width: 10),
+          _buildFilterChip('Meditations', 'meditation'),
+          const SizedBox(width: 10),
+          _buildFilterChip('Articles', 'article'),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilterChip(String label, String? value) {
+    final bool isSelected = _selectedFilter == value;
+    return GestureDetector(
+      onTap: () => setState(() => _selectedFilter = value),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
+        decoration: BoxDecoration(
+          color: isSelected ? primaryGreen : Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            if (!isSelected)
+              BoxShadow(
+                color: Colors.black.withOpacity(0.02),
+                blurRadius: 8,
+                offset: const Offset(0, 3),
+              ),
+          ],
+        ),
+        child: Text(
+          label,
+          style: GoogleFonts.outfit(
+            color: isSelected ? Colors.white : const Color(0xFF888888),
+            fontSize: 13,
+            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHistoryList(User currentUser) {
+    return StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
             .collection('user_activity')
             .where('userId', isEqualTo: currentUser.uid)
@@ -124,10 +189,10 @@ class DetailedHistoryScreen extends StatelessWidget {
           }
 
           var docs = snapshot.data!.docs.toList();
-          if (filterType != null) {
+          if (_selectedFilter != null) {
             docs = docs.where((doc) {
               final data = doc.data() as Map<String, dynamic>;
-              return data['type'] == filterType;
+              return data['type'] == _selectedFilter;
             }).toList();
           }
           
@@ -159,13 +224,16 @@ class DetailedHistoryScreen extends StatelessWidget {
 
           return ListView.builder(
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-            itemCount: groupedData.length + 1,
+            itemCount: groupedData.length + 2,
             itemBuilder: (context, index) {
               if (index == 0) {
-                return _buildSummaryCard(docs.length, filterType);
+                return _buildSummaryCard(docs.length, _selectedFilter);
+              }
+              if (index == 1) {
+                return _buildFilterRow();
               }
 
-              final dateKey = groupedData.keys.elementAt(index - 1);
+              final dateKey = groupedData.keys.elementAt(index - 2);
               final items = groupedData[dateKey]!;
 
               return Column(
@@ -309,7 +377,6 @@ class DetailedHistoryScreen extends StatelessWidget {
             },
           );
         },
-      ),
     );
   }
 

@@ -10,9 +10,40 @@ import 'shared_chats.dart';
 import 'counsellor_availability_management.dart';
 import 'counsellor_notifications.dart';
 
-class CounsellorDashboardScreen extends StatelessWidget {
+class CounsellorDashboardScreen extends StatefulWidget {
   final Function(int)? onTabChange;
   const CounsellorDashboardScreen({super.key, this.onTabChange});
+
+  @override
+  State<CounsellorDashboardScreen> createState() => _CounsellorDashboardScreenState();
+}
+
+class _CounsellorDashboardScreenState extends State<CounsellorDashboardScreen> {
+  String? _fallbackImageUrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchFallbackImageUrl();
+  }
+
+  Future<void> _fetchFallbackImageUrl() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    try {
+      final snap = await FirebaseFirestore.instance.collection('counsellor_applications').doc(user.uid).get();
+      if (snap.exists) {
+        final photo = snap.data()!['profilePhotoUrl'];
+        if (photo != null && mounted) {
+          setState(() {
+            _fallbackImageUrl = photo;
+          });
+        }
+      }
+    } catch (e) {
+      // Ignore
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -38,7 +69,7 @@ class CounsellorDashboardScreen extends StatelessWidget {
               if (userSnapshot.hasData && userSnapshot.data!.exists) {
                 final data = userSnapshot.data!.data() as Map<String, dynamic>;
                 name = data['fullName']?.split(' ')[0] ?? 'Expert';
-                profileUrl = data['counsellorImageUrl'] ?? data['profileImageUrl'];
+                profileUrl = data['counsellorImageUrl'] ?? _fallbackImageUrl ?? data['profileImageUrl'];
                 if (data['rating'] != null) {
                   rating = data['rating'].toString();
                 }
@@ -165,11 +196,11 @@ class CounsellorDashboardScreen extends StatelessWidget {
                       _buildSquareCard(Icons.calendar_month_rounded, 'Availability', 'Manage slots', () {
                         Navigator.push(context, MaterialPageRoute(builder: (context) => const CounsellorAvailabilityManagement()));
                       }),
-                      _buildSquareCard(Icons.analytics_rounded, 'Insights', 'Clinical growth', () => onTabChange?.call(3)),
+                      _buildSquareCard(Icons.analytics_rounded, 'Insights', 'Clinical growth', () => widget.onTabChange?.call(3)),
                       _buildSquareCard(Icons.history_rounded, 'History', 'Audit sessions', () {
                         Navigator.push(context, MaterialPageRoute(builder: (context) => const SessionHistoryScreen()));
                       }),
-                      _buildSquareCard(Icons.chat_bubble_outline_rounded, 'Client Data', 'Shared insights', () {
+                      _buildSquareCard(Icons.people_alt_rounded, 'Client Directory', 'View & filter clients', () {
                         Navigator.push(context, MaterialPageRoute(builder: (context) => const SharedChatsScreen()));
                       }),
                     ],

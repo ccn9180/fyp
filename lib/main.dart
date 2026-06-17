@@ -9,6 +9,7 @@ import 'package:flutter_stripe/flutter_stripe.dart';
 import 'app_localizations.dart';
 import 'UserAccount/login.dart';
 import 'UserAccount/welcome_screen.dart';
+import 'UserAccount/maintenance_screen.dart';
 import 'User/main_screen.dart';
 import 'Counsellor/counsellor_main.dart';
 import 'services/fcm_service.dart';
@@ -73,10 +74,20 @@ class AuthGate extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<User?>(
-      stream: FirebaseAuth.instance.authStateChanges(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
+    return StreamBuilder<DocumentSnapshot>(
+      stream: FirebaseFirestore.instance.collection('system').doc('settings').snapshots(),
+      builder: (context, sysSnapshot) {
+        if (sysSnapshot.hasData && sysSnapshot.data!.exists) {
+          final data = sysSnapshot.data!.data() as Map<String, dynamic>?;
+          if (data != null && data['maintenanceMode'] == true) {
+            return const MaintenanceScreen();
+          }
+        }
+
+        return StreamBuilder<User?>(
+          stream: FirebaseAuth.instance.authStateChanges(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
           return Container(color: const Color(0xFFF2F1EC));
         }
 
@@ -135,6 +146,8 @@ class AuthGate extends StatelessWidget {
           );  
         }
         return const WelcomeScreen();
+          },
+        );
       },
     );
   }

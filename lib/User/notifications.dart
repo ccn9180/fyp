@@ -259,7 +259,17 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             return const Center(child: CircularProgressIndicator(color: Color(0xFF7C9C84)));
           }
 
-          final docs = snapshot.data!.docs;
+          final allDocs = snapshot.data!.docs;
+          const bookingTypes = {
+            'booking', 'new_booking', 'booking_cancelled', 'cancelled',
+            'payment', 'income', 'reminder', 'reschedule', 'rescheduled',
+            'cancellation',
+          };
+          final docs = allDocs.where((doc) {
+            final data = doc.data() as Map<String, dynamic>;
+            final type = (data['type'] ?? '').toString().toLowerCase();
+            return !bookingTypes.contains(type);
+          }).toList();
 
           if (docs.isEmpty) {
             return Center(

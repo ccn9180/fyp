@@ -99,7 +99,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
       body: SingleChildScrollView(
         controller: _scrollController,
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+        padding: const EdgeInsets.fromLTRB(24, 30, 24, 10),
         child: Column(
           children: [
             StreamBuilder<DocumentSnapshot>(
@@ -144,8 +144,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         alignment: Alignment.bottomRight,
                         children: [
                           Container(
-                            width: 100,
-                            height: 100,
+                            width: 130,
+                            height: 130,
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
                               border: Border.all(color: Colors.white, width: 4),
@@ -171,7 +171,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             child: profileImageUrl == null
                                 ? const Icon(
                               Icons.person,
-                              size: 50,
+                              size: 65,
                               color: Color(0xFFBBCBC2),
                             )
                                 : null,
@@ -182,7 +182,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               color: Colors.white,
                               shape: BoxShape.circle,
                             ),
-                            child: const Icon(Icons.verified, color: Color(0xFF7C9C84), size: 20),
+                            child: const Icon(Icons.verified, color: Color(0xFF7C9C84), size: 28),
                           ),
                         ],
                       ),
@@ -1096,7 +1096,7 @@ Future<void> _handleRequestAction(BuildContext context, String currentUserId, St
               ),
               const SizedBox(height: 12),
               Text(
-                'Are you sure you want to remove this connection? You won\'t be able to see their private updates.',
+                'Are you sure you want to remove this connection?\n\nThis person is still your trusted recipient for safety alerts.',
                 textAlign: TextAlign.center,
                 style: GoogleFonts.outfit(
                   fontSize: 14,

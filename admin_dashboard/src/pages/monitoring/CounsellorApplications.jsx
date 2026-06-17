@@ -1,53 +1,65 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, updateDoc, serverTimestamp, setDoc, collection, addDoc } from 'firebase/firestore';
 import { db } from '../../firebase';
-import { useCounsellorApplications } from '../../hooks/useFirestore';
+import { useUsers, useCounsellorApplications, useDeactivationRequests } from '../../hooks/useFirestore';
 import { CheckCircle, XCircle, Clock, ExternalLink, ShieldCheck, Mail, BookOpen, Award, Loader2, Search, Filter, X, LayoutGrid, ChevronDown, Download, Upload } from 'lucide-react';
-import { customAlert, customConfirm } from '../../utils/dialogUtils';
+import { customAlert, customConfirm, customPrompt } from '../../utils/dialogUtils';
 import {
     BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
     CartesianGrid
 } from 'recharts';
 
 const C = {
-    primary: '#7C9C84',
-    primaryDark: '#6A8671',
-    cream: '#F6F5F2',
-    creamDarker: '#E5E4E0',
-    sage100: '#E5EDE8',
-    charcoal: '#333',
-    charcoalMuted: '#666',
-    muted: '#888',
-    white: '#ffffff',
-    error: '#f87171',
-    success: '#10b981',
-    amber: '#d97706'
+  primary: 'var(--primary-color, #7C9C84)',
+  primaryDark: 'var(--color-primary-dark, #66826D)',
+  primaryLight: 'var(--primary-light, #BBCBC2)',
+  sage100: 'var(--color-sage-100, #E5EDE8)',
+  cream: 'var(--bg-main, #F6F5F2)',
+  creamDarker: 'var(--border-color, #E5E4E0)',
+  charcoal: 'var(--text-darker, #333)',
+  charcoalMuted: 'var(--text-muted, #666)',
+  muted: 'var(--text-muted, #888)',
+  bgCard: 'var(--bg-card, white)',
+  amber: '#d97706',
+  blue: '#3b82f6',
+  rose: '#f43f5e',
+  error: '#f43f5e',
+  success: '#10b981'
 };
 
 const sLabel = { fontFamily: 'Outfit', fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: C.muted };
-const badge = (type) => ({
-    display: 'inline-flex',
-    padding: '4px 12px',
-    borderRadius: '999px',
-    fontSize: '11px',
-    fontWeight: 700,
-    fontFamily: 'Outfit',
-    background: type === 'approved' ? '#ecfdf5' : type === 'rejected' ? '#fef2f2' : '#fffbeb',
-    color: type === 'approved' ? C.success : type === 'rejected' ? C.error : C.amber,
-    textTransform: 'capitalize'
-});
+const badge = (type) => {
+    const isApp = type === 'approved';
+    const isRej = type === 'rejected';
+    return {
+        display: 'inline-flex',
+        padding: '4px 12px',
+        borderRadius: '999px',
+        fontSize: '11px',
+        fontWeight: 700,
+        fontFamily: 'Outfit',
+        background: isApp ? 'rgba(16, 185, 129, 0.15)' : isRej ? 'rgba(244, 63, 94, 0.15)' : 'rgba(217, 119, 6, 0.15)',
+        color: isApp ? '#10b981' : isRej ? '#f43f5e' : '#d97706',
+        textTransform: 'capitalize'
+    };
+};
 
 export default function CounsellorApplications() {
     const { data: applications, loading } = useCounsellorApplications();
+    const { data: deactivationRequests, loading: dLoading } = useDeactivationRequests();
+    const { data: users } = useUsers();
     const [processing, setProcessing] = useState(null);
     const [viewingApp, setViewingApp] = useState(null);
     const [preloading, setPreloading] = useState(null);
+    const [viewingDeactivation, setViewingDeactivation] = useState(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [specialtyFilter, setSpecialtyFilter] = useState('All');
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const [pendingPage, setPendingPage] = useState(1);
     const [historyPage, setHistoryPage] = useState(1);
+    const [deactPage, setDeactPage] = useState(1);
     const itemsPerPage = 4;
+    const deactItemsPerPage = 3;
 
     const viewDetailsWithPreload = (app) => {
         if (processing || preloading) return;
@@ -75,14 +87,31 @@ export default function CounsellorApplications() {
                 reviewedAt: serverTimestamp()
             });
 
-            // 2. If Approved, update User Role
+            // 2. If Approved, update User Role using setDoc merge (works even if doc doesn't exist)
             if (newStatus === 'approved') {
-                const userRef = doc(db, 'users', app.uid);
-                await updateDoc(userRef, {
+                const userId = app.uid || app.id;
+                await setDoc(doc(db, 'users', userId), {
                     role: 'counsellor',
                     specialization: Array.isArray(app.specializations) ? app.specializations[0] : 'General',
+                    specializations: app.specializations || [],
                     specialties: app.specializations || [],
+                    languages: app.languages || [],
+                    experience: app.experience || '',
+                    bio: app.bio || '',
+                    price: app.price || 'Free',
+                    phone: app.phone || '',
+                    counsellorImageUrl: app.profilePhotoUrl || null,
                     updatedAt: serverTimestamp()
+                }, { merge: true });
+
+                // Send approval notification
+                await addDoc(collection(db, 'notifications'), {
+                    to: userId,
+                    title: 'Application Approved! 🎉',
+                    message: 'Congratulations! Your counsellor application has been approved. You can now access the counsellor portal.',
+                    type: 'general',
+                    timestamp: serverTimestamp(),
+                    isRead: false
                 });
             }
 
@@ -93,6 +122,37 @@ export default function CounsellorApplications() {
             await customAlert("Error processing application. Check console.", "Error");
         } finally {
             setProcessing(null);
+        }
+    };
+
+    const handleUpdateDeactivationStatus = async (id, uid, status) => {
+        try {
+            let reason = '';
+            if (status === 'Rejected') {
+                reason = await customPrompt("Please provide a reason for rejecting this deactivation request. The counsellor will see this reason.", "Reject Deactivation");
+                if (reason === null) return; 
+            }
+            
+            const reqRef = doc(db, 'deactivation_requests', id);
+            await updateDoc(reqRef, {
+                status: status,
+                rejectionReason: reason || null,
+                updatedAt: serverTimestamp()
+            });
+
+            if (status === 'Approved') {
+                const userRef = doc(db, 'users', uid);
+                await setDoc(userRef, { role: 'user' }, { merge: true });
+
+                const appRef = doc(db, 'counsellor_applications', uid);
+                await setDoc(appRef, { status: 'deactivated' }, { merge: true });
+            }
+
+            await customAlert(`Request ${status.toLowerCase()} successfully`, 'Success');
+            setViewingDeactivation(null);
+        } catch (error) {
+            console.error('Error updating deactivation request:', error);
+            await customAlert(`Failed to update request: ${error.message}`, 'Error');
         }
     };
 
@@ -146,6 +206,10 @@ export default function CounsellorApplications() {
     const paginatedHistory = history.slice((historyPage - 1) * itemsPerPage, historyPage * itemsPerPage);
     const totalPendingPages = Math.ceil(pending.length / itemsPerPage);
     const totalHistoryPages = Math.ceil(history.length / itemsPerPage);
+
+    const pendingDeactivations = (deactivationRequests || []).filter(r => r.status === 'Pending');
+    const paginatedDeactivations = pendingDeactivations.slice((deactPage - 1) * deactItemsPerPage, deactPage * deactItemsPerPage);
+    const totalDeactPages = Math.ceil(pendingDeactivations.length / deactItemsPerPage);
 
     return (
         <div className="flex flex-col gap-6" style={{ position: 'relative' }}>
@@ -221,9 +285,9 @@ export default function CounsellorApplications() {
                 ) : (
                     <>
                         {/* Recruitment Funnel Stats - Matched to Analytics Style */}
-                        <div className="grid grid-cols-3 gap-3 mb-2">
+                        <div className="grid grid-cols-5 gap-3 mb-2">
                             <div className="card flex items-center gap-3 py-3 px-4 animate-in slide-in-from-top-4 duration-300">
-                                <div className="w-8 h-8 rounded-full bg-amber-50 flex items-center justify-center text-amber-600 shrink-0 border border-amber-100 shadow-sm">
+                                <div className="w-8 h-8 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-500 shrink-0 border border-amber-500/20 shadow-sm">
                                     <Clock size={16} />
                                 </div>
                                 <div>
@@ -233,7 +297,7 @@ export default function CounsellorApplications() {
                             </div>
 
                             <div className="card flex items-center gap-3 py-3 px-4 animate-in slide-in-from-top-4 duration-500 delay-75">
-                                <div className="w-8 h-8 rounded-full bg-sage-50 flex items-center justify-center text-primary shrink-0 border border-primary/10 shadow-sm">
+                                <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary shrink-0 border border-primary/20 shadow-sm">
                                     <ShieldCheck size={16} />
                                 </div>
                                 <div>
@@ -245,13 +309,35 @@ export default function CounsellorApplications() {
                             </div>
 
                             <div className="card flex items-center gap-3 py-3 px-4 animate-in slide-in-from-top-4 duration-700 delay-150">
-                                <div className="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center text-charcoal-muted shrink-0 border border-gray-100 shadow-sm">
+                                <div className="w-8 h-8 rounded-full bg-gray-500/20 flex items-center justify-center text-charcoal-muted shrink-0 border border-gray-500/20 shadow-sm">
                                     <XCircle size={16} />
                                 </div>
                                 <div>
                                     <p className="section-label mb-0 !text-[9px] !leading-none text-charcoal-muted/70 whitespace-nowrap uppercase tracking-widest">Rejected Counsellor</p>
                                     <h3 className="font-display text-lg font-bold text-charcoal">
                                         {allApps.filter(a => a.status === 'rejected').length}
+                                    </h3>
+                                </div>
+                            </div>
+
+                            <div className="card flex items-center gap-3 py-3 px-4 animate-in slide-in-from-top-4 duration-700 delay-200">
+                                <div className="w-8 h-8 rounded-full bg-rose-500/20 flex items-center justify-center text-rose-500 shrink-0 border border-rose-500/20 shadow-sm">
+                                    <Clock size={16} />
+                                </div>
+                                <div>
+                                    <p className="section-label mb-0 !text-[9px] !leading-none text-rose-600/70 whitespace-nowrap uppercase tracking-widest">Pending Deactivation</p>
+                                    <h3 className="font-display text-lg font-bold text-charcoal">{pendingDeactivations.length}</h3>
+                                </div>
+                            </div>
+
+                            <div className="card flex items-center gap-3 py-3 px-4 animate-in slide-in-from-top-4 duration-700 delay-300">
+                                <div className="w-8 h-8 rounded-full bg-red-500/20 flex items-center justify-center text-red-500 shrink-0 border border-red-500/20 shadow-sm">
+                                    <XCircle size={16} />
+                                </div>
+                                <div>
+                                    <p className="section-label mb-0 !text-[9px] !leading-none text-red-600/70 whitespace-nowrap uppercase tracking-widest">Deactivated Counsellor</p>
+                                    <h3 className="font-display text-lg font-bold text-charcoal">
+                                        {allApps.filter(a => a.status === 'deactivated').length}
                                     </h3>
                                 </div>
                             </div>
@@ -263,19 +349,21 @@ export default function CounsellorApplications() {
                                 <h3 className="font-display text-lg font-semibold">Pending Intake ({pending.length})</h3>
                             </div>
 
-                            {pending.length === 0 ? (
-                                <p style={{ fontFamily: 'Outfit', fontSize: '14px', color: C.muted, textAlign: 'center', padding: '40px 0' }}>No active applications to review.</p>
-                            ) : (
-                                <div className="overflow-x-auto">
-                                    <table className="w-full font-body text-sm">
-                                        <thead>
-                                            <tr style={{ borderBottom: `1px solid ${C.creamDarker}`, textAlign: 'left' }}>
-                                                {['Applicant', 'Expertise', 'Exp.', 'License', 'Action'].map(h => (
-                                                    <th key={h} className="pb-3 font-semibold section-label text-[10px]">{h}</th>
-                                                ))}
+                            <div className="overflow-x-auto">
+                                <table className="w-full font-body text-sm">
+                                    <thead>
+                                        <tr style={{ borderBottom: `1px solid ${C.creamDarker}`, textAlign: 'left' }}>
+                                            {['Applicant', 'Expertise', 'Exp.', 'Action'].map(h => (
+                                                <th key={h} className="pb-3 font-semibold section-label text-[10px]">{h}</th>
+                                            ))}
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {pending.length === 0 && (
+                                            <tr>
+                                                <td colSpan="5" className="py-8 text-center text-charcoal-muted opacity-60 font-body text-[14px]">No active applications to review.</td>
                                             </tr>
-                                        </thead>
-                                        <tbody>
+                                        )}
                                             {paginatedPending.map(app => (
                                                 <tr
                                                     key={app.id}
@@ -285,15 +373,9 @@ export default function CounsellorApplications() {
                                                 >
                                                     <td className="py-4 pr-4">
                                                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                                            <div style={{
-                                                                width: '32px', height: '32px',
-                                                                background: preloading === app.id ? 'transparent' : C.sage100,
-                                                                borderRadius: '50%',
-                                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                                fontWeight: 'bold', color: C.primary, fontSize: '11px', flexShrink: 0, overflow: 'hidden'
-                                                            }}>
+                                                            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-primary text-[11px] shrink-0 overflow-hidden ${preloading === app.id ? 'bg-transparent' : 'bg-primary/20'}`}>
                                                                 {preloading === app.id ? <Loader2 size={16} className="animate-spin" /> : (
-                                                                    app.profileImageUrl ? <img src={app.profileImageUrl} alt="profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (app.name ? app.name.charAt(0).toUpperCase() : '?')
+                                                                    app.profilePhotoUrl ? <img src={app.profilePhotoUrl} alt="profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (app.name ? app.name.charAt(0).toUpperCase() : '?')
                                                                 )}
                                                             </div>
                                                             <div>
@@ -307,14 +389,13 @@ export default function CounsellorApplications() {
                                                             {(app.specializations || []).slice(0, 2).map(s => <span key={s} style={{ fontSize: '10px', background: C.cream, padding: '2px 8px', borderRadius: '4px', color: C.charcoalMuted }}>{s}</span>)}
                                                         </div>
                                                     </td>
-                                                    <td className="py-4 pr-4 font-medium text-charcoal">{app.experience} Yrs</td>
-                                                    <td className="py-4 pr-4 font-mono text-xs text-charcoal-muted">{app.licenseNumber}</td>
+                                                    <td className="py-4 pr-4 font-medium text-charcoal">{app.experience}</td>
                                                     <td className="py-4">
                                                         <div style={{ display: 'flex', gap: '8px' }} onClick={e => e.stopPropagation()}>
                                                             <button
                                                                 onClick={() => handleAction(app, 'rejected')}
                                                                 disabled={processing === app.id}
-                                                                className="bg-red-50 hover:bg-red-100 text-red-500 px-3 py-1.5 rounded-xl text-[11px] font-bold shadow-sm transition-all border border-red-100"
+                                                                className="bg-red-500/10 hover:bg-red-500/20 text-red-500 px-3 py-1.5 rounded-xl text-[11px] font-bold shadow-sm transition-all border border-red-500/20"
                                                             >
                                                                 Reject
                                                             </button>
@@ -333,36 +414,37 @@ export default function CounsellorApplications() {
                                     </table>
 
                                     {/* Pagination for Pending */}
-                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '20px' }}>
-                                        <p style={{ ...sLabel, textTransform: 'none', color: C.muted }}>Showing {paginatedPending.length} of {pending.length} pending</p>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                            <button 
-                                                disabled={pendingPage === 1} 
-                                                onClick={() => setPendingPage(p => p - 1)} 
-                                                style={{ padding: '6px 14px', borderRadius: '10px', border: `1px solid ${C.creamDarker}`, background: 'white', fontFamily: 'Outfit', fontSize: '12px', fontWeight: 600, color: C.charcoal, cursor: pendingPage === 1 ? 'default' : 'pointer', opacity: pendingPage === 1 ? 0.4 : 1 }}
-                                            >
-                                                Previous
-                                            </button>
-                                            {[...Array(totalPendingPages)].map((_, i) => (
+                                    {pending.length > 0 && (
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '20px' }}>
+                                            <p style={{ ...sLabel, textTransform: 'none', color: C.muted }}>Showing {paginatedPending.length} of {pending.length} pending</p>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                                 <button 
-                                                    key={i}
-                                                    onClick={() => setPendingPage(i + 1)}
-                                                    style={{ width: '32px', height: '32px', borderRadius: '10px', border: pendingPage === i + 1 ? `1px solid ${C.primary}` : `1px solid ${C.creamDarker}`, background: pendingPage === i + 1 ? C.primary : 'white', fontFamily: 'Outfit', fontSize: '12px', fontWeight: 700, color: pendingPage === i + 1 ? 'white' : C.charcoal, cursor: 'pointer', transition: 'all 0.2s' }}
+                                                    disabled={pendingPage === 1} 
+                                                    onClick={() => setPendingPage(p => p - 1)} 
+                                                    style={{ padding: '6px 14px', borderRadius: '10px', border: `1px solid ${C.creamDarker}`, background: C.bgCard, fontFamily: 'Outfit', fontSize: '12px', fontWeight: 600, color: C.charcoal, cursor: pendingPage === 1 ? 'default' : 'pointer', opacity: pendingPage === 1 ? 0.4 : 1 }}
                                                 >
-                                                    {i + 1}
+                                                    Previous
                                                 </button>
-                                            ))}
-                                            <button 
-                                                disabled={pendingPage >= totalPendingPages || totalPendingPages === 0} 
-                                                onClick={() => setPendingPage(p => p + 1)} 
-                                                style={{ padding: '6px 14px', borderRadius: '10px', border: `1px solid ${C.creamDarker}`, background: 'white', fontFamily: 'Outfit', fontSize: '12px', fontWeight: 600, color: C.charcoal, cursor: (pendingPage >= totalPendingPages || totalPendingPages === 0) ? 'default' : 'pointer', opacity: (pendingPage >= totalPendingPages || totalPendingPages === 0) ? 0.4 : 1 }}
-                                            >
-                                                Next
-                                            </button>
+                                                {[...Array(totalPendingPages)].map((_, i) => (
+                                                    <button 
+                                                        key={i}
+                                                        onClick={() => setPendingPage(i + 1)}
+                                                        style={{ width: '32px', height: '32px', borderRadius: '10px', border: pendingPage === i + 1 ? `1px solid ${C.primary}` : `1px solid ${C.creamDarker}`, background: pendingPage === i + 1 ? C.primary : 'white', fontFamily: 'Outfit', fontSize: '12px', fontWeight: 700, color: pendingPage === i + 1 ? 'white' : C.charcoal, cursor: 'pointer', transition: 'all 0.2s' }}
+                                                    >
+                                                        {i + 1}
+                                                    </button>
+                                                ))}
+                                                <button 
+                                                    disabled={pendingPage >= totalPendingPages || totalPendingPages === 0} 
+                                                    onClick={() => setPendingPage(p => p + 1)} 
+                                                    style={{ padding: '6px 14px', borderRadius: '10px', border: `1px solid ${C.creamDarker}`, background: C.bgCard, fontFamily: 'Outfit', fontSize: '12px', fontWeight: 600, color: C.charcoal, cursor: (pendingPage >= totalPendingPages || totalPendingPages === 0) ? 'default' : 'pointer', opacity: (pendingPage >= totalPendingPages || totalPendingPages === 0) ? 0.4 : 1 }}
+                                                >
+                                                    Next
+                                                </button>
+                                            </div>
                                         </div>
-                                    </div>
+                                    )}
                                 </div>
-                            )}
                         </div>
 
                         {/* Application Detail Modal Overlay */}
@@ -373,7 +455,7 @@ export default function CounsellorApplications() {
                                 onClick={() => setViewingApp(null)}
                             >
                                 <div
-                                    style={{ position: 'relative', background: 'white', width: '100%', maxWidth: '1000px', borderRadius: '32px', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.35)', animation: 'modalIn 0.3s cubic-bezier(0.16, 1, 0.3, 1)' }}
+                                    style={{ position: 'relative', background: C.bgCard, width: '100%', maxWidth: '1000px', borderRadius: '32px', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.35)', animation: 'modalIn 0.3s cubic-bezier(0.16, 1, 0.3, 1)' }}
                                     onClick={e => e.stopPropagation()}
                                 >
                                     {/* Close Button */}
@@ -381,7 +463,7 @@ export default function CounsellorApplications() {
                                         onClick={() => setViewingApp(null)}
                                         style={{
                                             position: 'absolute', top: '24px', right: '32px', zIndex: 10,
-                                            border: 'none', background: 'white', borderRadius: '50%', width: '44px', height: '44px',
+                                            border: 'none', background: C.bgCard, borderRadius: '50%', width: '44px', height: '44px',
                                             cursor: 'pointer', color: C.muted, display: 'flex', alignItems: 'center', justifyContent: 'center',
                                             boxShadow: '0 4px 12px rgba(0,0,0,0.1)', transition: 'all 0.2s'
                                         }}
@@ -403,10 +485,13 @@ export default function CounsellorApplications() {
 
                                     <div style={{ display: 'flex', flexDirection: 'column', maxHeight: '92vh' }}>
                                         {/* Modal Header */}
-                                        <div style={{ padding: '32px 40px', borderBottom: `1px solid ${C.creamDarker}`, background: 'white', flexShrink: 0 }}>
+                                        <div style={{ padding: '32px 40px', borderBottom: `1px solid ${C.creamDarker}`, background: C.bgCard, flexShrink: 0 }}>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-                                                <div style={{ width: '64px', height: '64px', background: C.sage100, borderRadius: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', color: C.primary, fontSize: '24px' }}>
-                                                    {viewingApp.name ? viewingApp.name.charAt(0).toUpperCase() : '?'}
+                                                <div style={{ width: '64px', height: '64px', background: C.sage100, borderRadius: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', color: C.primary, fontSize: '24px', overflow: 'hidden' }}>
+                                                    {viewingApp.profilePhotoUrl
+                                                        ? <img src={viewingApp.profilePhotoUrl} alt="profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                                        : (viewingApp.name ? viewingApp.name.charAt(0).toUpperCase() : '?')
+                                                    }
                                                 </div>
                                                 <div>
                                                     <h4 style={{ margin: 0, fontFamily: 'Playfair Display', fontSize: '28px', color: C.charcoal }}>{viewingApp.name}</h4>
@@ -425,7 +510,7 @@ export default function CounsellorApplications() {
                                                 <section style={{ marginBottom: '40px' }}>
                                                     <h5 style={sLabel}>Self-Introduction & Motivation</h5>
                                                     <p style={{ marginTop: '16px', fontSize: '16px', lineHeight: 1.8, color: C.charcoal, fontStyle: 'italic', background: C.cream, padding: '24px', borderRadius: '24px', borderLeft: `4px solid ${C.primary}` }}>
-                                                        "{viewingApp.motivation}"
+                                                        "{viewingApp.bio || viewingApp.motivation}"
                                                     </p>
                                                 </section>
 
@@ -434,25 +519,21 @@ export default function CounsellorApplications() {
                                                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', margin: '20px 0' }}>
                                                         {(viewingApp.specializations || []).map(s => <span key={s} style={{ fontSize: '12px', background: C.sage100, padding: '8px 20px', borderRadius: '20px', color: C.primary, fontWeight: 600, border: `1px solid ${C.primary}22` }}>{s}</span>)}
                                                     </div>
-                                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginTop: '24px' }}>
-                                                        <div style={{ padding: '20px', background: '#f8faf9', borderRadius: '16px', border: '1px solid #eee' }}>
-                                                            <p style={sLabel}>License Number</p>
-                                                            <p style={{ margin: '8px 0 0 0', fontWeight: 700, fontSize: '18px', color: C.charcoal }}>{viewingApp.licenseNumber}</p>
-                                                        </div>
-                                                        <div style={{ padding: '20px', background: '#f8faf9', borderRadius: '16px', border: '1px solid #eee' }}>
+                                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '20px', marginTop: '24px' }}>
+                                                        <div className="bg-white border border-cream-darker" style={{ padding: '20px', borderRadius: '16px' }}>
                                                             <p style={sLabel}>Clinical Experience</p>
-                                                            <p style={{ margin: '8px 0 0 0', fontWeight: 700, fontSize: '18px', color: C.charcoal }}>{viewingApp.experience} Years</p>
+                                                            <p className="text-charcoal" style={{ margin: '8px 0 0 0', fontWeight: 700, fontSize: '18px' }}>{viewingApp.experience}</p>
                                                         </div>
                                                     </div>
                                                 </section>
                                             </div>
 
                                             {/* Right Side: Certificate & Actions */}
-                                            <div style={{ padding: '40px', background: '#FAFAFA', display: 'flex', flexDirection: 'column', overflowY: 'auto' }} className="custom-scrollbar">
+                                            <div style={{ padding: '40px', display: 'flex', flexDirection: 'column', overflowY: 'auto' }} className="custom-scrollbar bg-cream">
                                                 <h5 style={sLabel}>Professional Credential</h5>
-                                                <div style={{ flex: 1, marginTop: '20px', minHeight: '300px', background: 'white', borderRadius: '24px', overflow: 'hidden', border: `1px solid ${C.creamDarker}`, position: 'relative', boxShadow: 'inset 0 2px 10px rgba(0,0,0,0.05)' }}>
+                                                <div style={{ flex: 1, marginTop: '20px', minHeight: '300px', background: C.bgCard, borderRadius: '24px', overflow: 'hidden', border: `1px solid ${C.creamDarker}`, position: 'relative', boxShadow: 'inset 0 2px 10px rgba(0,0,0,0.05)' }}>
                                                     <img src={viewingApp.certificateUrl} style={{ width: '100%', height: '100%', objectFit: 'contain', padding: '10px' }} alt="Certificate" />
-                                                    <a href={viewingApp.certificateUrl} target="_blank" rel="noreferrer" style={{ position: 'absolute', bottom: '20px', right: '20px', padding: '10px 20px', background: 'white', borderRadius: '14px', boxShadow: '0 8px 16px rgba(0,0,0,0.1)', textDecoration: 'none', color: C.primary, fontSize: '12px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px', transition: 'all 0.2s' }}>
+                                                    <a href={viewingApp.certificateUrl} target="_blank" rel="noreferrer" style={{ position: 'absolute', bottom: '20px', right: '20px', padding: '10px 20px', background: C.bgCard, borderRadius: '14px', boxShadow: '0 8px 16px rgba(0,0,0,0.1)', textDecoration: 'none', color: C.primary, fontSize: '12px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px', transition: 'all 0.2s' }}>
                                                         <ExternalLink size={16} /> Full View
                                                     </a>
                                                 </div>
@@ -462,9 +543,9 @@ export default function CounsellorApplications() {
                                                         <button
                                                             onClick={() => handleAction(viewingApp, 'rejected')}
                                                             disabled={processing === viewingApp.id}
-                                                            style={{ flex: 1, padding: '18px', background: 'white', color: C.error, border: `1px solid ${C.error}44`, borderRadius: '18px', fontWeight: 600, fontSize: '14px', cursor: 'pointer', transition: 'all 0.2s' }}
-                                                            onMouseEnter={e => { e.currentTarget.style.background = '#fff5f5'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
-                                                            onMouseLeave={e => { e.currentTarget.style.background = 'white'; e.currentTarget.style.transform = 'translateY(0)'; }}
+                                                            style={{ flex: 1, padding: '18px', background: C.bgCard, color: C.error, border: `1px solid ${C.error}44`, borderRadius: '18px', fontWeight: 600, fontSize: '14px', cursor: 'pointer', transition: 'all 0.2s' }}
+                                                            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(244,63,94,0.1)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
+                                                            onMouseLeave={e => { e.currentTarget.style.background = C.bgCard; e.currentTarget.style.transform = 'translateY(0)'; }}
                                                         >
                                                             Reject
                                                         </button>
@@ -512,14 +593,8 @@ export default function CounsellorApplications() {
                                             >
                                                 <td className="py-3 pr-4">
                                                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                                        <div style={{
-                                                            width: '32px', height: '32px',
-                                                            background: C.sage100,
-                                                            borderRadius: '50%',
-                                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                            fontWeight: 'bold', color: C.primary, fontSize: '11px', flexShrink: 0, overflow: 'hidden'
-                                                        }}>
-                                                            {app.profileImageUrl ? <img src={app.profileImageUrl} alt="profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (app.name ? app.name.charAt(0).toUpperCase() : '?')}
+                                                        <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center font-bold text-primary text-[11px] shrink-0 overflow-hidden">
+                                                            {app.profilePhotoUrl ? <img src={app.profilePhotoUrl} alt="profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (app.name ? app.name.charAt(0).toUpperCase() : '?')}
                                                         </div>
                                                         <div>
                                                             <div style={{ fontWeight: 600 }} className="text-charcoal group-hover:text-primary transition-colors">{app.name}</div>
@@ -545,46 +620,152 @@ export default function CounsellorApplications() {
                                         ))}
                                         {history.length === 0 && (
                                             <tr>
-                                                <td colSpan="5" className="py-8 text-center text-charcoal-muted opacity-60">No application history found.</td>
+                                                <td colSpan="5" className="py-8 text-center text-charcoal-muted opacity-60 font-body text-[14px]">No application history found.</td>
                                             </tr>
                                         )}
                                     </tbody>
                                 </table>
 
                                 {/* Pagination for History */}
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '20px' }}>
-                                    <p style={{ ...sLabel, textTransform: 'none', color: C.muted }}>Showing {paginatedHistory.length} of {history.length} reviews</p>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                        <button 
-                                            disabled={historyPage === 1} 
-                                            onClick={() => setHistoryPage(p => p - 1)} 
-                                            style={{ padding: '6px 14px', borderRadius: '10px', border: `1px solid ${C.creamDarker}`, background: 'white', fontFamily: 'Outfit', fontSize: '12px', fontWeight: 600, color: C.charcoal, cursor: historyPage === 1 ? 'default' : 'pointer', opacity: historyPage === 1 ? 0.4 : 1 }}
-                                        >
-                                            Previous
-                                        </button>
-                                        {[...Array(totalHistoryPages)].map((_, i) => (
+                                {history.length > 0 && (
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '20px' }}>
+                                        <p style={{ ...sLabel, textTransform: 'none', color: C.muted }}>Showing {paginatedHistory.length} of {history.length} reviews</p>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                             <button 
-                                                key={i}
-                                                onClick={() => setHistoryPage(i + 1)}
-                                                style={{ width: '32px', height: '32px', borderRadius: '10px', border: historyPage === i + 1 ? `1px solid ${C.primary}` : `1px solid ${C.creamDarker}`, background: historyPage === i + 1 ? C.primary : 'white', fontFamily: 'Outfit', fontSize: '12px', fontWeight: 700, color: historyPage === i + 1 ? 'white' : C.charcoal, cursor: 'pointer', transition: 'all 0.2s' }}
+                                                disabled={historyPage === 1} 
+                                                onClick={() => setHistoryPage(p => p - 1)} 
+                                                style={{ padding: '6px 14px', borderRadius: '10px', border: `1px solid ${C.creamDarker}`, background: C.bgCard, fontFamily: 'Outfit', fontSize: '12px', fontWeight: 600, color: C.charcoal, cursor: historyPage === 1 ? 'default' : 'pointer', opacity: historyPage === 1 ? 0.4 : 1 }}
                                             >
-                                                {i + 1}
+                                                Previous
                                             </button>
-                                        ))}
-                                        <button 
-                                            disabled={historyPage >= totalHistoryPages || totalHistoryPages === 0} 
-                                            onClick={() => setHistoryPage(p => p + 1)} 
-                                            style={{ padding: '6px 14px', borderRadius: '10px', border: `1px solid ${C.creamDarker}`, background: 'white', fontFamily: 'Outfit', fontSize: '12px', fontWeight: 600, color: C.charcoal, cursor: (historyPage >= totalHistoryPages || totalHistoryPages === 0) ? 'default' : 'pointer', opacity: (historyPage >= totalHistoryPages || totalHistoryPages === 0) ? 0.4 : 1 }}
-                                        >
-                                            Next
-                                        </button>
+                                            {[...Array(totalHistoryPages)].map((_, i) => (
+                                                <button 
+                                                    key={i}
+                                                    onClick={() => setHistoryPage(i + 1)}
+                                                    style={{ width: '32px', height: '32px', borderRadius: '10px', border: historyPage === i + 1 ? `1px solid ${C.primary}` : `1px solid ${C.creamDarker}`, background: historyPage === i + 1 ? C.primary : 'white', fontFamily: 'Outfit', fontSize: '12px', fontWeight: 700, color: historyPage === i + 1 ? 'white' : C.charcoal, cursor: 'pointer', transition: 'all 0.2s' }}
+                                                >
+                                                    {i + 1}
+                                                </button>
+                                            ))}
+                                            <button 
+                                                disabled={historyPage >= totalHistoryPages || totalHistoryPages === 0} 
+                                                onClick={() => setHistoryPage(p => p + 1)} 
+                                                style={{ padding: '6px 14px', borderRadius: '10px', border: `1px solid ${C.creamDarker}`, background: C.bgCard, fontFamily: 'Outfit', fontSize: '12px', fontWeight: 600, color: C.charcoal, cursor: (historyPage >= totalHistoryPages || totalHistoryPages === 0) ? 'default' : 'pointer', opacity: (historyPage >= totalHistoryPages || totalHistoryPages === 0) ? 0.4 : 1 }}
+                                            >
+                                                Next
+                                            </button>
+                                        </div>
                                     </div>
-                                </div>
+                                )}
                             </div>
                         </div>
+                        
+                        {/* Pending Deactivation Requests Section */}
+                        {pendingDeactivations.length > 0 && (
+                            <div className="card mt-6">
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
+                                    <XCircle size={18} color={C.error} />
+                                    <h3 className="font-display text-lg font-semibold text-rose-600">Pending Deactivation Requests</h3>
+                                </div>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full font-body text-sm">
+                                        <thead>
+                                            <tr style={{ borderBottom: `1px solid ${C.creamDarker}`, textAlign: 'left' }}>
+                                                <th className="pb-2 font-semibold section-label text-[10px]">Counsellor</th>
+                                                <th className="pb-2 font-semibold section-label text-[10px]">Reason</th>
+                                                <th className="pb-2 font-semibold section-label text-[10px]">Date</th>
+                                                <th className="pb-2 font-semibold section-label text-[10px] text-right">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {paginatedDeactivations.map(req => (
+                                                <tr 
+                                                    key={req.id} 
+                                                    style={{ borderBottom: `1px solid ${C.creamDarker}` }} 
+                                                    className="hover:bg-rose-50/50 transition cursor-pointer"
+                                                    onClick={() => setViewingDeactivation(req)}
+                                                >
+                                                    <td className="py-3 pr-4">
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                                            <div className="w-8 h-8 rounded-full bg-rose-100 flex items-center justify-center font-bold text-rose-600 text-[11px] overflow-hidden">
+                                                                {(() => {
+                                                                    const cApp = applications?.find(a => a.uid === req.counsellorId || a.id === req.counsellorId);
+                                                                    const avatarUrl = cApp?.profilePhotoUrl;
+                                                                    return avatarUrl ? <img src={avatarUrl} alt="avatar" style={{width:'100%',height:'100%',objectFit:'cover'}}/> : (req.counsellorName?.charAt(0) || '?');
+                                                                })()}
+                                                            </div>
+                                                            <div>
+                                                                <div style={{ fontWeight: 600 }} className="text-charcoal">{req.counsellorName}</div>
+                                                                <div style={{ fontSize: '11px', color: C.muted }}>{req.counsellorEmail}</div>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    <td className="py-3 pr-4 text-charcoal-muted max-w-[200px] truncate" title={req.reason}>
+                                                        {req.reason || 'No reason provided'}
+                                                    </td>
+                                                    <td className="py-3 pr-4 text-muted">
+                                                        {req.requestedAt ? (req.requestedAt.toDate ? req.requestedAt.toDate().toLocaleDateString() : new Date(req.requestedAt).toLocaleDateString()) : 'N/A'}
+                                                    </td>
+                                                    <td className="py-3 text-right">
+                                                        <div className="flex justify-end gap-2">
+                                                            <button
+                                                                onClick={(e) => { e.stopPropagation(); handleUpdateDeactivationStatus(req.id, req.counsellorId || req.uid, 'Rejected'); }}
+                                                                className="px-3 py-1.5 rounded-lg text-xs font-bold text-charcoal-muted hover:bg-cream border border-cream-darker transition-colors"
+                                                            >
+                                                                Reject
+                                                            </button>
+                                                            <button
+                                                                onClick={(e) => { e.stopPropagation(); handleUpdateDeactivationStatus(req.id, req.counsellorId || req.uid, 'Approved'); }}
+                                                                className="px-3 py-1.5 rounded-lg text-xs font-bold bg-rose-50 text-rose-600 hover:bg-rose-100 transition-colors"
+                                                            >
+                                                                Approve Deactivation
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                {/* Pagination for Deactivations */}
+                                {pendingDeactivations.length > 0 && (
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '20px' }}>
+                                        <p style={{ ...sLabel, textTransform: 'none', color: C.muted }}>Showing {paginatedDeactivations.length} of {pendingDeactivations.length} requests</p>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                            <button 
+                                                disabled={deactPage === 1} 
+                                                onClick={() => setDeactPage(p => p - 1)} 
+                                                style={{ padding: '6px 14px', borderRadius: '10px', border: `1px solid ${C.creamDarker}`, background: C.bgCard, fontFamily: 'Outfit', fontSize: '12px', fontWeight: 600, color: C.charcoal, cursor: deactPage === 1 ? 'default' : 'pointer', opacity: deactPage === 1 ? 0.4 : 1 }}
+                                            >
+                                                Previous
+                                            </button>
+                                            {[...Array(totalDeactPages)].map((_, i) => (
+                                                <button 
+                                                    key={i}
+                                                    onClick={() => setDeactPage(i + 1)}
+                                                    style={{ width: '32px', height: '32px', borderRadius: '10px', border: deactPage === i + 1 ? `1px solid ${C.primary}` : `1px solid ${C.creamDarker}`, background: deactPage === i + 1 ? C.primary : 'white', fontFamily: 'Outfit', fontSize: '12px', fontWeight: 700, color: deactPage === i + 1 ? 'white' : C.charcoal, cursor: 'pointer', transition: 'all 0.2s' }}
+                                                >
+                                                    {i + 1}
+                                                </button>
+                                            ))}
+                                            <button 
+                                                disabled={deactPage === totalDeactPages || totalDeactPages === 0} 
+                                                onClick={() => setDeactPage(p => p + 1)} 
+                                                style={{ padding: '6px 14px', borderRadius: '10px', border: `1px solid ${C.creamDarker}`, background: C.bgCard, fontFamily: 'Outfit', fontSize: '12px', fontWeight: 600, color: C.charcoal, cursor: (deactPage === totalDeactPages || totalDeactPages === 0) ? 'default' : 'pointer', opacity: (deactPage === totalDeactPages || totalDeactPages === 0) ? 0.4 : 1 }}
+                                            >
+                                                Next
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </>
                 )}
             </div>
+
+
         </div>
     );
 }
