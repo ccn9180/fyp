@@ -5,6 +5,7 @@ class BackendConfig {
   static String? _cachedBaseUrl;
 
   static final List<String> _baseUrlsToTry = [
+    'http://192.168.0.108:5000',  // Host PC's new local Wi-Fi IP
     'http://192.168.101.97:5000', // Host PC's current local Wi-Fi IP
     'http://172.20.10.3:5000',    // Host PC's old local IP
     'http://192.168.68.115:5000', // Host PC's older local IP
@@ -44,5 +45,23 @@ class BackendConfig {
   // Helper method to clear cache (e.g. for retrying)
   static void clearCache() {
     _cachedBaseUrl = null;
+  }
+
+  /// Runs [attempt] against the current base URL. If it throws (connection
+  /// refused, timeout, dropped Wi-Fi, etc.), clears the cache and retries
+  /// [attempt] once more against a freshly re-discovered URL before giving
+  /// up. This is what makes a stale cached URL (e.g. after the phone briefly
+  /// drops Wi-Fi) self-heal within the same action instead of requiring the
+  /// next screen/message to trigger rediscovery.
+  static Future<T> withRetry<T>(Future<T> Function(String baseUrl) attempt) async {
+    final String firstUrl = await getBaseUrl();
+    try {
+      return await attempt(firstUrl);
+    } catch (e) {
+      debugPrint('BackendConfig: request to $firstUrl failed ($e), clearing cache and retrying once.');
+      clearCache();
+      final String retryUrl = await getBaseUrl();
+      return await attempt(retryUrl);
+    }
   }
 }

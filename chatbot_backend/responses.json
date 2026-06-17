@@ -147,7 +147,10 @@
     ],
     "smart_clarification": [
         "I want to understand you properly. Could you tell me which feeling is strongest right now?",
-        "It can be hard to find the words sometimes. What feels heaviest for you right now?"
+        "It can be hard to find the words sometimes. What feels heaviest for you right now?",
+        "I want to get this right — what's the main thing on your mind?",
+        "Sometimes it's hard to put into words. What stands out most to you right now?",
+        "I'm with you — what feels closest to the truth of it for you?"
     ],
     "coding_pressure_support": [
         "Coding pressure is uniquely frustrating because one tiny bug can block hours of progress. What feels hardest right now\u2014understanding the logic, fixing the errors, or just not knowing where to begin?",
@@ -217,7 +220,10 @@
     "reflective_validation": [
         "It sounds like this is still sitting really heavily on your chest.",
         "I can hear how difficult and painful this still feels for you right now.",
-        "That makes complete sense. Both your body and your mind sound so worn down from carrying this."
+        "That makes complete sense. Both your body and your mind sound so worn down from carrying this.",
+        "It sounds like this hasn't gotten any lighter to carry.",
+        "That sounds like it's still taking a real toll on you.",
+        "It makes sense that this is still weighing on you this much."
     ],
     "solution_suggestion_anxiety": [
         "When anxiety peaks, it can help to anchor your body first. Would you like to try one small grounding step with me right now?"
@@ -375,13 +381,18 @@
     ],
     "soft_idk_response": [
         "That's completely okay. You do not need to have the perfect words or understand it all. What feels the heaviest to you right now?",
-        "That's alright. Sometimes there are simply no words for how much it hurts\u2014what is your physical body feeling right now?"
+        "That's alright. Sometimes there are simply no words for how much it hurts\u2014what is your physical body feeling right now?",
+        "That's okay, not knowing is allowed too. I'm still here whenever you're ready.",
+        "It's fine not to have an answer right now. We can just sit with that for a moment.",
+        "No need to figure it out right away \u2014 I'm not going anywhere."
     ],
     "pure_validation": [
         "I understand.",
         "That makes sense.",
         "I hear you.",
-        "Got it."
+        "Got it.",
+        "That's okay.",
+        "I'm with you on that."
     ],
     "next_calming_step": [
         "Okay, let's try one more gentle step. Let your shoulders drop away from your ears, unclench your jaw, and breathe out slowly for longer than you breathe in. Tell me if that eases anything, even a tiny bit.",
@@ -447,6 +458,11 @@
     "clarify_uncertain": [
         "I want to make sure I understand you properly. Could you tell me a bit more?",
         "I'm not completely sure I'm following. Could you rephrase that for me?",
-        "I'm with you, but could you share a little more about what you mean?"
+        "I'm with you, but could you share a little more about what you mean?",
+        "I want to follow this the right way — could you walk me through it a bit more?",
+        "Help me understand a little better — what's going on for you right now?",
+        "I'm listening, I just want to make sure I'm getting it right. Could you say a bit more?",
+        "I don't want to assume — could you tell me more about what you mean?",
+        "Take your time, I'm still here — what would you like me to understand?"
     ]
 }

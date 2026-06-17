@@ -254,16 +254,13 @@ class _EntrySummaryScreenState extends State<EntrySummaryScreen> {
 
     bool success = false;
     try {
-      final String baseUrl = await BackendConfig.getBaseUrl();
-      final String predictUrl = '$baseUrl/predict_emotion';
-
-      final response = await http
+      final response = await BackendConfig.withRetry((baseUrl) => http
           .post(
-            Uri.parse(predictUrl),
+            Uri.parse('$baseUrl/predict_emotion'),
             headers: {'Content-Type': 'application/json'},
             body: jsonEncode({'text': widget.content}),
           )
-          .timeout(const Duration(seconds: 4));
+          .timeout(const Duration(seconds: 4)));
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = jsonDecode(response.body);

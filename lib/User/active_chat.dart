@@ -7,6 +7,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/gamification_service.dart';
 import '../widgets/level_up_dialog.dart';
 import 'package:fyp/services/backend_config.dart';
+import '../services/crisis_service.dart';
 
 class ActiveChatScreen extends StatefulWidget {
   const ActiveChatScreen({super.key});
@@ -25,6 +26,7 @@ class _ActiveChatScreenState extends State<ActiveChatScreen> {
     }
   ];
   bool _isLoading = false;
+  bool _crisisDetected = false;
   String? _userProfileImageUrl;
 
   @override
@@ -190,13 +192,31 @@ class _ActiveChatScreenState extends State<ActiveChatScreen> {
     _messageController.clear();
     _scrollToBottom();
 
+    // Check for crisis in user's message
+    if (CrisisService.containsCrisisKeyword(text)) {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null && !_crisisDetected) {
+        setState(() {
+          _crisisDetected = true;
+          _messages.add({
+            "isAi": true,
+            "text": "It sounds like you might be going through a tough time. We care about your safety and have notified your trusted contacts. Please consider reaching out to a professional."
+          });
+          _isLoading = false;
+        });
+        await CrisisService.triggerCrisisAlert(user.uid, 'chatbot');
+        await CrisisService.sendLocalCrisisNotification();
+        _scrollToBottom();
+        return;
+      }
+    }
+
     try {
-      final String baseUrl = await BackendConfig.getBaseUrl();
-      final response = await http.post(
+      final response = await BackendConfig.withRetry((baseUrl) => http.post(
         Uri.parse('$baseUrl/chat'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'message': text}),
-      ).timeout(const Duration(seconds: 8));
+      ).timeout(const Duration(seconds: 8)));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -576,12 +596,11 @@ class _ActiveChatScreenState extends State<ActiveChatScreen> {
 
     String aiSummary = preview;
     try {
-      final String baseUrl = await BackendConfig.getBaseUrl();
-      final response = await http.post(
+      final response = await BackendConfig.withRetry((baseUrl) => http.post(
         Uri.parse('$baseUrl/summarize_chat'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'messages': formattedMessages}),
-      ).timeout(const Duration(seconds: 8));
+      ).timeout(const Duration(seconds: 8)));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -605,8 +624,8 @@ class _ActiveChatScreenState extends State<ActiveChatScreen> {
         'createdAt': Timestamp.now(),
         'messages': formattedMessages,
         'sharingAccess': {}, // initially not shared with anyone
-        'crisisDetected': false,
-        'crisisKeyword': '',
+        'crisisDetected': _crisisDetected,
+        'crisisKeyword': _crisisDetected ? 'detected' : '',
         'status': 'Normal',
       });
     } catch (e) {

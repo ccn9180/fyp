@@ -96,13 +96,28 @@ MODERATE_RISK = [
     "can't go on", "can't do this anymore", "i'm done", "nothing matters",
     "everything is hopeless", "there is no point", "wish i could disappear",
     "wish i never existed", "don't want to wake up", "i hate being alive",
-    "tired of living", "want everything to stop", "feel trapped"
+    "tired of living", "want everything to stop", "feel trapped",
+    # indirect "I can't continue" phrasing -- people rarely say "can't go on"
+    # verbatim; they say it in roundabout ways like these.
+    "how long i can keep doing this", "how long i can keep this up",
+    "can't keep doing this", "can't keep this up", "cant keep doing this",
+    "cant keep this up", "don't know how much longer i can",
+    "dont know how much longer i can", "how much more i can take",
+    "losing control", "can't take this anymore", "cant take this anymore",
+    "can't handle this anymore", "cant handle this anymore",
 ]
 
 WARNING_SIGNS = [
-    "hopeless", "worthless", "empty", "broken", "numb", "nobody cares",
-    "alone", "abandoned", "burden", "failure", "giving up", "exhausted",
-    "can't cope", "overwhelmed"
+    "hopeless", "worthless", "empty", "emptiness", "broken", "numb",
+    "nobody cares", "alone", "abandoned", "burden", "failure", "failing",
+    "giving up", "given up", "exhausted", "exhausting",
+    "can't cope", "cant cope", "overwhelm",
+    # social withdrawal/isolation is a recognized risk factor, not just sadness
+    "don't feel like talking to anyone", "dont feel like talking to anyone",
+    "no one would understand", "nobody would understand",
+    "they wouldn't understand", "they wouldnt understand",
+    "no point talking to anyone", "don't want to talk to anyone",
+    "dont want to talk to anyone",
 ]
 
 class EmotionClassifier:

@@ -12,6 +12,7 @@ from custom_model import CustomNeuralNet
 from topic_extractor import TopicExtractor
 from nlg_engine import ComponentNLGEngine
 from firebase_manager import FirebaseManager
+from stage_engine import ConversationStageEngine
 
 warnings.filterwarnings("ignore")
 
@@ -58,6 +59,30 @@ class UserContextTracker:
     current_entity: Optional[str] = None   # extracted specific topic entity (e.g. "final year project")
     history: List[Turn] = field(default_factory=list) # richer session history
 
+    # ── conversation stage + situation/event memory ─────────
+    conversation_stage: str = "validation"  # validation/reflection/exploration/encouragement/problem_solving
+    stage_turns: int = 0                    # turns spent in the current stage
+    current_situation: Optional[str] = None # explicit situation slot (mirrors topic/topic category)
+    current_event: Optional[str] = None     # lightweight event phrase, e.g. "revise your proposal"
+    current_event_category: Optional[str] = None  # technical/deadline/supervisor_feedback/relationship/family/academic
+    current_progress_detail: Optional[str] = None  # e.g. "completed 30 modules, 10 left"
+    technical_failure_evidence: bool = False  # bug/debug/error/crash actually mentioned (Assumption Safety Layer)
+    recent_component_phrases: List[str] = field(default_factory=list)  # ComponentNLGEngine anti-repetition
+    last_response_mode: Optional[str] = None  # last question-ratio mode used (avoid back-to-back repeats)
+    recent_observation_categories: List[str] = field(default_factory=list)  # avoid same "flavor" twice in a row
+
+    # ── entity-mention fade: avoid repeating the literal entity every turn ──
+    entity_mention_streak: int = 0
+    last_literal_entity: Optional[str] = None
+    last_entity_alias: Optional[str] = None
+
+    # ── pending action / awaiting confirmation: when the bot offers something
+    # actionable ("would you be open to trying a calming step?"), this tracks
+    # what was offered so a plain "yes" executes it instead of being treated
+    # as small talk. ──
+    pending_action: Optional[str] = None
+    awaiting_confirmation: bool = False
+
 
     # New Unified Control & Emotion Fields
     stop_topic_flow: bool = False
@@ -65,6 +90,14 @@ class UserContextTracker:
     topic_decay_score: int = 0
     last_bot_question: dict = field(default_factory=lambda: {"text": "", "intent_slot": "", "topic": "", "answered": False})
     recent_bot_responses: List[dict] = field(default_factory=list)
+
+    # ── Answer Interpretation Layer: tracks the bot's previous turn (question
+    # OR statement) so a short "yes"/"no"/"both" reply can be interpreted
+    # relative to it, instead of being treated as a standalone message. ──
+    last_bot_turn: dict = field(default_factory=lambda: {
+        "text": "", "kind": "statement", "option_a": None, "option_b": None, "answered": True,
+        "topic": None, "entity": None, "intent": None,
+    })
 
     DISTRESS_WEIGHT = {
         "emergency_crisis": 10, "physical_panic": 8, "repeated_no_relief": 7,
@@ -114,12 +147,34 @@ class UserContextTracker:
         self.last_coping_step = None
         self.current_entity = None
         self.history = []
-        
+
         self.stop_topic_flow = False
         self.explicit_emotion_detected = False
         self.topic_decay_score = 0
         self.last_bot_question = {"text": "", "intent_slot": "", "topic": "", "answered": False}
         self.recent_bot_responses = []
+
+        self.conversation_stage = "validation"
+        self.stage_turns = 0
+        self.current_situation = None
+        self.current_event = None
+        self.current_event_category = None
+        self.current_progress_detail = None
+        self.technical_failure_evidence = False
+        self.last_bot_turn = {
+            "text": "", "kind": "statement", "option_a": None, "option_b": None,
+            "answered": True, "topic": None, "entity": None, "intent": None,
+        }
+        self.recent_component_phrases = []
+        self.last_response_mode = None
+        self.recent_observation_categories = []
+
+        self.entity_mention_streak = 0
+        self.last_literal_entity = None
+        self.last_entity_alias = None
+
+        self.pending_action = None
+        self.awaiting_confirmation = False
 
     def update(
         self,
@@ -328,6 +383,15 @@ class AdvancedNLUPipeline:
         clean = clean.replace("bad as fuck", "very bad")
         clean = clean.replace("fucked up", "very overwhelmed")
         clean = clean.replace("dump me", "leave me")
+
+        # leading conversational fillers (ermm/um/uh/hmm/well/actually/maybe) --
+        # only stripped if something meaningful remains, so a standalone "maybe"
+        # answer (a real signal elsewhere) is left intact.
+        filler_match = re.match(r'^(?:(?:erm+|umm?|uhh?|hmm+|well|actually|maybe)[\s,.]*)+', clean)
+        if filler_match:
+            stripped = clean[filler_match.end():].strip()
+            if stripped:
+                clean = stripped
 
         # remove repeated spaces
         clean = re.sub(r"\s+", " ", clean).strip()
@@ -919,19 +983,245 @@ class AdvancedNLUPipeline:
         clean = self.normalize_text(text)
         rule_hit = self.extract_direct_rules(text)
 
-        # ── Extract and store topic entity ───────────────────
+        state["clean_text"] = clean
+        state["msg_word_count"] = len(clean.split())
+
+        # ── Safety first: crisis detection always wins, before ANY other
+        # gatekeeper layer (e.g. short-reply/question-answer resolution)
+        # gets a chance to reinterpret a crisis disclosure as something else.
+        if rule_hit == "emergency_crisis":
+            state["intent"] = "emergency_crisis"
+            return state
+
+        # ── Meaning-shift detection: the user's latest message can carry a
+        # different meaning than whatever situation/emotion was previously being
+        # discussed, even on the exact same topic. Computed independently of
+        # intent classification so it survives whichever branch below ultimately
+        # returns, and OVERRIDES the response's framing instead of letting a
+        # persisted situational observation ("timeline pressure") repeat itself
+        # while the user has actually moved on to acceptance, relief, etc.
+        # Checked in priority order; first match wins.
+        MEANING_SHIFT_CUES = {
+            # mild distress-adjacent but not crisis-level (handled separately,
+            # unconditionally, above) -- checked first since it's the most
+            # safety-relevant of the non-crisis shifts.
+            "hopelessness": [
+                "what's the point", "whats the point", "no point", "nothing works",
+                "nothing helps", "i give up", "why bother", "it's useless",
+                "its useless", "i can't do this anymore", "i cant do this anymore",
+                "there's no use", "theres no use", "i'm done trying", "im done trying",
+            ],
+            "relief": [
+                "that helped", "i feel better", "feeling better", "that worked",
+                "feel a bit lighter", "feels a bit lighter", "that's helped",
+                "thats helped", "feel a little better", "feel okay now",
+            ],
+            "confidence": [
+                "i think i can", "i can do this", "i'll figure it out",
+                "ill figure it out", "i got this", "i've got this", "ive got this",
+                "i'm confident", "im confident", "i believe i can",
+            ],
+            "acceptance": [
+                "no choice", "only way", "keep doing", "keep going", "keep trying",
+                "push through", "gotta", "might as well", "guess i'll", "guess i will",
+                "have to anyway", "no other way", "won't give up", "wont give up",
+                "have to deal with it", "just have to", "still gonna", "still going to",
+            ],
+        }
+        meaning_shift = next(
+            (cat for cat, kws in MEANING_SHIFT_CUES.items() if any(kw in clean for kw in kws)),
+            None,
+        )
+
+        # Concrete progress ("completed 30 modules", "only 10 modules left") is its
+        # own meaning shift, detected separately since it's a number + cue-word
+        # pattern rather than a fixed phrase -- and it carries the specific detail
+        # so reflections/exploration can reference it instead of staying generic.
+        PROGRESS_CUE_WORDS = ["left", "remaining", "to go", "completed", "finished", "done with", "out of"]
+        if meaning_shift is None and re.search(r'\d', clean) and any(cue in clean for cue in PROGRESS_CUE_WORDS):
+            meaning_shift = "progress"
+            state["progress_detail"] = clean
+            tracker.current_progress_detail = clean
+
+        state["meaning_shift"] = meaning_shift
+
+        # ── Clarification Intent Layer (runs BEFORE Answer Interpretation) ──
+        # "What do you mean?" is not an answer to the previous question -- it's
+        # a request to explain that question/observation differently. Detected
+        # first so it can never be misread as a confirm/deny/both/partial reply
+        # (e.g. "huh?" must not be treated as answering "What would feel like
+        # good progress from here?"). Skips topic/entity/event extraction and
+        # does not advance the conversation stage (handled by stage_engine
+        # treating this strategy as a no-op).
+        CLARIFICATION_SUBSTRINGS = [
+            "what do you mean", "what you mean", "what does that mean",
+            "what's that supposed to mean", "whats that supposed to mean",
+            "can you explain", "could you explain", "could you clarify",
+            "can you clarify", "i don't understand", "i dont understand",
+            "not sure what you mean", "not sure what that means",
+            "come again",
+        ]
+        CLARIFICATION_EXACT = {"what?", "huh?", "sorry?", "what", "huh", "sorry"}
+        is_clarification_request = (
+            any(p in clean for p in CLARIFICATION_SUBSTRINGS)
+            or clean in CLARIFICATION_EXACT
+        )
+        if is_clarification_request and tracker.last_bot_turn.get("text"):
+            state["intent"] = "request_clarification"
+            return state
+
+        # ── Answer Interpretation Layer + Context Inheritance ──
+        # A short confirm/deny/both/partial reply to the bot's last turn (question
+        # OR a confirmable observation/statement) carries no topical content of its
+        # own -- interpret it relative to that prior turn, and skip topic/entity/
+        # event reclassification entirely so a contentless reply like "I think
+        # both" can never flip tracker.current_situation to something random.
+        CONFIRM_TOKENS = {
+            "yes", "yeah", "yep", "yup", "exactly", "sure", "definitely", "yea",
+            "correct", "that's right", "thats right", "sounds right", "right",
+        }
+        DENY_TOKENS = {
+            "no", "nah", "nope", "not really", "not at all",
+            "i don't think so", "i dont think so",
+        }
+        BOTH_TOKENS = {
+            "both", "both of them", "both of those", "all of them", "all of the above",
+        }
+        PARTIAL_TOKENS = {
+            "maybe", "kind of", "kinda", "sort of", "somewhat", "a little", "a bit",
+            "probably", "i guess", "i suppose", "guess so", "not sure", "could be",
+        }
+        ANSWER_HEDGE_PREFIX = re.compile(
+            r'^(?:i think|i\'d say|id say|i would say|i suppose|i feel like|honestly|probably|well|so|actually)[\s,]+',
+            re.IGNORECASE,
+        )
+        core_answer = ANSWER_HEDGE_PREFIX.sub('', clean).strip().rstrip(".!?,;:")
+        core_answer = core_answer or clean.rstrip(".!?,;:")
+
+        answer_sentiment = None
+        if core_answer in CONFIRM_TOKENS:
+            answer_sentiment = "confirm"
+        elif core_answer in DENY_TOKENS:
+            answer_sentiment = "deny"
+        elif core_answer in BOTH_TOKENS:
+            answer_sentiment = "both"
+        elif core_answer in PARTIAL_TOKENS:
+            answer_sentiment = "partial"
+
+        # This layer is purely additive: it defers to the coping-flow-specific
+        # awaiting flags (which dispatch real coping-step delivery on confirm/
+        # deny, so must not be bypassed) and to the pending-action layer (which
+        # needs to consume/clear awaiting_confirmation itself). It deliberately
+        # does NOT defer to awaiting_open_emotion_detail -- that flag's own
+        # confirm/deny handling is generic and was part of the original gap
+        # this layer exists to fill.
+        any_specific_awaiting_flag = (
+            tracker.awaiting_confirmation
+            or tracker.awaiting_choice_response
+            or tracker.awaiting_exercise_feedback
+            or tracker.awaiting_grounding_items
+            or tracker.awaiting_binary_progress_answer
+        )
+        prior_turn = tracker.last_bot_turn
+        if (
+            answer_sentiment
+            and not any_specific_awaiting_flag
+            and prior_turn.get("kind") in ("choice", "question", "statement")
+            and not prior_turn.get("answered")
+            and len(clean.split()) <= 8
+        ):
+            prior_turn["answered"] = True
+            if answer_sentiment == "both" and prior_turn.get("option_a") and prior_turn.get("option_b"):
+                state["intent"] = "confirmed_both"
+                state["choice_option_a"] = prior_turn["option_a"]
+                state["choice_option_b"] = prior_turn["option_b"]
+            elif answer_sentiment == "confirm":
+                state["intent"] = "confirmed_observation"
+            elif answer_sentiment == "deny":
+                state["intent"] = "denied_observation"
+            elif answer_sentiment == "partial":
+                state["intent"] = "partial_confirmation"
+            else:  # "both" without stored options to confirm both of
+                state["intent"] = "confirmed_observation"
+            return state
+
+        # ── Extract and store topic/situation/event memory ────
         topic_info = self.topic_extractor.extract(text)
-        if topic_info.get("topic_entity"):
+        new_info = False
+        if topic_info.get("topic_entity") and topic_info["topic_entity"] != tracker.current_entity:
             tracker.current_entity = topic_info["topic_entity"]
-            
+            new_info = True
+        if topic_info.get("event_phrase") and topic_info["event_phrase"] != tracker.current_event:
+            tracker.current_event = topic_info["event_phrase"]
+            new_info = True
+
         if topic_info.get("topic_category") and topic_info["topic_category"] != "general":
             state["topic"] = topic_info["topic_category"]
+            tracker.current_situation = topic_info["topic_category"]
+
+        state["new_info"] = new_info
+        state["event_phrase"] = topic_info.get("event_phrase")
+        state["repetition_cue"] = topic_info.get("repetition_cue", False)
+
+        # ── Event-category detection: a more specific lens than topic_category
+        # (e.g. "academic" -> "technical"/"deadline"/"supervisor_feedback"), so
+        # responses can use situation-tailored phrasing instead of generic
+        # academic-stress framing. Persists like current_entity/current_event
+        # (non-overwrite-on-None) so it survives short answers that don't
+        # re-mention the keyword.
+        # Assumption Safety Layer: "technical" is detected from generic mentions
+        # (backend/system/code) OR specific failure evidence (bug/error/crash).
+        # The two are tracked separately so response content can avoid assuming
+        # debugging specifically unless the user actually said so.
+        TECHNICAL_FAILURE_KEYWORDS = [
+            "bug", "bugs", "debug", "debugging", "error", "crash",
+            "not working", "doesn't work", "broke", "breaking",
+        ]
+        if any(kw in clean for kw in TECHNICAL_FAILURE_KEYWORDS):
+            tracker.technical_failure_evidence = True
+
+        EVENT_CATEGORY_KEYWORDS = {
+            "technical": [
+                "backend", "frontend", "code", "coding", "system", "api",
+                "database", "server", "compile", "syntax", "function",
+            ] + TECHNICAL_FAILURE_KEYWORDS,
+            "deadline": [
+                "deadline", "due date", "due soon", "overdue", "submission",
+                "running out of time", "not enough time", "time left",
+            ],
+            "supervisor_feedback": [
+                "supervisor", "feedback", "revise", "revision", "reject",
+                "rejected", "comments", "professor", "lecturer", "advisor",
+            ],
+            "relationship": [
+                "boyfriend", "girlfriend", "partner", "breakup", "broke up",
+                "relationship",
+            ],
+            "family": ["mother", "father", "mom", "dad", "family", "parents"],
+        }
+        detected_category = next(
+            (cat for cat, kws in EVENT_CATEGORY_KEYWORDS.items() if any(kw in clean for kw in kws)),
+            None,
+        )
+        if detected_category:
+            # Explicit keyword match this turn -- update directly, even if it
+            # overwrites a previous category (this is a direct signal, like entity).
+            tracker.current_event_category = detected_category
+        elif tracker.current_event_category:
+            # No new keyword this turn -- keep the persisted category rather than
+            # letting a generic "academic" fallback overwrite something specific
+            # (e.g. "technical") just because this message didn't repeat a keyword.
+            detected_category = tracker.current_event_category
+        elif state.get("topic") == "academic":
+            detected_category = "academic"
+            tracker.current_event_category = "academic"
+        state["event_category"] = detected_category
 
         # ── GATEKEEPER LAYER ──────────────────────────────────
         DISENGAGE_KEYWORDS = ["don't want to talk", "dont want to talk", "stop", "change topic", "not this", "overwhelmed", "let's talk about something else", "lets talk about something else"]
         LOW_ENGAGEMENT_KEYWORDS = ["nothing", "ok", "okay", "idk", "hmm", "...", "no", "nah", "yep", "yes"]
         
-        ACADEMIC_KEYWORDS = ["fyp", "assignment", "project", "coding", "backend", "report", "deadline", "exam", "study", "work", "alot of thing", "a lot of thing", "task"]
+        ACADEMIC_KEYWORDS = ["fyp", "assignment", "project", "coding", "backend", "report", "deadline", "due date", "due soon", "overdue", "submission", "exam", "study", "work", "alot of thing", "a lot of thing", "task"]
         EMOTION_KEYWORDS = ["stressed", "overwhelmed", "anxious", "depressed", "sad", "frustrated", "hopeless", "angry", "tired", "panic", "worry"]
         EMOTION_PHRASES = ["i feel", "i'm feeling", "im feeling", "i can't cope", "icant cope", "i am not okay", "im not okay", "i'm not okay"]
         PHYSICAL_KEYWORDS = ["heart racing", "breathe", "panic", "shaking", "tense", "dizzy"]
@@ -940,6 +1230,23 @@ class AdvancedNLUPipeline:
         if any(kw in clean for kw in DISENGAGE_KEYWORDS):
             tracker.stop_topic_flow = True
             tracker.topic = None
+            tracker.current_entity = None
+            tracker.current_situation = None
+            tracker.current_event = None
+            tracker.current_event_category = None
+            tracker.current_progress_detail = None
+            tracker.technical_failure_evidence = False
+            tracker.last_bot_turn = {
+                "text": "", "kind": "statement", "option_a": None, "option_b": None,
+                "answered": True, "topic": None, "entity": None, "intent": None,
+            }
+            tracker.conversation_stage = "validation"
+            tracker.stage_turns = 0
+            tracker.entity_mention_streak = 0
+            tracker.last_literal_entity = None
+            tracker.last_entity_alias = None
+            tracker.pending_action = None
+            tracker.awaiting_confirmation = False
             has_emotion = any(kw in clean for kw in EMOTION_KEYWORDS) or any(ph in clean for ph in EMOTION_PHRASES)
             if has_emotion:
                 state["intent"] = "topic_shift_emotion"
@@ -952,39 +1259,28 @@ class AdvancedNLUPipeline:
             state["intent"] = "general_activity"
             return state
 
-        # Priority 2: Question-Answer Resolution Layer
-        BOOLEAN_ANSWERS = ["yes", "no", "yup", "nope", "sure", "maybe", "yeah"]
-        SLOT_ANSWERS = ["backend", "database", "authentication", "flutter", "api", "firebase", "frontend", "ui"]
-        SHORT_PHRASES = ["backend stuff", "debugging", "documentation", "final report", "writing code", "testing"]
-        
-        is_answering = False
-        if tracker.last_bot_question.get("text") and not tracker.last_bot_question.get("answered"):
-            # Broaden heuristic: if it's a short statement and they were just asked a question
-            if len(clean.split()) <= 5 and not any(kw in clean for kw in EMOTION_KEYWORDS):
-                is_answering = True
-            elif clean in BOOLEAN_ANSWERS or clean in SLOT_ANSWERS or clean in SHORT_PHRASES:
-                is_answering = True
-            elif len(clean.split()) <= 3 and any(w in clean for w in SLOT_ANSWERS):
-                is_answering = True
-                
-        if is_answering:
-            tracker.last_bot_question["answered"] = True
-            state["intent"] = "answer_previous_question"
-            state["answer_value"] = clean
-            return state
+        # Priority 1.7: Pending-action confirmation -- when the bot offered
+        # something actionable (e.g. a grounding step) and is waiting on a
+        # yes/no, resolve that BEFORE the generic answer/low-engagement
+        # layers get a chance to misread it as something else.
+        if tracker.awaiting_confirmation:
+            tracker.awaiting_confirmation = False
+            if rule_hit == "short_confirm":
+                state["intent"] = "confirm_pending_action"
+                return state
+            if rule_hit == "short_deny":
+                state["intent"] = "decline_pending_action"
+                tracker.pending_action = None
+                return state
+            # Ambiguous reply -- let the pending action lapse and classify normally.
+            tracker.pending_action = None
 
-        # Priority 3: Low-engagement filter (Only if NOT answering a question)
-        if clean in LOW_ENGAGEMENT_KEYWORDS or (len(clean.split()) <= 2 and any(kw == clean for kw in LOW_ENGAGEMENT_KEYWORDS)):
-            state["intent"] = "low_engagement"
-            return state
-
-        # Priority 4: Emotion Activation Flag
-        has_academic = any(kw in clean for kw in ACADEMIC_KEYWORDS) or tracker.topic in ["academic", "fyp"]
-        has_emotion = any(kw in clean for kw in EMOTION_KEYWORDS) or any(ph in clean for ph in EMOTION_PHRASES)
-        has_physical = any(kw in clean for kw in PHYSICAL_KEYWORDS)
-        tracker.explicit_emotion_detected = has_emotion or has_physical
-
-        # ── context-aware short-response disambiguation (RUNS FIRST!) ──
+        # ── context-aware short-response disambiguation -- MUST run before
+        # Priority 2/3 below: those generic layers would otherwise misread a
+        # "yes"/"no" answer to one of these specific pending questions (e.g.
+        # "yes" is itself in LOW_ENGAGEMENT_KEYWORDS) as something else,
+        # exactly the bug that let a confirmed grounding offer fall through
+        # to generic conversation instead of executing. ──────────────────
         if tracker.awaiting_exercise_feedback:
             if rule_hit in ["mixed_relief", "slight_relief", "no_relief", "task_attempted", "short_confirm", "short_deny"]:
                 if rule_hit == "no_relief" and tracker.no_relief_count >= 2:
@@ -1039,6 +1335,53 @@ class AdvancedNLUPipeline:
                 if rule_hit == "short_deny":
                     state["intent"] = "short_deny"; return state
 
+        # Priority 2: Question-Answer Resolution Layer
+        BOOLEAN_ANSWERS = ["yes", "no", "yup", "nope", "sure", "maybe", "yeah"]
+        SLOT_ANSWERS = ["backend", "database", "authentication", "flutter", "api", "firebase", "frontend", "ui"]
+        SHORT_PHRASES = ["backend stuff", "debugging", "documentation", "final report", "writing code", "testing"]
+        
+        is_answering = False
+        if tracker.last_bot_question.get("text") and not tracker.last_bot_question.get("answered"):
+            # Broaden heuristic: if it's a short statement and they were just asked a question.
+            # Pure ambiguity fillers (hmm/nothing/.../nah/ok) are excluded here so they fall
+            # through to the low-engagement filter below instead of being misread as an answer.
+            # Capped at 4 words (not 5) and requires no rule_hit match, so a short but
+            # complete new statement ("My backend keeps having problems.") still gets its
+            # own classification instead of being swallowed as a generic answer.
+            if (
+                len(clean.split()) <= 4
+                and rule_hit is None
+                and not any(kw in clean for kw in EMOTION_KEYWORDS)
+                and clean not in LOW_ENGAGEMENT_KEYWORDS
+            ):
+                is_answering = True
+            elif clean in BOOLEAN_ANSWERS or clean in SLOT_ANSWERS or clean in SHORT_PHRASES:
+                is_answering = True
+            elif len(clean.split()) <= 3 and any(w in clean for w in SLOT_ANSWERS):
+                is_answering = True
+                
+        if is_answering:
+            tracker.last_bot_question["answered"] = True
+            state["intent"] = "answer_previous_question"
+            state["answer_value"] = clean
+            return state
+
+        # Priority 3: Low-engagement filter (Only if NOT answering a question)
+        if clean in LOW_ENGAGEMENT_KEYWORDS or (len(clean.split()) <= 2 and any(kw == clean for kw in LOW_ENGAGEMENT_KEYWORDS)):
+            state["intent"] = "low_engagement"
+            return state
+
+        # Priority 4: Emotion Activation Flag
+        academic_event_category = state.get("event_category") or tracker.current_event_category
+        has_academic = (
+            any(kw in clean for kw in ACADEMIC_KEYWORDS)
+            or tracker.topic in ["academic", "fyp"]
+            or academic_event_category in ("technical", "deadline", "supervisor_feedback", "academic")
+        )
+        has_emotion = any(kw in clean for kw in EMOTION_KEYWORDS) or any(ph in clean for ph in EMOTION_PHRASES)
+        has_physical = any(kw in clean for kw in PHYSICAL_KEYWORDS)
+        tracker.explicit_emotion_detected = has_emotion or has_physical
+
         # ── specific body symptom (sets tracker state) ────────
         if rule_hit and rule_hit.startswith("specific_body_symptom::"):
             symptom_name = rule_hit.split("::", 1)[1]
@@ -1090,10 +1433,16 @@ class AdvancedNLUPipeline:
             tag = self.tags[predicted.item()]
 
         if prob.item() < 0.60:
+            # Low BiLSTM confidence -- before giving up with "uncertain", defer to the
+            # reliable rule-based academic-keyword signal if one is present.
+            if has_academic and not tracker.explicit_emotion_detected:
+                state["topic"] = "academic"
+                state["intent"] = "academic_workload"
+                return state
             state["intent"] = "uncertain"
         else:
             emotion_tags = ["body_better_mind_worry", "physical_panic", "anxiety", "depression", "sadness", "stress", "strong_negative_mood"]
-            
+
             # Check confidence threshold for academic classification overrides
             if has_academic and not tracker.explicit_emotion_detected:
                 if tag in emotion_tags or tag in ["general_activity", "neutral_checkin", "venting"] or prob.item() < 0.85:
@@ -1119,10 +1468,13 @@ class AdvancedNLUPipeline:
 # DIALOGUE MANAGER
 # ============================================================
 class SmarterDialogueManager:
+    def __init__(self):
+        self.stage_engine = ConversationStageEngine()
+
     def get_coping_strategy_for_symptom(self, tracker: "UserContextTracker") -> str:
         symptom_map = {
             "shaking":    "grounding_tactile_step",
-            "tightness":  "chest_release_step", 
+            "tightness":  "chest_release_step",
             "breathing":  "guided_breath_step",
             "dizziness":  "orientation_step",
             "sweating":   "cool_down_grounding",
@@ -1130,6 +1482,16 @@ class SmarterDialogueManager:
         return symptom_map.get(tracker.last_body_symptom, "deliver_coping_step")
 
     def compute_strategy(
+        self, state: Dict[str, str], tracker: "UserContextTracker"
+    ) -> str:
+        """Resolve a strategy, then let the stage engine record which
+        conversation stage (validation/reflection/exploration/encouragement/
+        problem_solving) applies to *this* turn's response in state["active_stage"]."""
+        strategy = self._resolve_strategy(state, tracker)
+        state["active_stage"] = self.stage_engine.advance(strategy, state, tracker)
+        return strategy
+
+    def _resolve_strategy(
         self, state: Dict[str, str], tracker: "UserContextTracker"
     ) -> str:
         intent = state["intent"]
@@ -1146,9 +1508,52 @@ class SmarterDialogueManager:
         if intent == "uncertain":
             return "clarify_uncertain"
 
+        # ── Clarification Intent Layer: explain the previous turn, don't
+        # advance anything. ───────────────────────────────────────────────
+        if intent == "request_clarification":
+            return "explain_clarification"
+
+        # ── Answer Interpretation Layer: a short confirm/deny/both/partial
+        # reply to the bot's last turn, resolved relative to it instead of
+        # being treated as a standalone message. ──────────────────────────
+        if intent == "confirmed_both":
+            return "confirmed_both_strategy"
+        if intent == "confirmed_observation":
+            return "confirmed_observation_strategy"
+        if intent == "denied_observation":
+            return "denied_observation_strategy"
+        if intent == "partial_confirmation":
+            return "partial_confirmation_strategy"
+
         # ── safety first ──────────────────────────────────────
         if intent == "emergency_crisis":
             return "escalation"
+
+        # ── pending action confirmation: the bot must follow through on its
+        # own offer instead of returning to generic conversation ──────────
+        if intent == "confirm_pending_action":
+            action = tracker.pending_action
+            tracker.pending_action = None
+            if action == "grounding":
+                return self.get_coping_strategy_for_symptom(tracker)
+            return "graceful_close_or_continue"
+        if intent == "decline_pending_action":
+            return "acknowledge_decline_action"
+
+        # ── emotional overwhelm (panic/anxiety/strong distress), once enough
+        # rapport has built up, gets OFFERED a grounding step (consent-gated,
+        # since it's a guided exercise) rather than generic encouragement.
+        # Practical overwhelm (workload/deadlines) instead gets structured
+        # problem-solving once it reaches that stage -- no offer needed since
+        # asking a planning question doesn't require the same opt-in.
+        EMOTIONAL_OVERWHELM_INTENTS = {"physical_panic", "anxiety", "strong_negative_mood"}
+        if (
+            intent in EMOTIONAL_OVERWHELM_INTENTS
+            and tracker.conversation_stage == "encouragement"
+            and not tracker.awaiting_confirmation
+            and tracker.coping_steps_tried == 0
+        ):
+            return "offer_grounding"
 
         # ── session management ────────────────────────────────
         if intent == "session_close":
@@ -1390,6 +1795,32 @@ class HumanResponseGenerator:
             "gentle_pivot": [
                 "That's okay. Sometimes things just feel quiet or neutral, and that matters too.",
                 "That's alright. Not every day needs to be heavy — I'm still here with you.",
+            ],
+            "low_engagement_strategy": [
+                "That's okay, you don't need to find the right words right now. I'm still here whenever you're ready.",
+                "No worries. Sometimes there isn't a clear answer, and that's fine — I'm not going anywhere.",
+                "That's alright. We can just sit with this for a moment if that feels easier.",
+                "It's okay not to know. Take your time — I'll be here when you want to say more.",
+            ],
+            "topic_shift_neutral_strategy": [
+                "Sure, we can shift gears. What's on your mind instead?",
+                "Okay, let's leave that there for now. What would you like to talk about?",
+                "That's fine, we can change direction. I'm listening — what's up?",
+            ],
+            "topic_shift_emotion_strategy": [
+                "That's okay, we don't have to stay on this if it feels like too much right now. I'm still here with you.",
+                "Of course, let's step away from that for now. How are you feeling in this moment?",
+                "That makes sense if it feels heavy to stay on this. We can pause it — what would help right now?",
+            ],
+            "offer_grounding": [
+                "Would you be open to trying a short calming step right now?",
+                "Would it help to pause for a moment and try a brief grounding exercise together?",
+                "Before we go further, would you like to try a quick grounding step with me?",
+            ],
+            "acknowledge_decline_action": [
+                "That's okay, no pressure at all. We can just keep talking.",
+                "No worries, we don't have to do that right now.",
+                "That's fine, I'm still here either way — let's keep going.",
             ],
             "open_chat": [
                 "I'm here with you. What feels most worth talking about right now?",
@@ -1863,6 +2294,104 @@ class HumanResponseGenerator:
 
         return choice
 
+    # ── question ratio is now stage-specific, since each stage has a different
+    # natural tendency to ask (exploration investigates; encouragement mostly
+    # just affirms) rather than one global ratio applied everywhere ──────────
+    STAGE_QUESTION_PROBABILITY = {
+        "validation": 0.5,
+        "reflection": 0.35,
+        "exploration": 0.8,
+        "encouragement": 0.3,
+        "problem_solving": 0.6,
+    }
+
+    ENTITY_ALIASES_WORK = ["it", "the project", "that part of the work"]
+    ENTITY_ALIASES_GENERIC = ["it", "the situation", "that part of it"]
+
+    def _should_ask_question(self, stage: Optional[str], tracker: "UserContextTracker") -> bool:
+        if tracker.consecutive_questions >= 2:
+            return False
+        prob = self.STAGE_QUESTION_PROBABILITY.get(stage, 0.5)
+        return random.random() < prob
+
+    def _resolve_entity_for_turn(self, tracker: "UserContextTracker") -> Optional[str]:
+        """Fade a repeated literal entity ("your backend", "your backend"...) into a
+        generic alias after a couple of consecutive mentions, then let it return."""
+        raw_entity = tracker.current_entity or (tracker.topic if tracker.topic != "general" else None)
+        if not raw_entity:
+            tracker.entity_mention_streak = 0
+            return "this"
+
+        if raw_entity != tracker.last_literal_entity:
+            tracker.last_literal_entity = raw_entity
+            tracker.entity_mention_streak = 0
+
+        if tracker.entity_mention_streak >= 2:
+            pool = (
+                self.ENTITY_ALIASES_WORK
+                if tracker.current_situation in ("academic", "career")
+                else self.ENTITY_ALIASES_GENERIC
+            )
+            alias_pool = [a for a in pool if a != tracker.last_entity_alias] or pool
+            alias = random.choice(alias_pool)
+            tracker.last_entity_alias = alias
+            tracker.entity_mention_streak = 0
+            return alias
+
+        tracker.entity_mention_streak += 1
+        return raw_entity
+
+    def _generate_via_component_engine(
+        self,
+        state: Dict[str, str],
+        tracker: "UserContextTracker",
+        action_options: Optional[List[str]] = None,
+        stage_override: Optional[str] = None,
+    ) -> Tuple[str, bool]:
+        """Shared ComponentNLGEngine call used by both the main STRATEGY_MAP
+        routing and solution_suggestion's practical-overwhelm path. Returns
+        (response_text, has_question)."""
+        entity = self._resolve_entity_for_turn(tracker)
+        # tracker.conversation_stage already holds the *next* turn's stage by
+        # this point (compute_strategy's stage_engine.advance() ran already) --
+        # state["active_stage"] is the value that applies to THIS turn's reply.
+        stage = stage_override or state.get("active_stage", tracker.conversation_stage)
+        ask_question = self._should_ask_question(stage, tracker)
+        choice_options = None
+        if state.get("choice_option_a") and state.get("choice_option_b"):
+            choice_options = (state["choice_option_a"], state["choice_option_b"])
+        response, used_phrases, used_categories = self.component_engine.generate_response(
+            emotion_intent=state.get("intent", ""),
+            topic_entity=entity,
+            stage=stage,
+            meaning_shift=state.get("meaning_shift"),
+            event_category=state.get("event_category") or tracker.current_event_category,
+            action_options=action_options,
+            event_phrase=tracker.current_event,
+            repetition_cue=state.get("repetition_cue", False),
+            progress_detail=state.get("progress_detail") or tracker.current_progress_detail,
+            choice_options=choice_options,
+            has_evidence=tracker.technical_failure_evidence,
+            new_info=state.get("new_info", False),
+            recent_phrases=tracker.recent_component_phrases,
+            recent_categories=tracker.recent_observation_categories,
+            ask_question=ask_question,
+        )
+        tracker.recent_component_phrases.extend(used_phrases)
+        if len(tracker.recent_component_phrases) > 8:
+            tracker.recent_component_phrases = tracker.recent_component_phrases[-8:]
+        tracker.recent_observation_categories.extend(used_categories)
+        if len(tracker.recent_observation_categories) > 2:
+            tracker.recent_observation_categories = tracker.recent_observation_categories[-2:]
+        tracker.last_response_mode = "question" if ask_question else "statement"
+
+        has_question = "?" in response
+        if has_question:
+            tracker.last_bot_question = {
+                "text": response, "intent_slot": stage, "topic": tracker.topic, "answered": False,
+            }
+        return response, has_question
+
     def generate(
         self,
         strategy: str,
@@ -1959,29 +2488,82 @@ class HumanResponseGenerator:
             "academic_explore_strategy":        ("academic_explore_strategy",       "open_emotion"),
             "answer_acknowledgement_strategy":  ("answer_acknowledgement_strategy", "open_emotion"),
             "clarify_uncertain":                ("clarify_uncertain",               "clarify"),
+            # ambiguity / topic-shift (previously fell through to the absolute fallback)
+            "low_engagement_strategy":          ("low_engagement_strategy",         None),
+            "topic_shift_neutral_strategy":     ("topic_shift_neutral_strategy",    "open_emotion"),
+            "topic_shift_emotion_strategy":     ("topic_shift_emotion_strategy",    "open_emotion"),
+            # pending-action confirmation
+            "offer_grounding":                  ("offer_grounding",                 "choice"),
+            "acknowledge_decline_action":       ("acknowledge_decline_action",      None),
+            # Answer Interpretation Layer
+            "confirmed_both_strategy":          ("confirmed_both_strategy",         "open_emotion"),
+            "confirmed_observation_strategy":   ("confirmed_observation_strategy",  "open_emotion"),
+            "denied_observation_strategy":      ("denied_observation_strategy",     "open_emotion"),
+            "partial_confirmation_strategy":    ("partial_confirmation_strategy",   "open_emotion"),
+            # Clarification Intent Layer
+            "explain_clarification":            ("explain_clarification",           "open_emotion"),
         }
+
+        if strategy == "offer_grounding":
+            tracker.pending_action = "grounding"
+            tracker.awaiting_confirmation = True
 
         if strategy in STRATEGY_MAP:
             key, qtype = STRATEGY_MAP[strategy]
-            
-            # Use Component NLG Engine for emotions
-            if "support" in key and hasattr(self, 'component_engine'):
-                entity = tracker.current_entity or tracker.topic or "this"
-                response = self.component_engine.generate_response(
-                    emotion_intent=state.get("intent", ""),
-                    topic_entity=entity,
-                    strategy="explore" if qtype == "open_emotion" else "validate"
+
+            # Use Component NLG Engine for emotions: composes content whose *shape*
+            # follows the conversation stage (validate / summarize / investigate /
+            # encourage / next-steps), reacts to meaning-shifts, fades repeated
+            # entity mentions, and tracks anti-repetition (phrase + "flavor") via
+            # the tracker.
+            #
+            # academic_explore_strategy and answer_acknowledgement_strategy are
+            # included even though neither is a "_support" strategy:
+            # - academic_explore_strategy: intent=academic_workload is reached for
+            #   plain academic distress ("my backend keeps having problems") that
+            #   lacks an explicit emotion keyword; its own question bank is
+            #   specific/useful enough to keep, passed through as action_options.
+            # - answer_acknowledgement_strategy: intent=answer_previous_question
+            #   fires whenever the user directly answers our last question -- it
+            #   must continue the SAME thread (acknowledge + follow up), not pivot
+            #   to a generic canned line that discards what was just said.
+            EXPLORE_BANK_KEYS = {"academic_explore_strategy"}
+            # Answer Interpretation Layer strategies also need the rich,
+            # context-aware composition (event/entity/category-aware elaboration,
+            # stored choice options) rather than a static template bank.
+            ANSWER_INTERPRETATION_KEYS = {
+                "confirmed_both_strategy", "confirmed_observation_strategy",
+                "denied_observation_strategy", "partial_confirmation_strategy",
+                "explain_clarification",
+            }
+            if ((
+                    "support" in key or key in EXPLORE_BANK_KEYS
+                    or key == "answer_acknowledgement_strategy"
+                    or key in ANSWER_INTERPRETATION_KEYS
+                ) and hasattr(self, 'component_engine')):
+                action_options = self.responses.get(key) if key in EXPLORE_BANK_KEYS else None
+                response, has_question = self._generate_via_component_engine(
+                    state, tracker, action_options=action_options
                 )
-                return response, qtype
+                return response, (qtype if has_question else None)
 
             return self._pick(key, tracker), qtype
 
-        # ── solution suggestion (topic-dependent) ─────────────
+        # ── solution suggestion ────────────────────────────────
+        # Genuine anxiety keeps the existing grounding-style choice offer
+        # (Problem 4: emotional overwhelm -> grounding). Everything else
+        # ("seeking_solutions" while discussing a project/deadline/bug) is
+        # practical overwhelm -> route through the real problem-solving
+        # content (blockers/breakdown/prioritization) instead of a generic
+        # anxiety-flavored bank that doesn't know about the actual situation.
         if strategy == "solution_suggestion":
             if topic == "anxiety":
                 return self._pick("solution_suggestion_anxiety", tracker), "choice"
-            if topic in ["stress", "burnout"]:
-                return self._pick("solution_suggestion_stress", tracker), "open_emotion"
+            if hasattr(self, 'component_engine'):
+                response, has_question = self._generate_via_component_engine(
+                    state, tracker, stage_override="problem_solving"
+                )
+                return response, ("open_emotion" if has_question else None)
             return self._pick("solution_suggestion_general", tracker), "choice"
 
         # ── topic exploration (topic-dependent) ───────────────
@@ -2018,6 +2600,63 @@ def safety_filter(response: str) -> str:
     if any(term in response.lower() for term in BANNED_TERMS):
         return DISCLAIMER
     return response
+
+
+# ============================================================
+# ANSWER INTERPRETATION: classify the bot's own turn so a short reply next
+# turn ("yes"/"both"/"not really") can be interpreted relative to it.
+# ============================================================
+NO_CONFIRMATION_STRATEGIES = {
+    "escalation", "close", "greeting", "graceful_close_or_continue",
+    "topic_shift_neutral_strategy", "topic_shift_emotion_strategy",
+}
+
+
+def classify_bot_turn(
+    response_text: str, strategy: str,
+    topic: Optional[str] = None, entity: Optional[str] = None, intent: Optional[str] = None,
+) -> dict:
+    """Classify the bot's outgoing turn: a binary/open question, an A-or-B
+    CHOICE question (with both options extracted), or a plain statement.
+    Statements count too -- an observation ("This seems like it's been about
+    chasing bugs...") can be confirmed/denied just like a literal question.
+
+    Conversation Commitment Layer: also records what the question was ABOUT
+    (question_topic/question_entity/question_intent) so the next turn's
+    fresh answer can be checked against what was actually being asked,
+    instead of just persisted tracker state that may have moved on."""
+    if strategy in NO_CONFIRMATION_STRATEGIES:
+        return {
+            "text": response_text, "kind": "none", "option_a": None, "option_b": None,
+            "answered": True, "topic": topic, "entity": entity, "intent": intent,
+        }
+
+    has_question = "?" in response_text
+    option_a = option_b = None
+
+    if has_question:
+        # The question is usually the final clause/sentence of the response.
+        q = response_text.rstrip("?").strip()
+        sentences = re.split(r'(?<=[.!])\s+', q)
+        last_clause = sentences[-1] if sentences else q
+        if " or " in last_clause.lower():
+            idx = last_clause.lower().rfind(" or ")
+            left = last_clause[:idx].strip()
+            right = last_clause[idx + 4:].strip()
+            left = re.sub(
+                r'^(is it|is the|is this|was it|does it feel like|is that)\s+',
+                '', left, flags=re.IGNORECASE,
+            ).strip().rstrip(",")
+            right = re.split(r',\s+(?:that|which)\b', right, maxsplit=1, flags=re.IGNORECASE)[0].strip()
+            if left and right:
+                option_a, option_b = left, right
+
+    kind = "choice" if option_a else ("question" if has_question else "statement")
+    return {
+        "text": response_text, "kind": kind,
+        "option_a": option_a, "option_b": option_b, "answered": False,
+        "topic": topic, "entity": entity, "intent": intent,
+    }
 
 
 # ============================================================
@@ -2070,6 +2709,10 @@ class ProfessionalFYPBot:
         
         response, question_type = self.generator.generate(strategy, state, tracker)
         response = safety_filter(response)
+        tracker.last_bot_turn = classify_bot_turn(
+            response, strategy,
+            topic=state.get("topic"), entity=tracker.current_entity, intent=state.get("intent"),
+        )
 
         tracker.update(
             user_text=user_input,
@@ -2104,7 +2747,8 @@ class ProfessionalFYPBot:
                 # debug line — remove or guard with a flag in production
                 print(
                     f"  [DEBUG] intent={state['intent']} | "
-                    f"topic={state['topic']} | strategy={strategy}"
+                    f"topic={state['topic']} | strategy={strategy} | "
+                    f"stage={state.get('active_stage')}"
                 )
                 print(f"\nBot: {response}\n")
 
