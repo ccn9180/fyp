@@ -66,6 +66,7 @@ dependencies:
   flutter_local_notifications: ^20.1.0
   flutter_html: ^3.0.0
   share_plus: ^12.0.2
+  timezone: ^0.10.1
 
 dev_dependencies:
   flutter_test:
@@ -108,6 +109,8 @@ flutter:
     - assets/Group.svg
     - assets/icon.png
     - assets/leaf.png
+    - assets/google.png
+    - assets/google.svg
 
 
   # To add assets to your application, add an assets section, like this:

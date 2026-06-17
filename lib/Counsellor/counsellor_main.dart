@@ -90,25 +90,30 @@ class _CounsellorMainScreenState extends State<CounsellorMainScreen> {
       onTap: () => _onItemTapped(index),
       onLongPress: index == 4 ? () => _handleSwitchBack(context) : null,
       behavior: HitTestBehavior.opaque,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            isSelected ? activeIcon : inactiveIcon,
-            color: isSelected ? const Color(0xFF7C9C84) : const Color(0xFFBDBDBD),
-            size: 24,
-          ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: GoogleFonts.outfit(
-              fontSize: 9,
-              fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+      child: AnimatedScale(
+        scale: isSelected ? 1.15 : 1.0,
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOutBack,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              isSelected ? activeIcon : inactiveIcon,
               color: isSelected ? const Color(0xFF7C9C84) : const Color(0xFFBDBDBD),
+              size: 24,
             ),
-          ),
-        ],
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: GoogleFonts.outfit(
+                fontSize: 9,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                color: isSelected ? const Color(0xFF7C9C84) : const Color(0xFFBDBDBD),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

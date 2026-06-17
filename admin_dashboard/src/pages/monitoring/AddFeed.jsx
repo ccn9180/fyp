@@ -9,15 +9,18 @@ import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../firebase';
 
 const C = {
-  primary: '#7C9C84',
-  primaryLight: '#BBCBC2',
-  cream: '#F6F5F2',
-  creamDarker: '#E5E4E0',
-  sage100: '#E5EDE8',
-  charcoal: '#333',
-  charcoalMuted: '#666',
-  muted: '#888',
+  primary: 'var(--primary-color, #7C9C84)',
+  primaryDark: 'var(--color-primary-dark, #66826D)',
+  primaryLight: 'var(--primary-light, #BBCBC2)',
+  sage100: 'var(--color-sage-100, #E5EDE8)',
+  cream: 'var(--bg-main, #F6F5F2)',
+  creamDarker: 'var(--border-color, #E5E4E0)',
+  charcoal: 'var(--text-darker, #333)',
+  charcoalMuted: 'var(--text-muted, #666)',
+  muted: 'var(--text-muted, #888)',
+  bgCard: 'var(--bg-card, white)',
   amber: '#d97706',
+  blue: '#3b82f6',
   rose: '#f43f5e'
 };
 

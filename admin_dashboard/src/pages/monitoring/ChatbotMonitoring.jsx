@@ -14,17 +14,19 @@ import { usePDFExport } from '../../hooks/usePDFExport';
 import ReportPreview from '../../components/ReportPreview';
 
 const C = {
-  primary: '#7C9C84',
-  primaryDark: '#6A8671',
-  cream: '#F6F5F2',
-  creamDarker: '#E5E4E0',
-  sage100: '#E5EDE8',
-  charcoal: '#333',
-  charcoalMuted: '#666',
-  muted: '#888',
-  red: '#ef4444',
+  primary: 'var(--primary-color, #7C9C84)',
+  primaryDark: 'var(--color-primary-dark, #66826D)',
+  primaryLight: 'var(--primary-light, #BBCBC2)',
+  sage100: 'var(--color-sage-100, #E5EDE8)',
+  cream: 'var(--bg-main, #F6F5F2)',
+  creamDarker: 'var(--border-color, #E5E4E0)',
+  charcoal: 'var(--text-darker, #333)',
+  charcoalMuted: 'var(--text-muted, #666)',
+  muted: 'var(--text-muted, #888)',
+  bgCard: 'var(--bg-card, white)',
   amber: '#d97706',
-  white: '#ffffff'
+  blue: '#3b82f6',
+  rose: '#f43f5e'
 };
 
 const badge = (type) => ({
@@ -355,7 +357,7 @@ export default function ChatbotMonitoring() {
               {/* Trend Chart (Like Performance Metrics) */}
               <div className="card lg:col-span-2">
                 <p className="section-label mb-1">Weekly Distribution</p>
-                <h3 className="font-body font-semibold text-charcoal mb-6">Conversation Volume & Severity Trends</h3>
+                <h3 className="font-body font-semibold text-charcoal mb-6">Conversation Volume and Severity Trends</h3>
                 <div className="h-[250px] w-full">
                   <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={chartData}>
@@ -497,7 +499,7 @@ export default function ChatbotMonitoring() {
                   <button
                     disabled={currentPage === 1}
                     onClick={() => setCurrentPage(prev => prev - 1)}
-                    style={{ padding: '6px 14px', borderRadius: '10px', border: `1px solid ${C.creamDarker}`, background: 'white', fontFamily: 'Outfit', fontSize: '12px', fontWeight: 600, color: C.charcoal, cursor: currentPage === 1 ? 'default' : 'pointer', opacity: currentPage === 1 ? 0.4 : 1 }}
+                    style={{ padding: '6px 14px', borderRadius: '10px', border: `1px solid ${C.creamDarker}`, background: C.bgCard, fontFamily: 'Outfit', fontSize: '12px', fontWeight: 600, color: C.charcoal, cursor: currentPage === 1 ? 'default' : 'pointer', opacity: currentPage === 1 ? 0.4 : 1 }}
                   >
                     Previous
                   </button>
@@ -505,7 +507,7 @@ export default function ChatbotMonitoring() {
                     <button
                       key={i}
                       onClick={() => setCurrentPage(i + 1)}
-                      style={{ width: '32px', height: '32px', borderRadius: '10px', border: currentPage === i + 1 ? `1px solid ${C.primary}` : `1px solid ${C.creamDarker}`, background: currentPage === i + 1 ? C.primary : 'white', fontFamily: 'Outfit', fontSize: '12px', fontWeight: 700, color: currentPage === i + 1 ? 'white' : C.charcoal, cursor: 'pointer' }}
+                      style={{ width: '32px', height: '32px', borderRadius: '10px', border: currentPage === i + 1 ? `1px solid ${C.primary}` : `1px solid ${C.creamDarker}`, background: currentPage === i + 1 ? C.primary : C.bgCard, fontFamily: 'Outfit', fontSize: '12px', fontWeight: 700, color: currentPage === i + 1 ? 'white' : C.charcoal, cursor: 'pointer' }}
                     >
                       {i + 1}
                     </button>
@@ -513,7 +515,7 @@ export default function ChatbotMonitoring() {
                   <button
                     disabled={currentPage === totalPages || totalPages === 0}
                     onClick={() => setCurrentPage(prev => prev + 1)}
-                    style={{ padding: '6px 14px', borderRadius: '10px', border: `1px solid ${C.creamDarker}`, background: 'white', fontFamily: 'Outfit', fontSize: '12px', fontWeight: 600, color: C.charcoal, cursor: (currentPage === totalPages || totalPages === 0) ? 'default' : 'pointer', opacity: (currentPage === totalPages || totalPages === 0) ? 0.4 : 1 }}
+                    style={{ padding: '6px 14px', borderRadius: '10px', border: `1px solid ${C.creamDarker}`, background: C.bgCard, fontFamily: 'Outfit', fontSize: '12px', fontWeight: 600, color: C.charcoal, cursor: (currentPage === totalPages || totalPages === 0) ? 'default' : 'pointer', opacity: (currentPage === totalPages || totalPages === 0) ? 0.4 : 1 }}
                   >
                     Next
                   </button>
@@ -582,7 +584,7 @@ export default function ChatbotMonitoring() {
                     </div>
                   </div>
 
-                  <div className={`p-5 rounded-2xl border ${viewingLog.severity === 'High Risk' ? 'bg-red-50 border-red-100' : 'bg-sage-100 border-sage-100'}`}>
+                  <div className={`p-5 rounded-2xl border ${viewingLog.severity === 'High Risk' ? 'bg-red-500/10 border-red-500/20' : 'bg-primary/10 border-primary/20'}`}>
                     <div className="flex items-center gap-2 mb-3">
                       <ShieldAlert size={16} className={viewingLog.severity === 'High Risk' ? 'text-red-500' : 'text-primary'} />
                       <p className={`font-body font-bold text-xs ${viewingLog.severity === 'High Risk' ? 'text-red-500' : 'text-primary'} uppercase tracking-tight`}>AI Assessment Details</p>
@@ -608,7 +610,7 @@ export default function ChatbotMonitoring() {
         )
       }
       <div style={{ position: 'fixed', left: '-2000px', top: '0', width: '794px', pointerEvents: 'none', zIndex: -1 }}>
-        <div ref={paperRef} style={{ background: 'white' }}>
+        <div ref={paperRef} style={{ background: C.bgCard }}>
           <ReportContent chartData={chartData} totalChats={totalChats} totalCrisis={totalCrisis} detectionRate={detectionRate} processedSessions={processedSessions} />
         </div>
       </div>
@@ -646,7 +648,7 @@ function ReportContent({ chartData, totalChats, totalCrisis, detectionRate, proc
   ];
 
   return (
-    <div style={{ padding: '96px 96px 160px 96px', background: 'white', fontFamily: 'Outfit, sans-serif', color: '#1a1a1a' }}>
+    <div style={{ padding: '96px 96px 160px 96px', background: C.bgCard, fontFamily: 'Outfit, sans-serif', color: '#1a1a1a' }}>
       {/* Formal Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '2px solid #7C9C84', paddingBottom: '20px', marginBottom: '40px' }}>
         <div>

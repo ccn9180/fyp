@@ -22,6 +22,16 @@ class _SessionHistoryScreenState extends State<SessionHistoryScreen> {
 
   final List<Map<String, dynamic>> _allCompletedSessions = [];
 
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+  String _statusFilter = 'All';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
@@ -46,7 +56,162 @@ class _SessionHistoryScreenState extends State<SessionHistoryScreen> {
         ),
         centerTitle: true,
       ),
-      body: StreamBuilder<QuerySnapshot>(
+      body: Column(
+        children: [
+          _buildSearchAndFilterBar(),
+          if (_statusFilter != 'All') _buildActiveFilterChip(),
+          Expanded(child: _buildSessionStream(user)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSearchAndFilterBar() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+      child: Row(
+        children: [
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              height: 50,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10)],
+              ),
+              child: Center(
+                child: TextField(
+                  controller: _searchController,
+                  onChanged: (value) => setState(() => _searchQuery = value.toLowerCase().trim()),
+                  decoration: InputDecoration(
+                    hintText: 'Search by counsellor or session focus...',
+                    hintStyle: GoogleFonts.outfit(fontSize: 14, color: Colors.grey),
+                    border: InputBorder.none,
+                    icon: const Icon(Icons.search_rounded, size: 20, color: Colors.grey),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          GestureDetector(
+            onTap: () => _showFilterSheet(context),
+            child: Container(
+              width: 50,
+              height: 50,
+              decoration: BoxDecoration(
+                color: _statusFilter != 'All' ? primaryGreen : Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10)],
+              ),
+              child: Icon(Icons.tune_rounded, size: 20, color: _statusFilter != 'All' ? Colors.white : Colors.grey),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActiveFilterChip() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: primaryGreen.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                _statusFilter == 'Completed' ? Icons.check_circle_outline_rounded : Icons.cancel_outlined,
+                size: 14,
+                color: primaryGreen,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                _statusFilter,
+                style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold, color: primaryGreen),
+              ),
+              const SizedBox(width: 8),
+              GestureDetector(
+                onTap: () => setState(() => _statusFilter = 'All'),
+                child: Icon(Icons.close_rounded, size: 16, color: primaryGreen),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showFilterSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(32),
+        decoration: const BoxDecoration(
+          color: Color(0xFFF2F1EC),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 24),
+                decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2)),
+              ),
+            ),
+            Text('Filter Sessions', style: GoogleFonts.playfairDisplay(fontSize: 24, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 24),
+            _buildFilterOption(Icons.list_alt_rounded, 'All Sessions', () {
+              setState(() => _statusFilter = 'All');
+              Navigator.pop(context);
+            }),
+            _buildFilterOption(Icons.check_circle_outline_rounded, 'Completed', () {
+              setState(() => _statusFilter = 'Completed');
+              Navigator.pop(context);
+            }),
+            _buildFilterOption(Icons.cancel_outlined, 'Missed', () {
+              setState(() => _statusFilter = 'Missed');
+              Navigator.pop(context);
+            }, isLast: true),
+            const SizedBox(height: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFilterOption(IconData icon, String label, VoidCallback onTap, {bool isLast = false}) {
+    final bool isSelected = _statusFilter == label || (_statusFilter == 'All' && label == 'All Sessions');
+    return Column(
+      children: [
+        ListTile(
+          onTap: onTap,
+          leading: Icon(icon, color: primaryGreen, size: 20),
+          title: Text(label, style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w500)),
+          trailing: isSelected
+              ? Icon(Icons.check_rounded, color: primaryGreen, size: 18)
+              : const Icon(Icons.chevron_right_rounded, color: Colors.grey, size: 18),
+          contentPadding: EdgeInsets.zero,
+        ),
+        if (!isLast) Divider(color: Colors.grey.withOpacity(0.1)),
+      ],
+    );
+  }
+
+  Widget _buildSessionStream(User? user) {
+    return StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
             .collection('counsellor_bookings')
             .where('patientId', isEqualTo: user?.uid)
@@ -94,17 +259,30 @@ class _SessionHistoryScreenState extends State<SessionHistoryScreen> {
             return bTime.compareTo(aTime); // descending
           });
 
-          final listToShow = completedSessions;
+          final listToShow = completedSessions.where((session) {
+            final matchesStatus = _statusFilter == 'All' ||
+                (_statusFilter == 'Completed' && session['isMissed'] != true) ||
+                (_statusFilter == 'Missed' && session['isMissed'] == true);
+            final matchesSearch = _searchQuery.isEmpty ||
+                (session['counsellorName'] ?? '').toString().toLowerCase().contains(_searchQuery) ||
+                (session['summary'] ?? '').toString().toLowerCase().contains(_searchQuery);
+            return matchesStatus && matchesSearch;
+          }).toList();
 
           if (listToShow.isEmpty) {
+            final bool hasActiveFilter = _searchQuery.isNotEmpty || _statusFilter != 'All';
             return Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.history_rounded, size: 48, color: primaryGreen.withOpacity(0.5)),
+                  Icon(
+                    hasActiveFilter ? Icons.search_off_rounded : Icons.history_rounded,
+                    size: 48,
+                    color: primaryGreen.withOpacity(0.5),
+                  ),
                   const SizedBox(height: 16),
                   Text(
-                    'No past sessions yet.',
+                    hasActiveFilter ? 'No matching sessions' : 'No past sessions yet.',
                     style: GoogleFonts.playfairDisplay(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
@@ -113,7 +291,9 @@ class _SessionHistoryScreenState extends State<SessionHistoryScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Your completed and missed sessions will appear here.',
+                    hasActiveFilter
+                        ? 'Try adjusting your search or filter.'
+                        : 'Your completed and missed sessions will appear here.',
                     style: GoogleFonts.outfit(
                       fontSize: 14,
                       color: textColorSub,
@@ -133,8 +313,7 @@ class _SessionHistoryScreenState extends State<SessionHistoryScreen> {
             },
           );
         },
-      ),
-    );
+      );
   }
 
   Widget _buildSessionCard(BuildContext context, Map<String, dynamic> session) {

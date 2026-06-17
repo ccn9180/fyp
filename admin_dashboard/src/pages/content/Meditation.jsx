@@ -8,19 +8,22 @@ import { customAlert, customConfirm } from '../../utils/dialogUtils';
 import Skeleton from '../../components/Skeleton.jsx';
 
 const C = {
-  primary: '#7C9C84',
-  primaryDark: '#6A8671',
-  cream: '#F6F5F2',
-  creamDarker: '#E5E4E0',
-  sage100: '#E5EDE8',
-  charcoal: '#333',
-  charcoalMuted: '#666',
-  muted: '#888',
-  white: '#ffffff',
-  error: '#f87171'
+  primary: 'var(--primary-color, #7C9C84)',
+  primaryDark: 'var(--color-primary-dark, #66826D)',
+  primaryLight: 'var(--primary-light, #BBCBC2)',
+  sage100: 'var(--color-sage-100, #E5EDE8)',
+  cream: 'var(--bg-main, #F6F5F2)',
+  creamDarker: 'var(--border-color, #E5E4E0)',
+  charcoal: 'var(--text-darker, #333)',
+  charcoalMuted: 'var(--text-muted, #666)',
+  muted: 'var(--text-muted, #888)',
+  bgCard: 'var(--bg-card, white)',
+  amber: '#d97706',
+  blue: '#3b82f6',
+  rose: '#f43f5e'
 };
 
-const card = { background: 'white', borderRadius: '20px', boxShadow: '0 2px 16px rgba(0,0,0,0.06)', padding: '20px' };
+const card = { background: C.bgCard, borderRadius: '20px', boxShadow: '0 2px 16px rgba(0,0,0,0.06)', padding: '20px' };
 const sLabel = { fontFamily: 'Outfit', fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: C.muted };
 const badge = (type) => ({ display: 'inline-flex', padding: '3px 10px', borderRadius: '999px', fontSize: '11px', fontWeight: 700, fontFamily: 'Outfit', background: type === 'green' ? C.sage100 : type === 'gray' ? C.creamDarker : '#fffbeb', color: type === 'green' ? C.primary : type === 'gray' ? C.muted : '#d97706' });
 
@@ -476,7 +479,7 @@ export default function Meditation() {
               <button 
                 disabled={currentPage === 1}
                 onClick={() => setCurrentPage(prev => prev - 1)}
-                style={{ padding: '6px 14px', borderRadius: '10px', border: `1px solid ${C.creamDarker}`, background: 'white', fontFamily: 'Outfit', fontSize: '12px', fontWeight: 600, color: C.charcoal, cursor: currentPage === 1 ? 'default' : 'pointer', opacity: currentPage === 1 ? 0.4 : 1 }}
+                style={{ padding: '6px 14px', borderRadius: '10px', border: `1px solid ${C.creamDarker}`, background: C.bgCard, fontFamily: 'Outfit', fontSize: '12px', fontWeight: 600, color: C.charcoal, cursor: currentPage === 1 ? 'default' : 'pointer', opacity: currentPage === 1 ? 0.4 : 1 }}
               >
                 Previous
               </button>
@@ -492,7 +495,7 @@ export default function Meditation() {
               <button 
                 disabled={currentPage === totalPages || totalPages === 0}
                 onClick={() => setCurrentPage(prev => prev + 1)}
-                style={{ padding: '6px 14px', borderRadius: '10px', border: `1px solid ${C.creamDarker}`, background: 'white', fontFamily: 'Outfit', fontSize: '12px', fontWeight: 600, color: C.charcoal, cursor: (currentPage === totalPages || totalPages === 0) ? 'default' : 'pointer', opacity: (currentPage === totalPages || totalPages === 0) ? 0.4 : 1 }}
+                style={{ padding: '6px 14px', borderRadius: '10px', border: `1px solid ${C.creamDarker}`, background: C.bgCard, fontFamily: 'Outfit', fontSize: '12px', fontWeight: 600, color: C.charcoal, cursor: (currentPage === totalPages || totalPages === 0) ? 'default' : 'pointer', opacity: (currentPage === totalPages || totalPages === 0) ? 0.4 : 1 }}
               >
                 Next
               </button>
@@ -509,14 +512,14 @@ export default function Meditation() {
           onClick={() => setViewingGuide(null)}
         >
           <div 
-            style={{ width: '100%', maxWidth: '600px', background: 'white', borderRadius: '32px', overflow: 'hidden', boxShadow: '0 30px 60px rgba(0,0,0,0.15)' }}
+            style={{ width: '100%', maxWidth: '600px', background: C.bgCard, borderRadius: '32px', overflow: 'hidden', boxShadow: '0 30px 60px rgba(0,0,0,0.15)' }}
             onClick={e => e.stopPropagation()}
           >
             <div style={{ padding: '0', position: 'relative' }}>
                {viewingGuide.imageUrl && (
                  <img src={viewingGuide.imageUrl} style={{ width: '100%', height: '300px', objectFit: 'cover' }} alt="Cover" />
                )}
-               <button onClick={() => setViewingGuide(null)} style={{ position: 'absolute', top: '20px', right: '20px', padding: '10px', background: 'rgba(255,255,255,0.8)', border: 'none', borderRadius: '50%', cursor: 'pointer', backdropFilter: 'blur(4px)' }}>
+               <button onClick={() => setViewingGuide(null)} style={{ position: 'absolute', top: '20px', right: '20px', padding: '10px', background: 'rgba(255,255,255,0.8)', border: 'none', borderRadius: '50%', cursor: 'pointer', backdropFilter: 'blur(4px)', color: '#333' }}>
                  <X size={20} />
                </button>
             </div>
@@ -572,7 +575,7 @@ export default function Meditation() {
             style={{
               width: '100%',
               maxWidth: '500px',
-              background: 'white',
+              background: C.bgCard,
               height: '100%',
               display: 'flex',
               flexDirection: 'column',
@@ -674,7 +677,7 @@ export default function Meditation() {
                     height: '200px',
                     borderRadius: '16px',
                     border: formData.imageUrl ? 'none' : `2px dashed ${C.primaryLight}`,
-                    background: formData.imageUrl ? 'transparent' : '#f8faf9',
+                    background: formData.imageUrl ? 'transparent' : C.cream,
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'center',
@@ -699,7 +702,7 @@ export default function Meditation() {
                          onMouseOver={e => e.currentTarget.style.opacity = 1} 
                          onMouseOut={e => e.currentTarget.style.opacity = 0}
                        >
-                         <div style={{ background: 'white', padding: '8px 16px', borderRadius: '20px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 600, color: C.charcoal }}>
+                         <div style={{ background: C.bgCard, padding: '8px 16px', borderRadius: '20px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 600, color: C.charcoal }}>
                            <Upload size={14} /> Change Image
                          </div>
                        </div>
@@ -721,7 +724,7 @@ export default function Meditation() {
               <div className="form-group">
                 <label className="form-label"><PlayCircle size={12} /> Audio Track</label>
                 <div 
-                  style={{ display: 'flex', gap: '8px', padding: '10px', border: `2px dashed ${isUploading.audioUrl ? 'transparent' : C.primaryLight}`, borderRadius: '12px', background: isUploading.audioUrl ? 'transparent' : '#f8faf9', transition: 'all 0.2s', position: 'relative' }}
+                  style={{ display: 'flex', gap: '8px', padding: '10px', border: `2px dashed ${isUploading.audioUrl ? 'transparent' : C.primaryLight}`, borderRadius: '12px', background: isUploading.audioUrl ? 'transparent' : C.cream, transition: 'all 0.2s', position: 'relative' }}
                   onDragOver={(e) => { e.preventDefault(); e.currentTarget.style.borderColor = C.primary; }}
                   onDragLeave={(e) => { e.preventDefault(); e.currentTarget.style.borderColor = `2px dashed ${C.primaryLight}`; }}
                   onDrop={(e) => {
@@ -750,7 +753,7 @@ export default function Meditation() {
                     type="button"
                     onClick={() => audioInputRef.current.click()}
                     disabled={isUploading.audioUrl}
-                    style={{ padding: '8px 16px', borderRadius: '8px', border: `1px solid ${C.creamDarker}`, background: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600, color: C.charcoal }}
+                    style={{ padding: '8px 16px', borderRadius: '8px', border: `1px solid ${C.creamDarker}`, background: C.bgCard, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600, color: C.charcoal }}
                   >
                     {isUploading.audioUrl ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />} Upload
                   </button>

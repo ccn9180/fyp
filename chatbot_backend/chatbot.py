@@ -28,6 +28,22 @@ class Turn:
     applied_strategy: str
     bot_response: str
 
+
+@dataclass
+class AttentionState:
+    """Attention Lock System: once the user introduces a more specific topic
+    (backend, supervisor feedback, a relationship conflict, etc.), this holds
+    conversational attention on it for several turns so the bot keeps
+    building on it instead of reverting to whatever generic category
+    (deadline/workload) it was discussing before."""
+    focus_topic: Optional[str] = None     # short label, e.g. "backend"
+    focus_entity: Optional[str] = None    # full noun phrase, e.g. "your core tech and backend stuff"
+    focus_event: Optional[str] = None     # verb-phrase event tied to the focus, if any
+    focus_domain: Optional[str] = None    # category key, e.g. "technical" (-> technical_implementation)
+    lock_strength: float = 0.0
+    lock_turns_remaining: int = 0
+
+
 @dataclass
 class UserContextTracker:
     topic: Optional[str] = None
@@ -70,6 +86,7 @@ class UserContextTracker:
     recent_component_phrases: List[str] = field(default_factory=list)  # ComponentNLGEngine anti-repetition
     last_response_mode: Optional[str] = None  # last question-ratio mode used (avoid back-to-back repeats)
     recent_observation_categories: List[str] = field(default_factory=list)  # avoid same "flavor" twice in a row
+    attention: AttentionState = field(default_factory=AttentionState)  # Attention Lock System
 
     # ── entity-mention fade: avoid repeating the literal entity every turn ──
     entity_mention_streak: int = 0
@@ -168,6 +185,7 @@ class UserContextTracker:
         self.recent_component_phrases = []
         self.last_response_mode = None
         self.recent_observation_categories = []
+        self.attention = AttentionState()
 
         self.entity_mention_streak = 0
         self.last_literal_entity = None
@@ -1151,9 +1169,11 @@ class AdvancedNLUPipeline:
         if topic_info.get("topic_entity") and topic_info["topic_entity"] != tracker.current_entity:
             tracker.current_entity = topic_info["topic_entity"]
             new_info = True
+            state["new_entity_this_turn"] = True
         if topic_info.get("event_phrase") and topic_info["event_phrase"] != tracker.current_event:
             tracker.current_event = topic_info["event_phrase"]
             new_info = True
+            state["new_event_this_turn"] = True
 
         if topic_info.get("topic_category") and topic_info["topic_category"] != "general":
             state["topic"] = topic_info["topic_category"]
@@ -1192,6 +1212,7 @@ class AdvancedNLUPipeline:
             "supervisor_feedback": [
                 "supervisor", "feedback", "revise", "revision", "reject",
                 "rejected", "comments", "professor", "lecturer", "advisor",
+                "proposal",
             ],
             "relationship": [
                 "boyfriend", "girlfriend", "partner", "breakup", "broke up",
@@ -1199,10 +1220,11 @@ class AdvancedNLUPipeline:
             ],
             "family": ["mother", "father", "mom", "dad", "family", "parents"],
         }
-        detected_category = next(
+        fresh_category_match = next(
             (cat for cat, kws in EVENT_CATEGORY_KEYWORDS.items() if any(kw in clean for kw in kws)),
             None,
         )
+        detected_category = fresh_category_match
         if detected_category:
             # Explicit keyword match this turn -- update directly, even if it
             # overwrites a previous category (this is a direct signal, like entity).
@@ -1216,6 +1238,46 @@ class AdvancedNLUPipeline:
             detected_category = "academic"
             tracker.current_event_category = "academic"
         state["event_category"] = detected_category
+
+        # ── Attention Lock System ──────────────────────────────
+        # A FRESH, explicit mention of a specific domain (not just the
+        # inherited/persisted category) locks conversational attention onto
+        # it for several turns, so later generation overrides whatever the
+        # stage/category machinery would otherwise have used (e.g. reverting
+        # to "deadline" content just because that's what current_event_category
+        # used to be). Re-mentioning the SAME domain refreshes the lock;
+        # explicitly mentioning a DIFFERENT one replaces it -- this is how
+        # "unless the user explicitly returns to them" is satisfied.
+        ATTENTION_DOMAINS = {"technical", "deadline", "supervisor_feedback", "relationship", "family"}
+        DOMAIN_LABELS = {
+            "technical": "the technical side of things",
+            "deadline": "the amount of work and time pressure",
+            "supervisor_feedback": "the feedback you've been given",
+            "relationship": "what's going on in the relationship",
+            "family": "what's going on with family",
+            "academic": "the workload itself",
+        }
+        state["attention_fresh_match"] = False
+        if fresh_category_match and fresh_category_match in ATTENTION_DOMAINS:
+            previous_domain = tracker.attention.focus_domain
+            tracker.attention.focus_domain = fresh_category_match
+            # Only overwrite the locked entity/event if THIS turn actually
+            # produced one -- a refresh-only turn (e.g. "still breaking")
+            # shouldn't erase the more detailed focus from a turn or two ago.
+            if topic_info.get("topic_entity"):
+                tracker.attention.focus_entity = topic_info["topic_entity"]
+            if topic_info.get("event_phrase"):
+                tracker.attention.focus_event = topic_info["event_phrase"]
+            tracker.attention.focus_topic = next(
+                (kw for kw in EVENT_CATEGORY_KEYWORDS[fresh_category_match] if kw in clean),
+                fresh_category_match,
+            )
+            tracker.attention.lock_strength = 1.0
+            tracker.attention.lock_turns_remaining = 3
+            state["attention_fresh_match"] = True
+            state["attention_shifted"] = bool(previous_domain and previous_domain != fresh_category_match)
+            state["attention_previous_domain"] = previous_domain
+            state["attention_domain_labels"] = DOMAIN_LABELS
 
         # ── GATEKEEPER LAYER ──────────────────────────────────
         DISENGAGE_KEYWORDS = ["don't want to talk", "dont want to talk", "stop", "change topic", "not this", "overwhelmed", "let's talk about something else", "lets talk about something else"]
@@ -1240,6 +1302,7 @@ class AdvancedNLUPipeline:
                 "text": "", "kind": "statement", "option_a": None, "option_b": None,
                 "answered": True, "topic": None, "entity": None, "intent": None,
             }
+            tracker.attention = AttentionState()
             tracker.conversation_stage = "validation"
             tracker.stage_turns = 0
             tracker.entity_mention_streak = 0
@@ -1605,11 +1668,18 @@ class SmarterDialogueManager:
                 # Skip light-touch responses and go straight to coping/grounding
                 return self.get_coping_strategy_for_symptom(tracker)
 
-        # Check topic transition
-        if (topic != tracker.topic 
+        # Check topic transition -- but an active Attention Lock outranks the
+        # broad topic-category model here (Priority 1: Current Attention Focus
+        # > Priority 5: Global Topic). Without this, a vague message like "I
+        # don't even know what's wrong anymore" can get misclassified into an
+        # unrelated topic_category and spuriously ask "did the topic change?"
+        # even though the user is still deep in the locked technical/deadline/
+        # relationship focus.
+        if (topic != tracker.topic
                 and topic not in [None, "general"]
-                and tracker.topic not in [None, "general"] 
-                and tracker.turn_count > 2):
+                and tracker.topic not in [None, "general"]
+                and tracker.turn_count > 2
+                and tracker.attention.lock_turns_remaining <= 0):
             return "topic_shift_acknowledgement"
 
         # ── mood states ───────────────────────────────────────
@@ -2360,19 +2430,45 @@ class HumanResponseGenerator:
         choice_options = None
         if state.get("choice_option_a") and state.get("choice_option_b"):
             choice_options = (state["choice_option_a"], state["choice_option_b"])
+
+        # Attention Lock System: while locked, the locked domain/entity/event
+        # take priority over whatever event_category/entity resolution would
+        # otherwise apply -- this is what stops a stale persisted event (e.g.
+        # an old "10 modules to go") from outranking a fresher, more specific
+        # focus (e.g. "backend") that the user is actually talking about now.
+        attention_active = (
+            tracker.attention.lock_turns_remaining > 0 and bool(tracker.attention.focus_domain)
+        )
+        if attention_active:
+            event_category = tracker.attention.focus_domain
+            entity = tracker.attention.focus_entity or entity
+            event_phrase = tracker.attention.focus_event
+        else:
+            event_category = state.get("event_category") or tracker.current_event_category
+            event_phrase = tracker.current_event
+
+        attention_shift = None
+        if state.get("attention_shifted"):
+            labels = state.get("attention_domain_labels", {})
+            prev_label = labels.get(state.get("attention_previous_domain"), "what we were just discussing")
+            new_label = labels.get(tracker.attention.focus_domain, "this")
+            attention_shift = (prev_label, new_label)
+
         response, used_phrases, used_categories = self.component_engine.generate_response(
             emotion_intent=state.get("intent", ""),
             topic_entity=entity,
             stage=stage,
             meaning_shift=state.get("meaning_shift"),
-            event_category=state.get("event_category") or tracker.current_event_category,
+            event_category=event_category,
             action_options=action_options,
-            event_phrase=tracker.current_event,
+            event_phrase=event_phrase,
             repetition_cue=state.get("repetition_cue", False),
             progress_detail=state.get("progress_detail") or tracker.current_progress_detail,
             choice_options=choice_options,
             has_evidence=tracker.technical_failure_evidence,
             new_info=state.get("new_info", False),
+            new_entity_this_turn=state.get("new_entity_this_turn", False),
+            attention_shift=attention_shift,
             recent_phrases=tracker.recent_component_phrases,
             recent_categories=tracker.recent_observation_categories,
             ask_question=ask_question,
@@ -2713,6 +2809,15 @@ class ProfessionalFYPBot:
             response, strategy,
             topic=state.get("topic"), entity=tracker.current_entity, intent=state.get("intent"),
         )
+
+        # Attention Lock decay: a turn that didn't freshly re-mention the
+        # locked domain spends one turn of the lock's remaining budget. A
+        # fresh mention already reset it to 3 in analyze(), so skip decaying
+        # the very turn that just set/refreshed it.
+        if not state.get("attention_fresh_match") and tracker.attention.lock_turns_remaining > 0:
+            tracker.attention.lock_turns_remaining -= 1
+            if tracker.attention.lock_turns_remaining <= 0:
+                tracker.attention.lock_strength = 0.0
 
         tracker.update(
             user_text=user_input,

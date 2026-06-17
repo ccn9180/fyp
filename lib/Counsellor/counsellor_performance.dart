@@ -299,7 +299,7 @@ class _CounsellorPerformanceScreenState extends State<CounsellorPerformanceScree
       physics: const NeverScrollableScrollPhysics(),
       crossAxisCount: 2, crossAxisSpacing: 16, mainAxisSpacing: 16, childAspectRatio: 1.3,
       children: [
-        _buildMetricCard(Icons.star_rounded, 'Client Satisfaction', rating > 0 ? rating.toStringAsFixed(1) : 'N/A', color: accentGold),
+        _buildMetricCard(Icons.star_rounded, 'Client Satisfaction', rating.toStringAsFixed(1), color: accentGold),
         _buildMetricCard(Icons.timer_rounded, 'Clinical Hours', '${hours.toStringAsFixed(1)}h', color: primaryGreen),
         _buildMetricCard(Icons.check_circle_outline_rounded, 'Completion Rate', '${completionRate.toStringAsFixed(0)}%', color: Colors.blue),
         _buildMetricCard(Icons.replay_circle_filled_rounded, 'Client Retention', '${retentionRate.toStringAsFixed(0)}%', color: Colors.purple),
@@ -322,7 +322,7 @@ class _CounsellorPerformanceScreenState extends State<CounsellorPerformanceScree
       }
     }
     
-    String peakDayStr = 'N/A';
+    String peakDayStr = 'None';
     if (dayCounts.isNotEmpty) {
       int peakDay = dayCounts.entries.reduce((a, b) => a.value > b.value ? a : b).key;
       peakDayStr = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][peakDay - 1];

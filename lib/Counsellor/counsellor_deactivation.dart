@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:fyp/UserAccount/splash_screen.dart';
 
 class CounsellorDeactivationScreen extends StatefulWidget {
   const CounsellorDeactivationScreen({super.key});
@@ -14,8 +15,6 @@ class _CounsellorDeactivationScreenState extends State<CounsellorDeactivationScr
   final TextEditingController _reasonController = TextEditingController();
   final TextEditingController _detailsController = TextEditingController();
   bool _isSubmitting = false;
-  bool _isLoadingPendingState = true;
-  bool _hasPendingRequest = false;
 
   final List<String> _commonReasons = [
     'Career Change',
@@ -33,26 +32,6 @@ class _CounsellorDeactivationScreenState extends State<CounsellorDeactivationScr
     _detailsController.addListener(() {
       setState(() {});
     });
-    _checkPendingRequest();
-  }
-
-  Future<void> _checkPendingRequest() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      try {
-        final query = await FirebaseFirestore.instance
-            .collection('deactivation_requests')
-            .where('counsellorId', isEqualTo: user.uid)
-            .where('status', isEqualTo: 'Pending')
-            .get();
-        if (query.docs.isNotEmpty) {
-          if (mounted) setState(() => _hasPendingRequest = true);
-        }
-      } catch (e) {
-        debugPrint('Error checking pending requests: $e');
-      }
-    }
-    if (mounted) setState(() => _isLoadingPendingState = false);
   }
 
   @override
@@ -134,14 +113,25 @@ class _CounsellorDeactivationScreenState extends State<CounsellorDeactivationScr
     final user = FirebaseAuth.instance.currentUser;
 
     try {
-      await FirebaseFirestore.instance.collection('deactivation_requests').add({
-        'counsellorId': user?.uid,
-        'counsellorName': user?.displayName,
+      final userRef = FirebaseFirestore.instance.collection('users').doc(user!.uid);
+      final appRef = FirebaseFirestore.instance.collection('counsellor_applications').doc(user.uid);
+      
+      final batch = FirebaseFirestore.instance.batch();
+      
+      final reqRef = FirebaseFirestore.instance.collection('deactivation_requests').doc();
+      batch.set(reqRef, {
+        'counsellorId': user.uid,
+        'counsellorName': user.displayName,
         'reason': _selectedReason,
         'details': _detailsController.text.trim(),
-        'status': 'Pending',
+        'status': 'Approved',
         'requestedAt': FieldValue.serverTimestamp(),
       });
+      
+      batch.set(userRef, {'role': 'user'}, SetOptions(merge: true));
+      batch.set(appRef, {'status': 'deactivated'}, SetOptions(merge: true));
+      
+      await batch.commit();
 
       if (mounted) {
         showDialog(
@@ -163,10 +153,10 @@ class _CounsellorDeactivationScreenState extends State<CounsellorDeactivationScr
                   child: const Icon(Icons.check_circle_outline_rounded, color: Color(0xFF7C9C84), size: 48),
                 ),
                 const SizedBox(height: 24),
-                Text('Request Submitted', textAlign: TextAlign.center, style: GoogleFonts.playfairDisplay(fontSize: 24, fontWeight: FontWeight.bold, color: const Color(0xFF333333))),
+                Text('Account Deactivated', textAlign: TextAlign.center, style: GoogleFonts.playfairDisplay(fontSize: 24, fontWeight: FontWeight.bold, color: const Color(0xFF333333))),
                 const SizedBox(height: 16),
                 Text(
-                  'Your retirement request has been sent to the Admin for review. You will be notified once the deactivation process is finalized.',
+                  'Your counsellor account has been successfully deactivated. You will now be logged out. If you wish to reactivate, please apply again.',
                   textAlign: TextAlign.center,
                   style: GoogleFonts.outfit(color: Colors.grey[600], height: 1.5),
                 ),
@@ -174,9 +164,15 @@ class _CounsellorDeactivationScreenState extends State<CounsellorDeactivationScr
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: () {
+                    onPressed: () async {
                       Navigator.pop(context); // Close dialog
-                      Navigator.pop(context); // Back to profile
+                      await FirebaseAuth.instance.signOut();
+                      if (context.mounted) {
+                        Navigator.of(context).pushAndRemoveUntil(
+                          MaterialPageRoute(builder: (context) => const SplashTransitionScreen(isLogout: true)),
+                          (route) => false,
+                        );
+                      }
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF7C9C84),
@@ -226,87 +222,9 @@ class _CounsellorDeactivationScreenState extends State<CounsellorDeactivationScr
         ),
         centerTitle: true,
       ),
-      body: _isLoadingPendingState
-          ? const Center(child: CircularProgressIndicator(color: primaryGreen))
-          : _hasPendingRequest
-              ? _buildPendingState(textColorMain)
-              : SingleChildScrollView(
-                  padding: const EdgeInsets.all(24),
-                  child: _buildForm(textColorMain),
-                ),
-    );
-  }
-
-  Widget _buildPendingState(Color textColorMain) {
-    const Color primaryGreen = Color(0xFF7C9C84);
-    
-    return Center(
-      child: Container(
-        margin: const EdgeInsets.all(24),
-        padding: const EdgeInsets.all(32),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(24),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.03),
-              blurRadius: 20,
-              offset: const Offset(0, 10),
-            ),
-          ],
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: primaryGreen.withOpacity(0.1),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.access_time_rounded, size: 48, color: primaryGreen),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              'Request Under Review',
-              textAlign: TextAlign.center,
-              style: GoogleFonts.playfairDisplay(
-                fontSize: 24,
-                fontWeight: FontWeight.w700,
-                color: textColorMain,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'You have already submitted a retirement request. Please wait while our administrators review and process your request.',
-              textAlign: TextAlign.center,
-              style: GoogleFonts.outfit(
-                fontSize: 16,
-                color: const Color(0xFF666666),
-                height: 1.5,
-              ),
-            ),
-            const SizedBox(height: 32),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(context),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: primaryGreen,
-                minimumSize: const Size(double.infinity, 56),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                elevation: 0,
-              ),
-              child: Text(
-                'Return to Profile',
-                style: GoogleFonts.outfit(
-                  fontSize: 16,
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ],
-        ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: _buildForm(textColorMain),
       ),
     );
   }

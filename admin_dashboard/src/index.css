@@ -268,7 +268,7 @@ input::placeholder, textarea::placeholder {
 html.dark {
   --bg-main: #181C1A;
   --bg-card: #222724;
-  --border-color: #39423D;
+  --border-color: #525F58;
   --text-darker: #F9F6F0;
   --text-muted: #A3ACA7;
   --primary-color: #7C9C84;
@@ -286,12 +286,19 @@ html.dark {
 }
 
 /* Override background colors for cards and components */
-html.dark .bg-white,
+html.dark .card,
+html.dark .bg-white {
+  background-color: #222724 !important;
+  color: #E5E4E0 !important;
+}
+
+/* Main background overrides */
+html.dark .bg-\[\#f8f7f5\],
 html.dark .bg-\[\#F6F5F2\],
 html.dark .bg-cream,
 html.dark .bg-cream\/50,
 html.dark .bg-cream\/30 {
-  background-color: #222724 !important;
+  background-color: #181C1A !important;
   color: #E5E4E0 !important;
 }
 
@@ -307,7 +314,7 @@ html.dark .border-cream-darker,
 html.dark .border-\[\#E5E4E0\],
 html.dark .border-white\/20,
 html.dark .border {
-  border-color: #39423D !important;
+  border-color: #525F58 !important;
 }
 
 /* Override text colors */
@@ -327,6 +334,7 @@ html.dark .text-\[\#888\] {
 }
 
 /* Override specific panels */
+html.dark .bg-\[\#E5EDE8\],
 html.dark .bg-sage-50,
 html.dark .bg-sage-100 {
   background-color: #2C332F !important;
@@ -340,10 +348,22 @@ html.dark .bg-white\/80 {
   background-color: rgba(34, 39, 36, 0.8) !important;
 }
 
+/* Crisis Alert Overrides */
+html.dark .bg-red-50 {
+  background-color: rgba(239, 68, 68, 0.1) !important;
+}
+html.dark .border-red-50,
+html.dark .border-red-100 {
+  border-color: rgba(239, 68, 68, 0.2) !important;
+}
+html.dark .hover\:bg-red-100:hover {
+  background-color: rgba(239, 68, 68, 0.2) !important;
+}
+
 /* Specific chart adjustments */
 html.dark .recharts-cartesian-grid-horizontal line,
 html.dark .recharts-cartesian-grid-vertical line {
-  stroke: #39423D;
+  stroke: #525F58;
 }
 
 html.dark .recharts-text {
@@ -354,3 +374,14 @@ html.dark .shadow-\[0_0_50px_rgba\(0\,0\,0\,0\.15\)\] {
   box-shadow: 0 0 50px rgba(0,0,0,0.4) !important;
 }
 
+html.dark .hover\:bg-sage-50:hover {
+  background-color: rgba(255, 255, 255, 0.04) !important;
+}
+
+html.dark .text-charcoal {
+  color: #F9F6F0 !important;
+}
+
+html.dark .text-charcoal-muted {
+  color: #A3ACA7 !important;
+}

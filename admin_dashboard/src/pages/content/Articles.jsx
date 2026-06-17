@@ -8,18 +8,20 @@ import { customAlert, customConfirm } from '../../utils/dialogUtils';
 import Skeleton from '../../components/Skeleton.jsx';
 import RichTextEditor from '../../components/RichTextEditor.jsx';
 
-const C = { 
-  primary: '#7C9C84', 
-  primaryDark: '#6A8671',
-  cream: '#F6F5F2', 
-  creamDarker: '#E5E4E0', 
-  sage100: '#E5EDE8', 
-  charcoal: '#333', 
-  charcoalMuted: '#666',
-  muted: '#888',
-  white: '#ffffff',
-  error: '#f87171',
-  indigo: '#6366f1'
+const C = {
+  primary: 'var(--primary-color, #7C9C84)',
+  primaryDark: 'var(--color-primary-dark, #66826D)',
+  primaryLight: 'var(--primary-light, #BBCBC2)',
+  sage100: 'var(--color-sage-100, #E5EDE8)',
+  cream: 'var(--bg-main, #F6F5F2)',
+  creamDarker: 'var(--border-color, #E5E4E0)',
+  charcoal: 'var(--text-darker, #333)',
+  charcoalMuted: 'var(--text-muted, #666)',
+  muted: 'var(--text-muted, #888)',
+  bgCard: 'var(--bg-card, white)',
+  amber: '#d97706',
+  blue: '#3b82f6',
+  rose: '#f43f5e'
 };
 
 const AUTHOR_PRESETS = [
@@ -39,7 +41,7 @@ const CATEGORY_TEMPLATES = {
   "Recommend": "https://images.unsplash.com/photo-1484480974693-6ca0a78fb36b"
 };
 
-const card = { background: 'white', borderRadius: '20px', boxShadow: '0 2px 16px rgba(0,0,0,0.06)', padding: '20px' };
+const card = { background: C.bgCard, borderRadius: '20px', boxShadow: '0 2px 16px rgba(0,0,0,0.06)', padding: '20px' };
 const sLabel = { fontFamily: 'Outfit', fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: C.muted };
 const badge = (type) => ({ display: 'inline-flex', padding: '3px 10px', borderRadius: '999px', fontSize: '11px', fontWeight: 700, fontFamily: 'Outfit', background: type === 'green' ? C.sage100 : type === 'gray' ? C.creamDarker : '#fffbeb', color: type === 'green' ? C.primary : type === 'gray' ? C.muted : '#d97706' });
 
@@ -352,6 +354,13 @@ export default function Articles() {
           .markdown-preview h1, .markdown-preview h2, .markdown-preview h3 { font-family: 'Playfair Display'; margin-top: 1.5em; border-bottom: 1px solid ${C.creamDarker}; padding-bottom: 0.3em; }
           .markdown-preview code { background: ${C.cream}; padding: 2px 5px; border-radius: 4px; }
           
+          .form-group { margin-bottom: 20px; }
+          .form-label { display: flex; align-items: center; gap: 6px; font-family: 'Outfit', sans-serif; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: ${C.muted}; margin-bottom: 8px; }
+          .form-input { width: 100%; background: ${C.cream}; border: 1px solid ${C.creamDarker}; border-radius: 12px; padding: 10px 14px; height: 42px; font-family: 'Outfit', sans-serif; font-size: 14px; color: ${C.charcoal}; outline: none; box-sizing: border-box; transition: all 0.2s ease; }
+          .form-input:hover { border-color: ${C.primaryLight}; }
+          .form-input:focus { border-color: ${C.primary}; box-shadow: 0 0 0 3px ${C.sage100}; background: transparent; }
+          select.form-input { cursor: pointer; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%234F796B' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 14px center; padding-right: 40px; }
+
           .custom-dropdown {
             padding: 10px 32px 10px 14px;
             border-radius: 12px;
@@ -554,7 +563,7 @@ export default function Articles() {
               <button 
                 disabled={currentPage === 1}
                 onClick={() => setCurrentPage(prev => prev - 1)}
-                style={{ padding: '6px 14px', borderRadius: '10px', border: `1px solid ${C.creamDarker}`, background: 'white', fontFamily: 'Outfit', fontSize: '12px', fontWeight: 600, color: C.charcoal, cursor: currentPage === 1 ? 'default' : 'pointer', opacity: currentPage === 1 ? 0.4 : 1 }}
+                style={{ padding: '6px 14px', borderRadius: '10px', border: `1px solid ${C.creamDarker}`, background: C.bgCard, fontFamily: 'Outfit', fontSize: '12px', fontWeight: 600, color: C.charcoal, cursor: currentPage === 1 ? 'default' : 'pointer', opacity: currentPage === 1 ? 0.4 : 1 }}
               >
                 Previous
               </button>
@@ -570,7 +579,7 @@ export default function Articles() {
               <button 
                 disabled={currentPage === totalPages || totalPages === 0}
                 onClick={() => setCurrentPage(prev => prev + 1)}
-                style={{ padding: '6px 14px', borderRadius: '10px', border: `1px solid ${C.creamDarker}`, background: 'white', fontFamily: 'Outfit', fontSize: '12px', fontWeight: 600, color: C.charcoal, cursor: (currentPage === totalPages || totalPages === 0) ? 'default' : 'pointer', opacity: (currentPage === totalPages || totalPages === 0) ? 0.4 : 1 }}
+                style={{ padding: '6px 14px', borderRadius: '10px', border: `1px solid ${C.creamDarker}`, background: C.bgCard, fontFamily: 'Outfit', fontSize: '12px', fontWeight: 600, color: C.charcoal, cursor: (currentPage === totalPages || totalPages === 0) ? 'default' : 'pointer', opacity: (currentPage === totalPages || totalPages === 0) ? 0.4 : 1 }}
               >
                 Next
               </button>
@@ -587,7 +596,7 @@ export default function Articles() {
           onClick={() => setViewingArticle(null)}
         >
           <div 
-            style={{ width: '100%', maxWidth: '900px', maxHeight: '90vh', background: 'white', borderRadius: '32px', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 30px 60px rgba(0,0,0,0.15)' }}
+            style={{ width: '100%', maxWidth: '900px', maxHeight: '90vh', background: C.bgCard, borderRadius: '32px', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 30px 60px rgba(0,0,0,0.15)' }}
             onClick={e => e.stopPropagation()}
           >
             <div style={{ padding: '40px', overflowY: 'auto' }}>
@@ -615,7 +624,7 @@ export default function Articles() {
                )}
 
                <div 
-                style={{ fontSize: '17px', lineHeight: 1.9, color: '#334155', fontFamily: 'Outfit' }}
+                style={{ fontSize: '17px', lineHeight: 1.9, color: C.charcoal, fontFamily: 'Outfit' }}
                 dangerouslySetInnerHTML={{ 
                   __html: /<[a-z][\s\S]*>/i.test(viewingArticle.content) 
                     ? viewingArticle.content 
@@ -623,7 +632,7 @@ export default function Articles() {
                 }}
                />
             </div>
-            <div style={{ padding: '20px 40px', background: '#FAF9F6', borderTop: `1px solid ${C.creamDarker}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ padding: '20px 40px', background: C.cream, borderTop: `1px solid ${C.creamDarker}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                <div style={{ display: 'flex', gap: '24px' }}>
                  <div style={{ textAlign: 'center' }}>
                    <p style={{ margin: 0, fontSize: '10px', fontWeight: 700, color: C.muted, textTransform: 'uppercase' }}>Views</p>
@@ -658,7 +667,7 @@ export default function Articles() {
             style={{
               width: '100%',
               maxWidth: '600px',
-              background: 'white',
+              background: C.bgCard,
               height: '100%',
               display: 'flex',
               flexDirection: 'column',
@@ -769,7 +778,7 @@ export default function Articles() {
                       padding: '0 15px', 
                       borderRadius: '12px', 
                       border: `1px solid ${C.creamDarker}`, 
-                      background: isSummarizing ? C.cream : '#f8faf9', 
+                      background: isSummarizing ? C.cream : C.cream, 
                       cursor: 'pointer', 
                       display: 'flex', 
                       alignItems: 'center', 
@@ -798,7 +807,7 @@ export default function Articles() {
                     height: '200px',
                     borderRadius: '16px',
                     border: formData.imageUrl ? 'none' : `2px dashed ${C.primaryLight}`,
-                    background: formData.imageUrl ? 'transparent' : '#f8faf9',
+                    background: formData.imageUrl ? 'transparent' : C.cream,
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'center',
@@ -824,7 +833,7 @@ export default function Articles() {
                          onMouseOver={e => e.currentTarget.style.opacity = 1} 
                          onMouseOut={e => e.currentTarget.style.opacity = 0}
                        >
-                         <div style={{ background: 'white', padding: '8px 16px', borderRadius: '20px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 600, color: C.charcoal }}>
+                         <div style={{ background: C.bgCard, padding: '8px 16px', borderRadius: '20px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 600, color: C.charcoal }}>
                            <Upload size={14} /> Change Image
                          </div>
                        </div>
@@ -847,7 +856,7 @@ export default function Articles() {
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
                   <span className="form-label" style={{ marginBottom: 0 }}><User size={12} /> Author Profile</span>
                   <select 
-                    style={{ background: 'white', border: `1px solid ${C.creamDarker}`, borderRadius: '8px', padding: '4px 8px', fontSize: '11px', fontFamily: 'Outfit', cursor: 'pointer' }}
+                    style={{ background: C.bgCard, border: `1px solid ${C.creamDarker}`, borderRadius: '8px', padding: '4px 8px', fontSize: '11px', fontFamily: 'Outfit', cursor: 'pointer' }}
                     onChange={(e) => {
                       const author = AUTHOR_PRESETS.find(a => a.name === e.target.value);
                       if (author) applyAuthorPreset(author);
@@ -944,14 +953,27 @@ export default function Articles() {
                 </>
               ) : (
                 <div className="markdown-preview">
-                  <div style={{ marginBottom: '20px', borderRadius: '20px', overflow: 'hidden', height: '240px' }}>
-                    <img src={formData.imageUrl || 'https://via.placeholder.com/800x400'} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  <div style={{ marginBottom: '20px', borderRadius: '20px', overflow: 'hidden', height: '240px', background: C.cream, display: 'flex', alignItems: 'center', justifyContent: 'center', border: `1px solid ${C.creamDarker}` }}>
+                    {formData.imageUrl ? (
+                      <img src={formData.imageUrl} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', color: C.muted }}>
+                        <ImageIcon size={32} style={{ marginBottom: '8px', opacity: 0.5 }} />
+                        <span style={{ fontSize: '13px', fontWeight: 600 }}>No Cover Image</span>
+                      </div>
+                    )}
                   </div>
                   <h1 style={{ fontFamily: 'Playfair Display', fontSize: '32px', marginBottom: '8px' }}>{formData.title || 'Untitled Article'}</h1>
                   <p style={{ color: C.muted, fontSize: '14px', marginBottom: '24px' }}>{formData.readingTime} · Published in <span style={{ color: C.primary, fontWeight: 700 }}>{formData.tag}</span></p>
                   
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '16px', background: C.cream, borderRadius: '16px', marginBottom: '32px' }}>
-                    <img src={formData.authorImageUrl || 'https://via.placeholder.com/100'} style={{ width: '48px', height: '48px', borderRadius: '50%', objectFit: 'cover' }} />
+                    {formData.authorImageUrl ? (
+                      <img src={formData.authorImageUrl} style={{ width: '48px', height: '48px', borderRadius: '50%', objectFit: 'cover' }} />
+                    ) : (
+                      <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: C.sage100, color: C.primary, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', fontWeight: 700 }}>
+                        {(formData.authorName || 'A')[0].toUpperCase()}
+                      </div>
+                    )}
                     <div>
                       <div style={{ fontWeight: 700, color: C.charcoal }}>{formData.authorName || 'Anonymous'}</div>
                       <div style={{ fontSize: '12px', color: C.charcoalMuted }}>{formData.authorRole || 'Contributor'}</div>

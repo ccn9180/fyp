@@ -265,7 +265,9 @@ class _RewardStoreScreenState extends State<RewardStoreScreen> with SingleTicker
     final String category = reward['category'] ?? 'General';
     final iconData = _getIconData(reward['icon']);
 
-    return Container(
+    return GestureDetector(
+      onTap: () => _showVoucherDetails(reward, rewardId, cost, userCoins, isRedeemed),
+      child: Container(
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -349,6 +351,129 @@ class _RewardStoreScreenState extends State<RewardStoreScreen> with SingleTicker
             ],
           ),
         ],
+      ),
+      ),
+    );
+  }
+
+  void _showVoucherDetails(
+    Map<String, dynamic> reward,
+    String rewardId,
+    int cost,
+    int userCoins,
+    bool isRedeemed,
+  ) {
+    final iconData = _getIconData(reward['icon']);
+    final String category = reward['category'] ?? 'General';
+    final String description = (reward['description'] as String?)?.trim().isNotEmpty == true
+        ? reward['description']
+        : 'No additional details for this reward.';
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => Container(
+        padding: const EdgeInsets.fromLTRB(28, 16, 28, 32),
+        decoration: const BoxDecoration(
+          color: Color(0xFFF2F1EC),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 24),
+                decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2)),
+              ),
+            ),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: isRedeemed ? Colors.grey[100] : primaryGreen.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  child: Icon(iconData, color: isRedeemed ? Colors.grey : primaryGreen, size: 30),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        reward['name'] ?? 'Premium Reward',
+                        style: GoogleFonts.outfit(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                          color: const Color(0xFF333333),
+                          decoration: isRedeemed ? TextDecoration.lineThrough : null,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(category, style: GoogleFonts.outfit(fontSize: 12, color: Colors.grey)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+            Text(
+              'DETAILS',
+              style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.2, color: Colors.grey[500]),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              description,
+              style: GoogleFonts.outfit(fontSize: 14, color: const Color(0xFF555555), height: 1.5),
+            ),
+            const SizedBox(height: 24),
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18)),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('Cost', style: GoogleFonts.outfit(fontSize: 13, color: Colors.grey[600])),
+                  Text(
+                    '$cost COINS',
+                    style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 16, color: primaryGreen),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: isRedeemed
+                    ? null
+                    : () {
+                        Navigator.pop(context); // close the details sheet
+                        _handleRedeem(reward, rewardId, cost, userCoins); // show the existing confirmation flow
+                      },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: isRedeemed ? Colors.grey[300] : primaryGreen,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  elevation: 0,
+                ),
+                child: Text(
+                  isRedeemed ? 'Already Claimed' : 'Redeem',
+                  style: GoogleFonts.outfit(
+                    fontWeight: FontWeight.bold,
+                    color: isRedeemed ? Colors.grey[600] : Colors.white,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

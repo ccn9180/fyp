@@ -1,4 +1,4 @@
-
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -24,6 +24,7 @@ class _MainScreenState extends State<MainScreen> {
   int _selectedIndex = 0;
   bool _isCounsellor = false;
   bool _isEmailVerified = true; // Default to true to avoid flicker
+  StreamSubscription<DocumentSnapshot>? _roleListener;
 
   final GlobalKey<State> _homeKey = GlobalKey();
   final GlobalKey<State> _counselorKey = GlobalKey();
@@ -34,30 +35,41 @@ class _MainScreenState extends State<MainScreen> {
   @override
   void initState() {
     super.initState();
-    _checkCounsellorStatus();
+    _initUserStatus();
   }
 
-  Future<void> _checkCounsellorStatus() async {
+  Future<void> _initUserStatus() async {
     final user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      // 1. Check Email Verification
-      await user.reload(); // Refresh user state from Firebase
-      final updatedUser = FirebaseAuth.instance.currentUser;
-      if (mounted) setState(() => _isEmailVerified = updatedUser?.emailVerified ?? true);
+    if (user == null) return;
 
-      // 2. Check Counsellor Status
-      final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
-      if (doc.exists && doc.data()?['role'] == 'counsellor') {
-        if (mounted) setState(() => _isCounsellor = true);
-      }
+    // 1. Check Email Verification (one-time)
+    await user.reload();
+    final updatedUser = FirebaseAuth.instance.currentUser;
+    if (mounted) setState(() => _isEmailVerified = updatedUser?.emailVerified ?? true);
 
-      // 3. Initialise Gamification
-      try {
-        await GamificationService.initUserGamification(user.uid);
-      } catch (e) {
-        debugPrint('Error updating gamification: $e');
+    // 2. Real-time listener for role — updates instantly when admin approves
+    _roleListener = FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .snapshots()
+        .listen((doc) {
+      if (mounted) {
+        setState(() => _isCounsellor = doc.exists && doc.data()?['role'] == 'counsellor');
       }
+    });
+
+    // 3. Initialise Gamification
+    try {
+      await GamificationService.initUserGamification(user.uid);
+    } catch (e) {
+      debugPrint('Error updating gamification: $e');
     }
+  }
+
+  @override
+  void dispose() {
+    _roleListener?.cancel();
+    super.dispose();
   }
 
   Future<void> _resendVerificationEmail() async {
@@ -174,68 +186,104 @@ class _MainScreenState extends State<MainScreen> {
       onTap: () => _onItemTapped(index),
       onLongPress: index == 4 ? _handleProfileLongPress : null,
       behavior: HitTestBehavior.opaque,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Stack(
-            clipBehavior: Clip.none,
-            children: [
-              Icon(
-                isSelected ? activeIcon : inactiveIcon,
-                color: isSelected ? const Color(0xFF7C9C84) : const Color(0xFFBDBDBD),
-                size: 26,
-              ),
-              if (hasNotification && currentUser != null)
-                StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance
-                      .collection('notifications')
-                      .where('to', isEqualTo: currentUser.uid)
-                      .where('isRead', isEqualTo: false)
-                      .snapshots(),
-                  builder: (context, snapshot) {
-                    if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
-                      return Positioned(
-                        right: -2,
-                        top: -2,
-                        child: Container(
-                          width: 8,
-                          height: 8,
-                          decoration: const BoxDecoration(
-                            color: Colors.red,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                      );
-                    }
-                    return const SizedBox.shrink();
-                  },
+      child: AnimatedScale(
+        scale: isSelected ? 1.15 : 1.0,
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOutBack,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Icon(
+                  isSelected ? activeIcon : inactiveIcon,
+                  color: isSelected ? const Color(0xFF7C9C84) : const Color(0xFFBDBDBD),
+                  size: 26,
                 ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: GoogleFonts.outfit(
-              fontSize: 10,
-              fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-              color: isSelected ? const Color(0xFF7C9C84) : const Color(0xFFBDBDBD),
+                if (hasNotification && currentUser != null)
+                  StreamBuilder<QuerySnapshot>(
+                    stream: FirebaseFirestore.instance
+                        .collection('notifications')
+                        .where('to', isEqualTo: currentUser.uid)
+                        .where('isRead', isEqualTo: false)
+                        .snapshots(),
+                    builder: (context, snapshot) {
+                      if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
+                        const bookingTypes = {
+                          'booking', 'new_booking', 'booking_cancelled', 'cancelled',
+                          'payment', 'income', 'reminder', 'reschedule', 'rescheduled',
+                          'cancellation',
+                        };
+                        final hasUserUnread = snapshot.data!.docs.any((doc) {
+                          final type = ((doc.data() as Map<String, dynamic>)['type'] ?? '').toString().toLowerCase();
+                          return !bookingTypes.contains(type);
+                        });
+                        
+                        if (hasUserUnread) {
+                          return Positioned(
+                            right: -2,
+                            top: -2,
+                            child: Container(
+                              width: 8,
+                              height: 8,
+                              decoration: const BoxDecoration(
+                                color: Colors.red,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                          );
+                        }
+                      }
+                      return const SizedBox.shrink();
+                    },
+                  ),
+              ],
             ),
-          ),
-        ],
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: GoogleFonts.outfit(
+                fontSize: 10,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                color: isSelected ? const Color(0xFF7C9C84) : const Color(0xFFBDBDBD),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  void _handleProfileLongPress() {
+  void _handleProfileLongPress() async {
     if (!_isCounsellor) {
+      // Check if they are deactivated
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        final appDoc = await FirebaseFirestore.instance.collection('counsellor_applications').doc(user.uid).get();
+        if (appDoc.exists && appDoc.data()?['status'] == 'deactivated') {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Your counselor account has been deactivated. Please reapply via the Apply as Counselor page to reactivate.'),
+                duration: Duration(seconds: 4),
+              ),
+            );
+          }
+          return;
+        }
+      }
+
       // Logic for users who are NOT counselors
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Become a counselor to unlock the professional portal!'),
-          duration: Duration(seconds: 2),
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Become a counselor to unlock the professional portal!'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
       return;
     }
 

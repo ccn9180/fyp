@@ -16,9 +16,9 @@ class EditCounsellorProfileScreen extends StatefulWidget {
 class _EditCounsellorProfileScreenState extends State<EditCounsellorProfileScreen> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
-  final TextEditingController _licenseController = TextEditingController();
   final TextEditingController _bioController = TextEditingController();
   final TextEditingController _priceController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
   
   String? _selectedExperience;
   final List<String> _experienceOptions = ['1-2 Years', '3-5 Years', '5-10 Years', '10+ Years', '15+ Years'];
@@ -53,9 +53,9 @@ class _EditCounsellorProfileScreenState extends State<EditCounsellorProfileScree
   void dispose() {
     _nameController.dispose();
     _emailController.dispose();
-    _licenseController.dispose();
     _bioController.dispose();
     _priceController.dispose();
+    _phoneController.dispose();
     super.dispose();
   }
 
@@ -68,26 +68,63 @@ class _EditCounsellorProfileScreenState extends State<EditCounsellorProfileScree
       if (doc.exists) {
         final data = doc.data()!;
         _nameController.text = data['fullName'] ?? user.displayName ?? 'Expert';
-        _licenseController.text = data['licenseNumber'] ?? 'E-SAGE-${user.uid.substring(0, 8).toUpperCase()}';
-        _bioController.text = data['bio'] ?? '';
+        _phoneController.text = data['phone'] ?? '';
+        final appDoc = await FirebaseFirestore.instance.collection('counsellor_applications').doc(user.uid).get();
+        final appData = appDoc.exists ? appDoc.data() as Map<String, dynamic> : null;
+        _bioController.text = data['counsellorBio'] ?? '';
+
+        if (appData != null) {
+          final appBio = appData['bio'] ?? appData['motivation'];
+          if (_bioController.text.isEmpty && appBio != null && appBio.toString().trim().isNotEmpty) {
+             _bioController.text = appBio.toString();
+          }
+          if (_selectedExperience == null || _selectedExperience!.isEmpty) {
+             _selectedExperience = appData['experience'];
+          }
+          if (_selectedSpecializations.isEmpty) {
+             final dynamic specs = appData['specializations'];
+             if (specs is List) {
+               _selectedSpecializations = List<String>.from(specs);
+             }
+          }
+          if (_selectedLanguages.isEmpty) {
+             final dynamic langData = appData['languages'];
+             if (langData is List) {
+               _selectedLanguages = List<String>.from(langData);
+             } else if (langData is String && langData.isNotEmpty) {
+               _selectedLanguages = langData.split(', ').map((e) => e.trim()).toList();
+             }
+          }
+        }
+          if (_bioController.text.isEmpty && data['bio'] != null) {
+            _bioController.text = data['bio'] ?? '';
+          }
+          if (_selectedExperience == null && data['experience'] != null) {
+            _selectedExperience = data['experience']?.toString();
+          }
+
+          if (_selectedSpecializations.isEmpty) {
+            final dynamic specs = data['specializations'];
+            if (specs is List) {
+              _selectedSpecializations = List<String>.from(specs);
+            }
+          }
+
+          if (_selectedLanguages.isEmpty) {
+            final dynamic langData = data['languages'];
+            if (langData is List) {
+              _selectedLanguages = List<String>.from(langData);
+            } else if (langData is String && langData.isNotEmpty) {
+              _selectedLanguages = langData.split(', ').map((e) => e.trim()).toList();
+            }
+          }
+        
         _priceController.text = data['price']?.toString() ?? 'Free';
         _isFreeSession = _priceController.text.toLowerCase() == 'free' || _priceController.text == '0' || _priceController.text.trim().isEmpty;
-        _selectedExperience = data['experience']?.toString();
-        _profileImageUrl = data['counsellorImageUrl'];
+        _profileImageUrl = data['counsellorImageUrl'] ?? (appData != null ? appData['profilePhotoUrl'] : null);
         
-        // Safety check for legacy data
         if (_selectedExperience != null && !_experienceOptions.contains(_selectedExperience)) {
           _selectedExperience = null;
-        }
-
-        final List<dynamic>? specs = data['specializations'];
-        if (specs != null) _selectedSpecializations = List<String>.from(specs);
-
-        final dynamic langData = data['languages'];
-        if (langData is List) {
-          _selectedLanguages = List<String>.from(langData);
-        } else if (langData is String && langData.isNotEmpty) {
-          _selectedLanguages = langData.split(', ').toList();
         }
       }
     }
@@ -218,7 +255,7 @@ class _EditCounsellorProfileScreenState extends State<EditCounsellorProfileScree
       }
 
       await FirebaseFirestore.instance.collection('users').doc(user?.uid).update({
-        'bio': _bioController.text.trim(),
+        'counsellorBio': _bioController.text.trim(),
         'price': _isFreeSession ? 'Free' : _priceController.text.trim(),
         'experience': _selectedExperience,
         'specializations': _selectedSpecializations,
@@ -226,6 +263,15 @@ class _EditCounsellorProfileScreenState extends State<EditCounsellorProfileScree
         'counsellorImageUrl': imageUrl,
         'updatedAt': FieldValue.serverTimestamp(),
       });
+
+      await FirebaseFirestore.instance.collection('counsellor_applications').doc(user?.uid).set({
+        'bio': _bioController.text.trim(),
+        'price': _isFreeSession ? 'Free' : _priceController.text.trim(),
+        'experience': _selectedExperience,
+        'specializations': _selectedSpecializations,
+        'languages': _selectedLanguages,
+        'profilePhotoUrl': imageUrl,
+      }, SetOptions(merge: true));
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Professional profile updated successfully'), backgroundColor: Color(0xFF7C9C84)));
@@ -331,16 +377,16 @@ class _EditCounsellorProfileScreenState extends State<EditCounsellorProfileScree
             _buildTextField(_nameController, hintText: "Enter your full name", readOnly: true),
 
             const SizedBox(height: 24),
-            
-            // License Field
-            _buildLabel('CLINICAL LICENSE ID (READ-ONLY)'),
-            _buildTextField(_licenseController, hintText: "Enter your license number", readOnly: true),
-
-            const SizedBox(height: 24),
 
             // Email Field
             _buildLabel('PROFESSIONAL EMAIL (READ-ONLY)'),
             _buildTextField(_emailController, hintText: "Enter your professional email", readOnly: true),
+
+            const SizedBox(height: 24),
+
+            // Phone Field
+            _buildLabel('PHONE CONTACT (READ-ONLY)'),
+            _buildTextField(_phoneController, hintText: "Enter your phone contact", readOnly: true),
 
             const SizedBox(height: 24),
 

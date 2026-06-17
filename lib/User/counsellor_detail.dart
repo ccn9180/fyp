@@ -54,8 +54,31 @@ class _CounsellorDetailScreenState extends State<CounsellorDetailScreen> {
           .doc(widget.counsellorId)
           .get();
       if (doc.exists && mounted) {
+        Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
+        
+        final appDoc = await FirebaseFirestore.instance.collection('counsellor_applications').doc(widget.counsellorId).get();
+        final appData = appDoc.exists ? appDoc.data() as Map<String, dynamic> : null;
+        
+        if (appData != null) {
+          if (data['counsellorBio'] == null || data['counsellorBio'].toString().trim().isEmpty) {
+            data['counsellorBio'] = appData['bio'] ?? appData['motivation'];
+          }
+          if (data['experience'] == null || data['experience'].toString().trim().isEmpty) {
+            data['experience'] = appData['experience'];
+          }
+          if (data['specializations'] == null || (data['specializations'] is List && (data['specializations'] as List).isEmpty)) {
+            data['specializations'] = appData['specializations'];
+          }
+          if (data['languages'] == null || (data['languages'] is List ? (data['languages'] as List).isEmpty : data['languages'].toString().trim().isEmpty)) {
+            data['languages'] = appData['languages'];
+          }
+          if (data['counsellorImageUrl'] == null || data['counsellorImageUrl'].toString().trim().isEmpty) {
+            data['counsellorImageUrl'] = appData['profilePhotoUrl'];
+          }
+        }
+
         setState(() {
-          _counsellorData = doc.data();
+          _counsellorData = data;
           _isLoadingDetails = false;
         });
       } else if (mounted) {
@@ -69,7 +92,8 @@ class _CounsellorDetailScreenState extends State<CounsellorDetailScreen> {
 
   List<String> _getCounsellorSpecializations() {
     if (_counsellorData != null) {
-      final List<dynamic>? specs = _counsellorData!['specializations'];
+      // Check both possible field names
+      final List<dynamic>? specs = _counsellorData!['specializations'] ?? _counsellorData!['specialties'];
       if (specs != null && specs.isNotEmpty) {
         return List<String>.from(specs);
       }
@@ -93,7 +117,7 @@ class _CounsellorDetailScreenState extends State<CounsellorDetailScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFFEEF3F0),
+        color: Colors.white,
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(
@@ -209,9 +233,9 @@ class _CounsellorDetailScreenState extends State<CounsellorDetailScreen> {
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(40),
                             image: DecorationImage(
-                              image: widget.imageUrl.startsWith('data:image')
-                                  ? MemoryImage(base64Decode(widget.imageUrl.split(',').last)) as ImageProvider
-                                  : NetworkImage(widget.imageUrl),
+                              image: (_counsellorData?['counsellorImageUrl'] ?? widget.imageUrl).startsWith('data:image')
+                                  ? MemoryImage(base64Decode((_counsellorData?['counsellorImageUrl'] ?? widget.imageUrl).split(',').last)) as ImageProvider
+                                  : NetworkImage(_counsellorData?['counsellorImageUrl'] ?? widget.imageUrl),
                               fit: BoxFit.cover,
                               alignment: Alignment.topCenter,
                             ),
@@ -259,24 +283,6 @@ class _CounsellorDetailScreenState extends State<CounsellorDetailScreen> {
                       ),
                     ),
 
-                    const SizedBox(height: 12),
-                    
-                    // Credentials
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.school_outlined, size: 16, color: Color(0xFF888888)),
-                        const SizedBox(width: 6),
-                        Text(
-                          'License: ${_counsellorData?['licenseNumber'] ?? 'Verifying...'} • ${widget.experience} exp',
-                          style: GoogleFonts.outfit(
-                            fontSize: 13,
-                            color: textColorSub,
-                          ),
-                        ),
-                      ],
-                    ),
-
                     const SizedBox(height: 8),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -301,11 +307,11 @@ class _CounsellorDetailScreenState extends State<CounsellorDetailScreen> {
                     // Stats Row
                     Row(
                       children: [
-                        Expanded(child: _buildStatCard('PATIENTS', widget.patients)),
+                        Expanded(child: _buildStatCard('PATIENTS', _counsellorData?['patients']?.toString() ?? '-')),
                         const SizedBox(width: 12),
-                        Expanded(child: _buildStatCard('EXPERIENCE', widget.experience)),
+                        Expanded(child: _buildStatCard('EXPERIENCE', _counsellorData?['experience']?.toString() ?? '-')),
                         const SizedBox(width: 12),
-                        Expanded(child: _buildStatCard('RATING', widget.rating, isRating: true)),
+                        Expanded(child: _buildStatCard('RATING', _counsellorData?['rating']?.toString() ?? '0.0', isRating: true)),
                       ],
                     ),
                   ],
@@ -318,21 +324,18 @@ class _CounsellorDetailScreenState extends State<CounsellorDetailScreen> {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          'About',
-                          style: GoogleFonts.playfairDisplay(
-                            fontSize: 22,
-                            fontWeight: FontWeight.w600,
-                            color: textColorMain,
-                          ),
-                        ),
+                        Text('Counsellor Motivation', style: GoogleFonts.playfairDisplay(fontSize: 22, fontWeight: FontWeight.w600, color: textColorMain)),
                         const SizedBox(height: 12),
-                        Text(
-                          _counsellorData?['bio'] ?? widget.about,
-                          style: GoogleFonts.outfit(
-                            fontSize: 15,
-                            color: const Color(0xFF7A8981),
-                            height: 1.6,
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            _counsellorData?['counsellorBio'] ?? _counsellorData?['bio'] ?? widget.about,
+                            style: GoogleFonts.outfit(fontSize: 15, color: const Color(0xFF4C5E51), height: 1.6),
                           ),
                         ),
                       ],

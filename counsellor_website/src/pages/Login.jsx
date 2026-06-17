@@ -51,7 +51,7 @@ const s = {
     width: '100%', 
     maxWidth: '960px', 
     minHeight: '420px', 
-    background: 'var(--bg-card)', 
+    background: '#FFFFFF', 
     borderRadius: '24px', 
     boxShadow: '0 24px 64px rgba(124,156,132,0.15)', // Soft green shadow
     display: 'flex',
@@ -73,7 +73,7 @@ const s = {
   },
   logoIcon: {
     width: '130px', height: '130px', borderRadius: '50%',
-    background: 'var(--bg-card)', display: 'flex', alignItems: 'center',
+    background: '#FFFFFF', display: 'flex', alignItems: 'center',
     justifyContent: 'center', marginBottom: '20px',
     boxShadow: '0 20px 50px rgba(0,0,0,0.15)',
     zIndex: 2
@@ -97,7 +97,7 @@ const s = {
   // Right Panel
   rightPanel: {
     flex: '1',
-    background: 'var(--bg-card)',
+    background: '#FFFFFF',
     display: 'flex',
     flexDirection: 'column',
     justifyContent: 'center',
@@ -106,6 +106,7 @@ const s = {
 
   cardTitle: { fontFamily: '"Playfair Display", serif', fontWeight: 600, fontSize: '30px', color: '#2c3630', marginBottom: '6px', textAlign: 'center' },
   cardSub: { fontFamily: 'Outfit, sans-serif', fontSize: '13px', color: '#6a7870', marginBottom: '24px', lineHeight: '1.5', textAlign: 'center' },
+  // Force light text on labels/inputs regardless of theme
   
   // Form Elements
   form: { display: 'flex', flexDirection: 'column', gap: '16px' }, 
@@ -117,6 +118,7 @@ const s = {
     borderRadius: '12px', padding: '12px 16px 12px 44px', fontFamily: 'Outfit, sans-serif', 
     fontSize: '13px', color: '#2c3630', outline: 'none', boxSizing: 'border-box', 
     transition: 'all 0.2s ease',
+    colorScheme: 'light',
   },
   eyeBtn: { position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'transparent', cursor: 'pointer', color: '#A3BBA9', padding: '2px' },
   
@@ -138,7 +140,7 @@ const s = {
   dividerText: { fontFamily: 'Outfit, sans-serif', fontSize: '11px', color: '#88928b' },
   
   googleBtn: { 
-    width: '100%', background: 'var(--bg-card)', border: '1px solid var(--border-color)', color: 'var(--text-darker)', 
+    width: '100%', background: '#FFFFFF', border: '1px solid #E5EDE8', color: '#2C3630', 
     fontFamily: 'Outfit, sans-serif', fontWeight: 600, fontSize: '13px', padding: '12px', 
     borderRadius: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', 
     justifyContent: 'center', gap: '12px', transition: 'all 0.2s ease'
@@ -280,7 +282,7 @@ export default function Login({ unauthorized, onClearUnauthorized }) {
                   value={email}
                   onChange={e => setEmail(e.target.value)}
                   autoComplete="email"
-                  onFocus={e => { e.target.style.borderColor = 'var(--primary-color)'; e.target.style.boxShadow = '0 0 0 4px rgba(124,156,132,0.1)'; e.target.style.background = 'var(--bg-card)'; }}
+                  onFocus={e => { e.target.style.borderColor = '#7C9C84'; e.target.style.boxShadow = '0 0 0 4px rgba(124,156,132,0.1)'; e.target.style.background = '#FFFFFF'; }}
                   onBlur={e => { e.target.style.borderColor = '#E5E4E0'; e.target.style.boxShadow = 'none'; e.target.style.background = '#Fbfbfb'; }}
                 />
               </div>
@@ -347,11 +349,11 @@ export default function Login({ unauthorized, onClearUnauthorized }) {
             disabled={loading || googleLoading} 
             style={{
               ...s.googleBtn,
-              background: (loading || googleLoading) ? 'var(--bg-secondary)' : 'var(--bg-card)',
+              background: (loading || googleLoading) ? '#E5E4E0' : '#FFFFFF',
               cursor: (loading || googleLoading) ? 'not-allowed' : 'pointer'
             }} 
             onMouseEnter={e => { if (!(loading || googleLoading)) { e.currentTarget.style.background = '#Fbfbfb'; e.currentTarget.style.borderColor = '#A3BBA9'; } }} 
-            onMouseLeave={e => { if (!(loading || googleLoading)) { e.currentTarget.style.background = 'var(--bg-card)'; e.currentTarget.style.borderColor = 'var(--border-color)'; } }}
+            onMouseLeave={e => { if (!(loading || googleLoading)) { e.currentTarget.style.background = '#FFFFFF'; e.currentTarget.style.borderColor = '#E5EDE8'; } }}
           >
             {googleLoading ? (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>

@@ -10,6 +10,7 @@ import 'entry_summary.dart';
 import '../services/gamification_service.dart';
 import '../widgets/level_up_dialog.dart';
 import '../widgets/quest_completed_dialog.dart';
+import '../services/crisis_service.dart';
 
 
 class AddDiaryScreen extends StatefulWidget {
@@ -730,6 +731,11 @@ class _AddDiaryScreenState extends State<AddDiaryScreen> {
               .doc(user.uid)
               .collection('diary_entries')
               .add(diaryData);
+        }
+        
+        if (isCrisis) {
+          await CrisisService.triggerCrisisAlert(user.uid, 'diary');
+          await CrisisService.sendLocalCrisisNotification();
         }
 
         // Cleanup: Remove draft if it was saved

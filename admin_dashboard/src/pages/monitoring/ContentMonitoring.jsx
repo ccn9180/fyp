@@ -11,15 +11,19 @@ import { usePDFExport } from '../../hooks/usePDFExport';
 import ReportPreview from '../../components/ReportPreview';
 
 const C = {
-  primary: '#7C9C84',
-  primaryLight: '#BBCBC2',
-  cream: '#F6F5F2',
-  creamDarker: '#E5E4E0',
-  sage100: '#E5EDE8',
-  charcoal: '#333',
-  charcoalMuted: '#666',
-  muted: '#888',
-  amber: '#d97706'
+  primary: 'var(--primary-color, #7C9C84)',
+  primaryDark: 'var(--color-primary-dark, #66826D)',
+  primaryLight: 'var(--primary-light, #BBCBC2)',
+  sage100: 'var(--color-sage-100, #E5EDE8)',
+  cream: 'var(--bg-main, #F6F5F2)',
+  creamDarker: 'var(--border-color, #E5E4E0)',
+  charcoal: 'var(--text-darker, #333)',
+  charcoalMuted: 'var(--text-muted, #666)',
+  muted: 'var(--text-muted, #888)',
+  bgCard: 'var(--bg-card, white)',
+  amber: '#d97706',
+  blue: '#3b82f6',
+  rose: '#f43f5e'
 };
 
 export default function ContentMonitoring() {
@@ -117,7 +121,8 @@ export default function ContentMonitoring() {
   const chartData = processedData.slice(0, 8).map(c => ({
     name: c.title.length > 15 ? c.title.substring(0, 15) + '...' : c.title,
     engagement: c.engagement,
-    type: c.type
+    type: c.type,
+    fullData: c
   }));
 
   const handleSort = (field) => {
@@ -267,7 +272,7 @@ export default function ContentMonitoring() {
             {/* Summary Stats Grid */}
             <div className="grid grid-cols-3 gap-3">
               <div className="card flex items-center gap-3 py-3 px-4">
-                <div className="w-8 h-8 rounded-full bg-sage-50 flex items-center justify-center text-primary shrink-0">
+                <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary shrink-0">
                   <FileText size={16} />
                 </div>
                 <div>
@@ -277,7 +282,7 @@ export default function ContentMonitoring() {
               </div>
 
               <div className="card flex items-center gap-3 py-3 px-4">
-                <div className="w-8 h-8 rounded-full bg-amber-50 flex items-center justify-center text-amber-500 shrink-0">
+                <div className="w-8 h-8 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-500 shrink-0">
                   <Star size={16} fill="currentColor" />
                 </div>
                 <div>
@@ -287,7 +292,7 @@ export default function ContentMonitoring() {
               </div>
 
               <div className="card flex items-center gap-3 py-3 px-4">
-                <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center text-blue-500 shrink-0">
+                <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-500 shrink-0">
                   <Activity size={16} />
                 </div>
                 <div>
@@ -313,10 +318,20 @@ export default function ContentMonitoring() {
                     <XAxis dataKey="name" tick={{ fontFamily: 'Outfit', fontSize: 10, fill: '#aaa' }} axisLine={false} tickLine={false} />
                     <YAxis tick={{ fontFamily: 'Outfit', fontSize: 10, fill: '#aaa' }} axisLine={false} tickLine={false} />
                     <Tooltip
-                      cursor={{ fill: '#F6F5F2' }}
-                      contentStyle={{ fontFamily: 'Outfit', borderRadius: '12px', border: 'none', boxShadow: '0 8px 16px rgba(0,0,0,0.08)', fontSize: '11px' }}
+                      cursor={{ fill: 'rgba(124, 156, 132, 0.05)' }}
+                      contentStyle={{ fontFamily: 'Outfit', borderRadius: '12px', border: '1px solid var(--border-color)', boxShadow: '0 8px 16px rgba(0,0,0,0.08)', fontSize: '11px', background: 'var(--bg-card)', color: 'var(--text-darker)' }}
                     />
-                    <Bar dataKey="engagement" fill={C.primary} radius={[8, 8, 0, 0]} />
+                    <Bar 
+                      dataKey="engagement" 
+                      fill={C.primary} 
+                      radius={[8, 8, 0, 0]} 
+                      cursor="pointer"
+                      onClick={(data) => {
+                        if (data && data.payload && data.payload.fullData) {
+                          handleViewDetails(data.payload.fullData);
+                        }
+                      }}
+                    />
                   </BarChart>
                 </ResponsiveContainer>
               ) : (
@@ -345,30 +360,38 @@ export default function ContentMonitoring() {
                     </tr>
                   </thead>
                   <tbody>
-                    {processedData.map((c, i) => (
-                      <tr key={c.id || i} className="border-b border-cream-darker last:border-0 hover:bg-sage-50 transition group">
-                        <td className="py-4">
-                          <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-xl bg-sage-100 flex items-center justify-center text-primary font-bold text-xs overflow-hidden border border-cream-darker shrink-0">
-                              {c.imageUrl ? <img src={c.imageUrl} alt="" className="w-full h-full object-cover shadow-inner" /> : (c.title || '?').charAt(0).toUpperCase()}
+                    {processedData.length > 0 ? (
+                      processedData.map((c, i) => (
+                        <tr key={c.id || i} className="border-b border-cream-darker last:border-0 hover:bg-sage-50 transition group cursor-pointer" onClick={() => handleViewDetails(c)}>
+                          <td className="py-4">
+                            <div className="flex items-center gap-3">
+                              <div className="w-9 h-9 rounded-xl bg-sage-100 flex items-center justify-center text-primary font-bold text-xs overflow-hidden border border-cream-darker shrink-0">
+                                {c.imageUrl ? <img src={c.imageUrl} alt="" className="w-full h-full object-cover shadow-inner" /> : (c.title || '?').charAt(0).toUpperCase()}
+                              </div>
+                              <div className="flex flex-col">
+                                <span className="font-bold text-charcoal group-hover:text-primary transition truncate max-w-[280px] leading-tight">{c.title}</span>
+                                <span className={`text-[9px] font-bold uppercase tracking-tight mt-0.5 ${c.status === 'published' ? 'text-primary' : 'text-amber-500'}`}>{c.status}</span>
+                              </div>
                             </div>
-                            <div className="flex flex-col">
-                              <span className="font-bold text-charcoal group-hover:text-primary transition truncate max-w-[280px] leading-tight">{c.title}</span>
-                              <span className={`text-[9px] font-bold uppercase tracking-tight mt-0.5 ${c.status === 'published' ? 'text-primary' : 'text-amber-500'}`}>{c.status}</span>
+                          </td>
+                          <td className="py-4">
+                            <div className="flex flex-col gap-0.5">
+                              <span className={`text-[10px] font-black uppercase tracking-tight ${c.type === 'Article' ? 'text-amber-600' : 'text-emerald-600'}`}>{c.type === 'Article' ? '📝 Article' : '🎧 Guide'}</span>
+                              <span className="text-[9px] font-bold text-charcoal-muted uppercase">{c.category}</span>
                             </div>
-                          </div>
+                          </td>
+                          <td className="py-4 text-center text-charcoal-muted font-mono text-[11px]">{c.duration}</td>
+                          <td className="py-4 text-right pr-4 font-display font-black text-charcoal">{c.engagement.toLocaleString()}</td>
+                          <td className="py-4 text-right pr-4"><div className="flex items-center justify-end gap-1 text-amber-500 font-bold"><Star size={11} fill="currentColor" /> {c.rating ? c.rating.toFixed(1) : '0.0'}</div></td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan="5" className="py-20 text-center text-charcoal-muted font-body text-sm border-b border-cream-darker">
+                          No matching content found for the selected filters.
                         </td>
-                        <td className="py-4">
-                          <div className="flex flex-col gap-0.5">
-                            <span className={`text-[10px] font-black uppercase tracking-tight ${c.type === 'Article' ? 'text-amber-600' : 'text-emerald-600'}`}>{c.type === 'Article' ? '📝 Article' : '🎧 Guide'}</span>
-                            <span className="text-[9px] font-bold text-charcoal-muted uppercase">{c.category}</span>
-                          </div>
-                        </td>
-                        <td className="py-4 text-center text-charcoal-muted font-mono text-[11px]">{c.duration}</td>
-                        <td className="py-4 text-right pr-4 font-display font-black text-charcoal">{c.engagement.toLocaleString()}</td>
-                        <td className="py-4 text-right pr-4"><div className="flex items-center justify-end gap-1 text-amber-500 font-bold"><Star size={11} fill="currentColor" /> {c.rating ? c.rating.toFixed(1) : '0.0'}</div></td>
                       </tr>
-                    ))}
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -388,14 +411,14 @@ export default function ContentMonitoring() {
                 </div>
                 <div>
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="text-[9px] font-black uppercase tracking-widest text-primary bg-white/60 px-2 py-0.5 rounded-md">{viewingDetails.type}</span>
-                    <span className="text-[9px] font-black uppercase tracking-widest text-charcoal-muted bg-white/60 px-2 py-0.5 rounded-md">{viewingDetails.status}</span>
+                    <span className="text-[9px] font-black uppercase tracking-widest text-primary bg-cream px-2 py-0.5 rounded-md">{viewingDetails.type}</span>
+                    <span className="text-[9px] font-black uppercase tracking-widest text-charcoal bg-cream px-2 py-0.5 rounded-md">{viewingDetails.status}</span>
                   </div>
                   <h2 className="font-display font-bold text-2xl text-charcoal leading-tight">{viewingDetails.title}</h2>
                   <p className="text-primary font-medium text-xs mt-1">Focus: {viewingDetails.category}</p>
                 </div>
               </div>
-              <button onClick={() => setViewingDetails(null)} className="text-gray-400 hover:text-charcoal transition bg-white/50 p-2 rounded-full"><XCircle size={24} /></button>
+              <button onClick={() => setViewingDetails(null)} className="text-charcoal-muted hover:text-charcoal transition bg-cream p-2 rounded-full"><XCircle size={24} /></button>
             </div>
             <div className="p-8 overflow-y-auto custom-scrollbar flex-1 bg-white">
               <div className="grid grid-cols-2 gap-3 mb-8">
@@ -409,14 +432,22 @@ export default function ContentMonitoring() {
                 </div>
               </div>
               <p className="section-label mb-3">Resource Insight</p>
-              <div className="bg-cream/30 p-5 rounded-2xl border border-creamDarker relative italic text-sm text-charcoal-muted leading-relaxed">{viewingDetails.content}</div>
+              <div 
+                className="bg-cream/30 p-5 rounded-2xl border border-creamDarker relative text-sm text-charcoal leading-relaxed"
+                style={{ whiteSpace: /<[a-z][\s\S]*>/i.test(viewingDetails.content) ? 'normal' : 'pre-wrap' }}
+                dangerouslySetInnerHTML={{ 
+                  __html: /<[a-z][\s\S]*>/i.test(viewingDetails.content) 
+                    ? viewingDetails.content 
+                    : viewingDetails.content?.replace(/\n/g, '<br/>') || 'No content yet.'
+                }}
+              />
             </div>
           </div>
         </div>
       )}
       {/* --- HIDDEN FORMAL PAPER REPORT (PRINT-ONLY CAPTURE) --- */}
       <div className="print-container" style={{ position: 'fixed', left: '-2000px', top: '0', width: '794px', pointerEvents: 'none', zIndex: -1 }}>
-        <div ref={paperRef} style={{ background: 'white' }}>
+        <div ref={paperRef} style={{ background: '#FFFFFF' }}>
           <ReportContent
             processedData={processedData}
             chartData={chartData}
@@ -457,7 +488,7 @@ function ReportContent({ processedData, chartData, avgRating, totalEngagement, t
   const highlightBox = { background: '#F8F9FA', padding: '15px', borderRadius: '12px', border: '1px solid #E9ECEF', marginBottom: '15px' };
 
   return (
-    <div style={{ padding: '96px 96px 160px 96px', background: 'white', fontFamily: 'Outfit, sans-serif', color: '#1a1a1a' }}>
+    <div style={{ padding: '96px 96px 160px 96px', background: '#FFFFFF', fontFamily: 'Outfit, sans-serif', color: '#1a1a1a' }}>
       {/* Institutional Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '2px solid #7C9C84', paddingBottom: '20px', marginBottom: '30px' }}>
         <div>
@@ -544,7 +575,7 @@ function ReportContent({ processedData, chartData, avgRating, totalEngagement, t
       {isPreview ? (
         <div style={{ height: '200px', position: 'relative', display: 'flex', justifyContent: 'center', paddingTop: '40px' }}>
           <div style={{ position: 'absolute', top: '45px', width: 'calc(100% + 192px)', left: '-96px', borderBottom: '2px dashed #BBCBC2' }}></div>
-          <span style={{ background: 'white', padding: '0 15px', color: '#BBCBC2', fontSize: '10px', fontWeight: 800, letterSpacing: '0.1em', zIndex: 1, position: 'relative', height: '14px', lineHeight: '14px' }}>PAGE BREAK</span>
+          <span style={{ background: '#FFFFFF', padding: '0 15px', color: '#BBCBC2', fontSize: '10px', fontWeight: 800, letterSpacing: '0.1em', zIndex: 1, position: 'relative', height: '14px', lineHeight: '14px' }}>PAGE BREAK</span>
         </div>
       ) : (
         <div style={{ height: '200px' }} />
@@ -641,7 +672,7 @@ function ReportContent({ processedData, chartData, avgRating, totalEngagement, t
       {isPreview ? (
         <div style={{ height: '260px', position: 'relative', display: 'flex', justifyContent: 'center', paddingTop: '40px' }}>
           <div style={{ position: 'absolute', top: '45px', width: 'calc(100% + 192px)', left: '-96px', borderBottom: '2px dashed #BBCBC2' }}></div>
-          <span style={{ background: 'white', padding: '0 15px', color: '#BBCBC2', fontSize: '10px', fontWeight: 800, letterSpacing: '0.1em', zIndex: 1, position: 'relative', height: '14px', lineHeight: '14px' }}>PAGE BREAK</span>
+          <span style={{ background: '#FFFFFF', padding: '0 15px', color: '#BBCBC2', fontSize: '10px', fontWeight: 800, letterSpacing: '0.1em', zIndex: 1, position: 'relative', height: '14px', lineHeight: '14px' }}>PAGE BREAK</span>
         </div>
       ) : (
         <div style={{ height: '260px' }} />

@@ -239,6 +239,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF2F1EC), // Light beige/cream background
       body: SafeArea(
+        bottom: false,
         child: SingleChildScrollView(
           controller: _scrollController,
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),

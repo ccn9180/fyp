@@ -5,6 +5,8 @@ import { Eye, EyeOff, Lock, Mail } from 'lucide-react';
 import logo from '../assets/leaf.png';
 import googleIcon from '../assets/google_logo.svg';
 
+const C = { bgCard: '#FFFFFF' };
+
 const keyframes = `
   @keyframes floatSlow {
     0% { transform: translate(0px, 0px) scale(1); }
@@ -19,12 +21,12 @@ const keyframes = `
 `;
 
 const s = {
-  wrap: { 
-    minHeight: '100vh', 
-    width: '100%', 
-    display: 'flex', 
-    alignItems: 'center', 
-    justifyContent: 'center', 
+  wrap: {
+    minHeight: '100vh',
+    width: '100%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
     background: '#F9F6F0', // Creamy color
     padding: '24px',
     position: 'relative',
@@ -38,7 +40,7 @@ const s = {
     borderRadius: '50%', filter: 'blur(80px)', zIndex: 0,
     animation: 'floatSlow 20s ease-in-out infinite'
   },
-  
+
   orb2: {
     position: 'absolute', bottom: '-20%', right: '-10%',
     width: '50vw', height: '50vw',
@@ -46,23 +48,23 @@ const s = {
     borderRadius: '50%', filter: 'blur(80px)', zIndex: 0,
     animation: 'floatSlow 25s ease-in-out infinite reverse'
   },
-  
-  card: { 
-    width: '100%', 
-    maxWidth: '960px', 
-    minHeight: '420px', 
-    background: 'white', 
-    borderRadius: '24px', 
+
+  card: {
+    width: '100%',
+    maxWidth: '960px',
+    minHeight: '420px',
+    background: C.bgCard,
+    borderRadius: '24px',
     boxShadow: '0 24px 64px rgba(124,156,132,0.15)', // Soft green shadow
     display: 'flex',
     overflow: 'hidden',
-    zIndex: 1, 
+    zIndex: 1,
   },
 
   // Left Panel
   leftPanel: {
-    flex: '1', 
-    background: 'linear-gradient(135deg, #7C9C84 0%, #5d7e65 100%)', 
+    flex: '1',
+    background: 'linear-gradient(135deg, #7C9C84 0%, #5d7e65 100%)',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
@@ -73,18 +75,18 @@ const s = {
   },
   logoIcon: {
     width: '130px', height: '130px', borderRadius: '50%',
-    background: 'white', display: 'flex', alignItems: 'center',
+    background: C.bgCard, display: 'flex', alignItems: 'center',
     justifyContent: 'center', marginBottom: '20px',
     boxShadow: '0 20px 50px rgba(0,0,0,0.15)',
     zIndex: 2
   },
-  logoTitle: { 
-    fontFamily: '"Playfair Display", serif', fontWeight: 700, 
-    fontSize: '36px', color: 'white', marginBottom: '6px', zIndex: 2 
+  logoTitle: {
+    fontFamily: '"Playfair Display", serif', fontWeight: 700,
+    fontSize: '36px', color: 'white', marginBottom: '6px', zIndex: 2
   },
-  logoSub: { 
-    fontFamily: 'Outfit, sans-serif', fontSize: '14px', color: '#E5EDE8', 
-    textAlign: 'center', letterSpacing: '0.05em', zIndex: 2, fontWeight: 300 
+  logoSub: {
+    fontFamily: 'Outfit, sans-serif', fontSize: '14px', color: '#E5EDE8',
+    textAlign: 'center', letterSpacing: '0.05em', zIndex: 2, fontWeight: 300
   },
   decorativePattern: {
     position: 'absolute',
@@ -97,53 +99,53 @@ const s = {
   // Right Panel
   rightPanel: {
     flex: '1',
-    background: 'white',
+    background: C.bgCard,
     display: 'flex',
     flexDirection: 'column',
     justifyContent: 'center',
-    padding: '36px 100px', 
+    padding: '36px 100px',
   },
 
   cardTitle: { fontFamily: '"Playfair Display", serif', fontWeight: 600, fontSize: '30px', color: '#2c3630', marginBottom: '6px', textAlign: 'center' },
   cardSub: { fontFamily: 'Outfit, sans-serif', fontSize: '13px', color: '#6a7870', marginBottom: '24px', lineHeight: '1.5', textAlign: 'center' },
-  
+
   // Form Elements
-  form: { display: 'flex', flexDirection: 'column', gap: '16px' }, 
+  form: { display: 'flex', flexDirection: 'column', gap: '16px' },
   label: { display: 'block', fontFamily: 'Outfit, sans-serif', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#4a5750', marginBottom: '6px' },
   inputWrap: { position: 'relative' },
   inputIcon: { position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: '#A3BBA9', pointerEvents: 'none' },
-  input: { 
-    width: '100%', background: '#Fbfbfb', border: '1px solid #E5E4E0', 
-    borderRadius: '12px', padding: '12px 16px 12px 44px', fontFamily: 'Outfit, sans-serif', 
-    fontSize: '13px', color: '#2c3630', outline: 'none', boxSizing: 'border-box', 
+  input: {
+    width: '100%', background: '#Fbfbfb', border: '1px solid #E5E4E0',
+    borderRadius: '12px', padding: '12px 16px 12px 44px', fontFamily: 'Outfit, sans-serif',
+    fontSize: '13px', color: '#2c3630', outline: 'none', boxSizing: 'border-box',
     transition: 'all 0.2s ease',
   },
   eyeBtn: { position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'transparent', cursor: 'pointer', color: '#A3BBA9', padding: '2px' },
-  
+
   // Actions
   forgotBtnWrap: { display: 'flex', justifyContent: 'flex-end', marginTop: '2px' },
   forgotBtn: { background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Outfit, sans-serif', fontSize: '11px', color: '#7C9C84', fontWeight: 600 },
   error: { fontFamily: 'Outfit, sans-serif', fontSize: '12px', color: '#ef4444', background: '#fef2f2', borderRadius: '10px', padding: '10px 12px', border: '1px solid #fee2e2' },
   success: { fontFamily: 'Outfit, sans-serif', fontSize: '12px', color: '#059669', background: '#d1fae5', borderRadius: '10px', padding: '10px 12px', border: '1px solid #a7f3d0' },
-  
-  submitBtn: (loading) => ({ 
-    width: '100%', background: loading ? '#A3BBA9' : '#7C9C84', color: 'white', 
-    fontFamily: 'Outfit, sans-serif', fontWeight: 600, fontSize: '14px', 
-    padding: '12px', borderRadius: '12px', border: 'none', cursor: loading ? 'not-allowed' : 'pointer', 
-    marginTop: '4px', transition: 'all 0.2s ease', 
+
+  submitBtn: (loading) => ({
+    width: '100%', background: loading ? '#A3BBA9' : '#7C9C84', color: 'white',
+    fontFamily: 'Outfit, sans-serif', fontWeight: 600, fontSize: '14px',
+    padding: '12px', borderRadius: '12px', border: 'none', cursor: loading ? 'not-allowed' : 'pointer',
+    marginTop: '4px', transition: 'all 0.2s ease',
   }),
-  
+
   divider: { display: 'flex', alignItems: 'center', gap: '16px', margin: '20px 0' },
   dividerLine: { flex: 1, height: '1px', background: '#E5EDE8' },
   dividerText: { fontFamily: 'Outfit, sans-serif', fontSize: '11px', color: '#88928b' },
-  
-  googleBtn: { 
-    width: '100%', background: 'white', border: '1px solid #E5EDE8', color: '#4a5750', 
-    fontFamily: 'Outfit, sans-serif', fontWeight: 600, fontSize: '13px', padding: '12px', 
-    borderRadius: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', 
+
+  googleBtn: {
+    width: '100%', background: C.bgCard, border: '1px solid #E5EDE8', color: '#4a5750',
+    fontFamily: 'Outfit, sans-serif', fontWeight: 600, fontSize: '13px', padding: '12px',
+    borderRadius: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center',
     justifyContent: 'center', gap: '12px', transition: 'all 0.2s ease'
   },
-  
+
   footer: { textAlign: 'center', fontFamily: 'Outfit, sans-serif', fontSize: '11px', color: '#88928b', marginTop: '24px' },
 };
 
@@ -214,10 +216,10 @@ export default function LoginPage({ externalError }) {
     e.preventDefault();
     setError('');
     setMessage('');
-    
-    if (!email || !password) { 
-      setError('Please fill in all fields.'); 
-      return; 
+
+    if (!email || !password) {
+      setError('Please fill in all fields.');
+      return;
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -243,13 +245,13 @@ export default function LoginPage({ externalError }) {
   return (
     <div style={s.wrap}>
       <style>{keyframes}</style>
-      
+
       {/* Static/Slow Floating Orbs */}
       <div id="background-orb" style={s.orb1} />
       <div id="background-orb" style={s.orb2} />
 
       <div id="login-card" style={s.card}>
-        
+
         {/* Left Panel - Branding */}
         <div style={s.leftPanel}>
           <div style={s.decorativePattern} />
@@ -311,13 +313,13 @@ export default function LoginPage({ externalError }) {
             {error && <div style={s.error}>{error}</div>}
             {message && <div style={s.success}>{message}</div>}
 
-            <button 
-              id="login-btn" 
-              type="submit" 
-              disabled={loading || googleLoading} 
+            <button
+              id="login-btn"
+              type="submit"
+              disabled={loading || googleLoading}
               style={s.submitBtn(loading)}
-              onMouseEnter={e => { if(!loading && !googleLoading) { e.currentTarget.style.background = '#6a8a71'; e.currentTarget.style.transform = 'translateY(-1px)'; } }}
-              onMouseLeave={e => { if(!loading && !googleLoading) { e.currentTarget.style.background = '#7C9C84'; e.currentTarget.style.transform = 'none'; } }}
+              onMouseEnter={e => { if (!loading && !googleLoading) { e.currentTarget.style.background = '#6a8a71'; e.currentTarget.style.transform = 'translateY(-1px)'; } }}
+              onMouseLeave={e => { if (!loading && !googleLoading) { e.currentTarget.style.background = '#7C9C84'; e.currentTarget.style.transform = 'none'; } }}
             >
               {loading ? (
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
@@ -340,15 +342,15 @@ export default function LoginPage({ externalError }) {
             <div style={s.dividerLine} />
           </div>
 
-          <button 
-            onClick={handleGoogleLogin} 
-            disabled={loading || googleLoading} 
+          <button
+            onClick={handleGoogleLogin}
+            disabled={loading || googleLoading}
             style={{
               ...s.googleBtn,
               background: (loading || googleLoading) ? '#F5F5F5' : 'white',
               cursor: (loading || googleLoading) ? 'not-allowed' : 'pointer'
-            }} 
-            onMouseEnter={e => { if (!(loading || googleLoading)) { e.currentTarget.style.background = '#Fbfbfb'; e.currentTarget.style.borderColor = '#A3BBA9'; } }} 
+            }}
+            onMouseEnter={e => { if (!(loading || googleLoading)) { e.currentTarget.style.background = '#Fbfbfb'; e.currentTarget.style.borderColor = '#A3BBA9'; } }}
             onMouseLeave={e => { if (!(loading || googleLoading)) { e.currentTarget.style.background = 'white'; e.currentTarget.style.borderColor = '#E5EDE8'; } }}
           >
             {googleLoading ? (

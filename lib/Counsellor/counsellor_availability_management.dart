@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -15,11 +16,35 @@ class CounsellorAvailabilityManagement extends StatefulWidget {
 class _CounsellorAvailabilityManagementState extends State<CounsellorAvailabilityManagement> {
   DateTime _selectedDate = DateTime.now();
   DateTime _currentMonthView = DateTime(DateTime.now().year, DateTime.now().month);
+  
+  StreamSubscription<DocumentSnapshot>? _userSub;
+  bool _chargesEnabled = false;
 
   final Color primaryGreen = const Color(0xFF7C9C84);
   final Color secondaryGreen = const Color(0xFFEAF2ED);
   final Color backgroundColor = const Color(0xFFF2F1EC);
   final Color textColorMain = const Color(0xFF333333);
+
+  @override
+  void initState() {
+    super.initState();
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      _userSub = FirebaseFirestore.instance.collection('users').doc(user.uid).snapshots().listen((doc) {
+        if (doc.exists && mounted) {
+          setState(() {
+            _chargesEnabled = (doc.data() as Map<String, dynamic>?)?['stripeChargesEnabled'] == true;
+          });
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _userSub?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -72,6 +97,39 @@ class _CounsellorAvailabilityManagementState extends State<CounsellorAvailabilit
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (!_chargesEnabled)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 24),
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 24),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Wallet Setup Required',
+                                style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.orange.shade800),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Please connect your Stripe wallet in the Wallet tab to receive payments before setting availability slots.',
+                                style: GoogleFonts.outfit(fontSize: 13, color: Colors.orange.shade900),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 _buildCalendarSection(allAvailability),
                 const SizedBox(height: 32),
                 _buildSlotsListSection(allAvailability),
@@ -82,8 +140,21 @@ class _CounsellorAvailabilityManagementState extends State<CounsellorAvailabilit
         },
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showSlotDialog(),
-        backgroundColor: primaryGreen,
+        onPressed: () {
+          if (!_chargesEnabled) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Please connect your Wallet first to receive payments.', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+                backgroundColor: Colors.orange,
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            );
+            return;
+          }
+          _showSlotDialog();
+        },
+        backgroundColor: _chargesEnabled ? primaryGreen : Colors.grey,
         icon: const Icon(Icons.add_rounded, color: Colors.white),
         label: Text('Set Availability', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: Colors.white)),
       ),
@@ -251,7 +322,20 @@ class _CounsellorAvailabilityManagementState extends State<CounsellorAvailabilit
             spacing: 12,
             runSpacing: 12,
             children: slotsForSelectedDate.map((slot) => GestureDetector(
-                onTap: () => _showSlotDialog(slot: slot),
+                onTap: () {
+                  if (!_chargesEnabled) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Please connect your Wallet first to receive payments.', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+                        backgroundColor: Colors.orange,
+                        behavior: SnackBarBehavior.floating,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                    );
+                    return;
+                  }
+                  _showSlotDialog(slot: slot);
+                },
                 child: _buildSlotTile(slot)
             )).toList(),
           ),

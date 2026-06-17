@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:fyp/UserAccount/splash_screen.dart';
 
 class ApplyCounsellorScreen extends StatefulWidget {
   const ApplyCounsellorScreen({super.key});
@@ -23,6 +24,8 @@ class _ApplyCounsellorScreenState extends State<ApplyCounsellorScreen> {
   bool _isSubmitting = false;
   bool _isLoadingStatus = true;
   String? _statusError;
+  bool _isRejected = false;
+  bool _isDeactivated = false;
 
   // Personal Information
   final TextEditingController _nameController = TextEditingController();
@@ -41,10 +44,6 @@ class _ApplyCounsellorScreenState extends State<ApplyCounsellorScreen> {
   // Verification Documents
   File? _certificateFile;
 
-  // Availability
-  final List<String> _selectedDays = [];
-  final List<String> _selectedTimeSlots = [];
-
   final List<String> _specializations = [
     'Anxiety & Stress', 'Depression', 'Relationship Issues', 
     'Trauma & PTSD', 'Career Counseling', 'Addiction Recovery',
@@ -53,9 +52,6 @@ class _ApplyCounsellorScreenState extends State<ApplyCounsellorScreen> {
 
   final List<String> _languageOptions = ['English', 'Malay', 'Mandarin', 'Cantonese', 'Tamil', 'Hokkien'];
   final List<String> _experienceOptions = ['1-2 Years', '3-5 Years', '5-10 Years', '10+ Years', '15+ Years'];
-
-  final List<String> _daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-  final List<String> _shifts = ['Morning (9 AM - 12 PM)', 'Afternoon (1 PM - 5 PM)', 'Evening (6 PM - 9 PM)'];
 
   @override
   void initState() {
@@ -83,7 +79,7 @@ class _ApplyCounsellorScreenState extends State<ApplyCounsellorScreen> {
       if (userDoc.exists && (userDoc.data()?['role'] == 'counsellor')) {
         if (mounted) {
           setState(() {
-            _statusError = "You are already registered as an active counsellor.";
+            _statusError = "Your application is ALREADY APPROVED! 🎉\n\nPlease long press the Profile tab at the bottom navigation bar to switch to the Counsellor portal.";
             _isLoadingStatus = false;
           });
         }
@@ -96,7 +92,7 @@ class _ApplyCounsellorScreenState extends State<ApplyCounsellorScreen> {
         if (status == 'pending') {
           if (mounted) {
             setState(() {
-              _statusError = "You already have a pending application. Please wait for our review.";
+              _statusError = "Your application is currently PENDING. Our team is reviewing your details. Please check back later.";
               _isLoadingStatus = false;
             });
           }
@@ -105,7 +101,26 @@ class _ApplyCounsellorScreenState extends State<ApplyCounsellorScreen> {
           await FirebaseFirestore.instance.collection('users').doc(user.uid).update({'role': 'counsellor'});
           if (mounted) {
             setState(() {
-              _statusError = "You are already registered as a counsellor.";
+              _statusError = "Your application is ALREADY APPROVED! 🎉\n\nPlease long press the Profile tab at the bottom navigation bar to switch to the Counsellor portal.";
+              _isLoadingStatus = false;
+            });
+          }
+          return;
+        } else if (status == 'rejected') {
+          final reason = appDoc.data()?['rejectionReason'] ?? 'Does not meet our requirements at this time.';
+          if (mounted) {
+            setState(() {
+              _statusError = reason;
+              _isRejected = true;
+              _isLoadingStatus = false;
+            });
+          }
+          return;
+        } else if (status == 'deactivated') {
+          if (mounted) {
+            setState(() {
+              _statusError = "Your account has been deactivated. You can apply again if you wish to return as a counsellor.";
+              _isDeactivated = true;
               _isLoadingStatus = false;
             });
           }
@@ -167,15 +182,6 @@ class _ApplyCounsellorScreenState extends State<ApplyCounsellorScreen> {
         _showError('Please upload your professional certificate');
         return false;
       }
-    } else if (_activeStep == 3) {
-      if (_selectedDays.isEmpty) {
-        _showError('Please select available days');
-        return false;
-      }
-      if (_selectedTimeSlots.isEmpty) {
-        _showError('Please select available time slots');
-        return false;
-      }
     }
     return true;
   }
@@ -214,6 +220,58 @@ class _ApplyCounsellorScreenState extends State<ApplyCounsellorScreen> {
     setState(() => _isSubmitting = true);
 
     try {
+      final phone = _phoneController.text.trim();
+      
+      // Check for duplicate phone number
+      final existingApp = await FirebaseFirestore.instance
+          .collection('counsellor_applications')
+          .where('phone', isEqualTo: phone)
+          .get();
+          
+      if (existingApp.docs.isNotEmpty) {
+        bool isDuplicate = false;
+        for (var doc in existingApp.docs) {
+          if (doc.id != user.uid) {
+            isDuplicate = true;
+            break;
+          }
+        }
+        if (isDuplicate) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('This phone number is already registered by another counsellor. Please use a different number.')),
+            );
+            setState(() => _isSubmitting = false);
+          }
+          return;
+        }
+      }
+
+      // Check users collection as well just in case
+      final existingUser = await FirebaseFirestore.instance
+          .collection('users')
+          .where('phone', isEqualTo: phone)
+          .get();
+          
+      if (existingUser.docs.isNotEmpty) {
+        bool isDuplicate = false;
+        for (var doc in existingUser.docs) {
+          if (doc.id != user.uid && doc.data()['role'] == 'counsellor') {
+            isDuplicate = true;
+            break;
+          }
+        }
+        if (isDuplicate) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('This phone number is already registered by another counsellor. Please use a different number.')),
+            );
+            setState(() => _isSubmitting = false);
+          }
+          return;
+        }
+      }
+
       final String basePath = 'counsellor_applications/${user.uid}';
       
       final profileUrl = await _uploadFile(_profilePhotoFile, '$basePath/profile.jpg');
@@ -223,14 +281,12 @@ class _ApplyCounsellorScreenState extends State<ApplyCounsellorScreen> {
         'uid': user.uid,
         'name': _nameController.text.trim(),
         'email': _emailController.text.trim(),
-        'phone': _phoneController.text.trim(),
+        'phone': phone,
         'specializations': _selectedSpecializations,
         'languages': _selectedLanguages,
         'experience': _selectedExperience,
         'price': _isFreeSession ? 'Free' : _priceController.text.trim(),
         'bio': _bioController.text.trim(),
-        'availableDays': _selectedDays,
-        'availableTimeSlots': _selectedTimeSlots,
         'profilePhotoUrl': profileUrl,
         'certificateUrl': certUrl,
         'status': 'pending',
@@ -253,6 +309,43 @@ class _ApplyCounsellorScreenState extends State<ApplyCounsellorScreen> {
       }
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
+    }
+  }
+
+  Future<void> _reactivateAccount() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    try {
+      final userRef = FirebaseFirestore.instance.collection('users').doc(user.uid);
+      final appRef = FirebaseFirestore.instance.collection('counsellor_applications').doc(user.uid);
+
+      final batch = FirebaseFirestore.instance.batch();
+      batch.set(userRef, {'role': 'counsellor'}, SetOptions(merge: true));
+      batch.set(appRef, {'status': 'approved'}, SetOptions(merge: true));
+
+      await batch.commit();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Account successfully reactivated! Please log in again.'),
+            backgroundColor: primaryGreen,
+          ),
+        );
+        
+        await FirebaseAuth.instance.signOut();
+        if (mounted) {
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (context) => const SplashTransitionScreen(isLogout: true)),
+            (route) => false,
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Reactivation failed: $e')));
+      }
     }
   }
 
@@ -335,8 +428,6 @@ class _ApplyCounsellorScreenState extends State<ApplyCounsellorScreen> {
           _buildStepDot(1, 'Professional'),
           _buildStepLine(1),
           _buildStepDot(2, 'Verification'),
-          _buildStepLine(2),
-          _buildStepDot(3, 'Availability'),
         ],
       ),
     );
@@ -392,7 +483,6 @@ class _ApplyCounsellorScreenState extends State<ApplyCounsellorScreen> {
       case 0: return _buildPersonalStep();
       case 1: return _buildProfessionalStep();
       case 2: return _buildVerificationStep();
-      case 3: return _buildAvailabilityStep();
       default: return const SizedBox();
     }
   }
@@ -486,16 +576,7 @@ class _ApplyCounsellorScreenState extends State<ApplyCounsellorScreen> {
     );
   }
 
-  Widget _buildAvailabilityStep() {
-    return Column(
-      key: const ValueKey(3),
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildSectionCard('Available Days', Icons.calendar_month_outlined, _buildChipGroup(_daysOfWeek, _selectedDays), subtext: 'Select the days you are typically available.'),
-        _buildSectionCard('Available Time Slots', Icons.schedule, _buildChipGroup(_shifts, _selectedTimeSlots), subtext: 'Select your preferred working shifts.'),
-      ],
-    );
-  }
+
 
   Widget _buildFileUploadUI(File? file, Function(File) onUpdate, String placeholder) {
     return GestureDetector(
@@ -720,7 +801,7 @@ class _ApplyCounsellorScreenState extends State<ApplyCounsellorScreen> {
       ),
       child: ElevatedButton(
         onPressed: _isSubmitting ? null : () {
-          if (_activeStep < 3) {
+          if (_activeStep < 2) {
             if (_validateStep()) setState(() => _activeStep++);
           } else {
             _submitFinalApplication();
@@ -737,8 +818,8 @@ class _ApplyCounsellorScreenState extends State<ApplyCounsellorScreen> {
             : Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(_activeStep == 3 ? 'Submit Application' : 'Continue', style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold)),
-                  if (_activeStep < 3) ...[
+                  Text(_activeStep == 2 ? 'Submit Application' : 'Continue', style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold)),
+                  if (_activeStep < 2) ...[
                     const SizedBox(width: 8),
                     const Icon(Icons.arrow_forward_rounded, color: Colors.white, size: 18),
                   ]
@@ -749,6 +830,15 @@ class _ApplyCounsellorScreenState extends State<ApplyCounsellorScreen> {
   }
 
   Widget _buildErrorPlaceholder() {
+    final bool isErrorState = _isRejected || _isDeactivated;
+    final bool isApproved = _statusError?.contains('ALREADY APPROVED') ?? false;
+    final String title = _isDeactivated ? 'Account Deactivated' : (_isRejected ? 'Application Rejected' : (isApproved ? 'Application Approved' : 'Application Pending'));
+    final String description = _isDeactivated 
+        ? 'Your counselor profile has been deactivated.\n\n${_statusError ?? ''}'
+        : (_isRejected 
+            ? 'Your application was unfortunately not approved at this time.\n\nReason: ${_statusError ?? ''}'
+            : (_statusError ?? ''));
+
     return Center(
       child: Container(
         margin: const EdgeInsets.all(24),
@@ -771,14 +861,14 @@ class _ApplyCounsellorScreenState extends State<ApplyCounsellorScreen> {
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: primaryGreen.withOpacity(0.1),
+                color: isErrorState ? Colors.red[50] : primaryGreen.withOpacity(0.1),
                 shape: BoxShape.circle,
               ),
-              child: Icon(Icons.access_time_rounded, size: 48, color: primaryGreen),
+              child: Icon(isErrorState ? Icons.error_outline_rounded : Icons.access_time_rounded, size: 48, color: isErrorState ? Colors.red[400] : primaryGreen),
             ),
             const SizedBox(height: 24),
             Text(
-              'Application Pending',
+              title,
               style: GoogleFonts.playfairDisplay(
                 fontSize: 24,
                 fontWeight: FontWeight.w700,
@@ -787,7 +877,7 @@ class _ApplyCounsellorScreenState extends State<ApplyCounsellorScreen> {
             ),
             const SizedBox(height: 12),
             Text(
-              _statusError ?? '',
+              description,
               textAlign: TextAlign.center,
               style: GoogleFonts.outfit(
                 fontSize: 16,
@@ -796,19 +886,52 @@ class _ApplyCounsellorScreenState extends State<ApplyCounsellorScreen> {
               ),
             ),
             const SizedBox(height: 32),
+            if (isErrorState)
+              ElevatedButton(
+                onPressed: () {
+                  if (_isDeactivated) {
+                    _reactivateAccount();
+                  } else {
+                    setState(() {
+                      _statusError = null;
+                      _isRejected = false;
+                      _isDeactivated = false;
+                      _activeStep = 0;
+                    });
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: primaryGreen,
+                  minimumSize: const Size(double.infinity, 56),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  elevation: 0,
+                ),
+                child: Text(
+                  _isDeactivated ? 'Reactivate Again' : 'Reapply Now',
+                  style: GoogleFonts.outfit(
+                    fontSize: 16,
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            if (isErrorState) const SizedBox(height: 16),
             ElevatedButton(
               onPressed: () => Navigator.pop(context),
               style: ElevatedButton.styleFrom(
-                backgroundColor: primaryGreen,
+                backgroundColor: isErrorState ? Colors.white : primaryGreen,
                 minimumSize: const Size(double.infinity, 56),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  side: isErrorState ? BorderSide(color: Colors.grey[300]!) : BorderSide.none,
+                ),
                 elevation: 0,
               ),
               child: Text(
                 'Return to Profile',
                 style: GoogleFonts.outfit(
                   fontSize: 16,
-                  color: Colors.white,
+                  color: isErrorState ? textColorMain : Colors.white,
                   fontWeight: FontWeight.w600,
                 ),
               ),

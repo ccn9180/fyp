@@ -241,10 +241,9 @@ class _SearchFriendScreenState extends State<SearchFriendScreen> {
                   final uid = doc.id;
                   final role = data['role'] ?? '';
 
-                  // Exclude current user, admins, counsellors, and filter by search query
+                  // Exclude current user, admins, and filter by search query
                   return uid != currentUser?.uid &&
                       role != 'admin' &&
-                      role != 'counsellor' &&
                       (fullName.contains(_searchQuery) || email.contains(_searchQuery));
                 }).toList();
 
@@ -285,7 +284,7 @@ class _SearchFriendScreenState extends State<SearchFriendScreen> {
       stream: FirebaseFirestore.instance.collection('users').doc(currentUser?.uid).snapshots(),
       builder: (context, userSnapshot) {
         return StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance.collection('users').limit(15).snapshots(),
+          stream: FirebaseFirestore.instance.collection('users').snapshots(),
           builder: (context, suggestSnapshot) {
             // Wait for history AND both streams to have data
             if (!_historyLoaded ||
@@ -306,8 +305,7 @@ class _SearchFriendScreenState extends State<SearchFriendScreen> {
               final role = data['role'] ?? '';
               return uid != currentUser?.uid &&
                   !following.contains(uid) &&
-                  role != 'admin' &&
-                  role != 'counsellor';
+                  role != 'admin';
             }).toList();
 
             return SingleChildScrollView(
@@ -395,7 +393,7 @@ class _SearchFriendScreenState extends State<SearchFriendScreen> {
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
                       padding: const EdgeInsets.symmetric(horizontal: 24),
-                      itemCount: suggestions.length > 5 ? 5 : suggestions.length,
+                      itemCount: suggestions.length,
                       itemBuilder: (context, index) {
                         final doc = suggestions[index];
                         final data = doc.data() as Map<String, dynamic>;
@@ -729,7 +727,7 @@ Future<void> handleRequestActionGlobal(BuildContext context, User? currentUser, 
               ),
               const SizedBox(height: 12),
               Text(
-                'Are you sure you want to remove this connection? You won\'t be able to see their private updates.',
+                'Are you sure you want to remove this connection?\n\nThis person is still your trusted recipient for safety alerts.',
                 textAlign: TextAlign.center,
                 style: GoogleFonts.outfit(
                   fontSize: 14,
@@ -844,7 +842,7 @@ Future<void> handleRequestActionGlobal(BuildContext context, User? currentUser, 
               ),
               const SizedBox(height: 24),
               Text(
-                'Cancel Request?',
+                'Unsend Request?',
                 style: GoogleFonts.playfairDisplay(
                   fontSize: 22,
                   fontWeight: FontWeight.bold,
@@ -853,7 +851,7 @@ Future<void> handleRequestActionGlobal(BuildContext context, User? currentUser, 
               ),
               const SizedBox(height: 12),
               Text(
-                'Are you sure you want to cancel the friend request sent to $targetName?',
+                'Are you sure you want to unsend the friend request sent to $targetName?',
                 textAlign: TextAlign.center,
                 style: GoogleFonts.outfit(
                   fontSize: 14,
@@ -897,7 +895,7 @@ Future<void> handleRequestActionGlobal(BuildContext context, User? currentUser, 
                         ),
                       ),
                       child: Text(
-                        'Cancel',
+                        'Unsend',
                         style: GoogleFonts.outfit(
                           fontSize: 15,
                           fontWeight: FontWeight.w700,
@@ -930,7 +928,7 @@ Future<void> handleRequestActionGlobal(BuildContext context, User? currentUser, 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Friend request cancelled', style: GoogleFonts.outfit()),
+            content: Text('Friend request unsent', style: GoogleFonts.outfit()),
             backgroundColor: const Color(0xFFE57373),
             behavior: SnackBarBehavior.floating,
           ),

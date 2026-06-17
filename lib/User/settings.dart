@@ -12,6 +12,7 @@ import 'package:local_auth/local_auth.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../UserAccount/login.dart';
+import '../services/fcm_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -25,7 +26,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _pushNotifications = true;
   bool _dailyReminder = true;
   bool _syncToGoogleCalendar = true;
-  bool _isFaceIdEnabled = false;
   bool _isFingerprintEnabled = false;
   final LocalAuthentication _localAuth = LocalAuthentication();
 
@@ -38,7 +38,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
-      _isFaceIdEnabled = prefs.getBool('face_id_enabled') ?? false;
+      _pushNotifications = prefs.getBool('push_notifications') ?? true;
+      _dailyReminder = prefs.getBool('daily_reminder') ?? true;
       _isFingerprintEnabled = prefs.getBool('fingerprint_enabled') ?? false;
       _syncToGoogleCalendar = prefs.getBool('sync_google_calendar') ?? true;
     });
@@ -392,7 +393,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 title: 'Push Notifications',
                 subtitle: 'Daily quotes and reminders',
                 value: _pushNotifications,
-                onChanged: (val) => setState(() => _pushNotifications = val),
+                onChanged: (val) async {
+                  setState(() => _pushNotifications = val);
+                  final prefs = await SharedPreferences.getInstance();
+                  await prefs.setBool('push_notifications', val);
+                  await FCMService.setPushNotificationsEnabled(val, isCounsellor: false);
+                },
               ),
               const Divider(height: 1, indent: 60),
               _buildSwitchTile(
@@ -400,7 +406,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 title: 'Daily Reminder',
                 subtitle: 'Evening reflection prompt',
                 value: _dailyReminder,
-                onChanged: (val) => setState(() => _dailyReminder = val),
+                onChanged: (val) async {
+                  setState(() => _dailyReminder = val);
+                  final prefs = await SharedPreferences.getInstance();
+                  await prefs.setBool('daily_reminder', val);
+                  await FCMService.setDailyReminderEnabled(val);
+                },
               ),
               const Divider(height: 1, indent: 60),
               _buildSwitchTile(
@@ -431,14 +442,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     MaterialPageRoute(builder: (context) => const ChangePasswordScreen()),
                   );
                 },
-              ),
-              const Divider(height: 1, indent: 60),
-              _buildSwitchTile(
-                icon: Icons.face_retouching_natural,
-                title: 'Face Unlock',
-                subtitle: 'Enable face recognition login',
-                value: _isFaceIdEnabled,
-                onChanged: (val) => _toggleBiometrics(val, 'face_id'),
               ),
               const Divider(height: 1, indent: 60),
               _buildSwitchTile(

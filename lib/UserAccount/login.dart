@@ -41,8 +41,10 @@ class _LoginPageState extends State<LoginPage> {
       final prefs = await SharedPreferences.getInstance();
       final bool fingerprintEnabled = prefs.getBool('fingerprint_enabled') ?? false;
       final bool faceIdEnabled = prefs.getBool('face_id_enabled') ?? false;
+      final bool cFingerprintEnabled = prefs.getBool('c_fingerprint_enabled') ?? false;
+      final bool cFaceIdEnabled = prefs.getBool('c_face_id_enabled') ?? false;
       
-      if (fingerprintEnabled || faceIdEnabled) {
+      if (fingerprintEnabled || faceIdEnabled || cFingerprintEnabled || cFaceIdEnabled) {
         final bool canCheck = await _localAuth.canCheckBiometrics;
         final bool isDeviceSupported = await _localAuth.isDeviceSupported();
         if (canCheck && isDeviceSupported) {
@@ -89,6 +91,14 @@ class _LoginPageState extends State<LoginPage> {
       }
     } catch (e) {
       debugPrint('Biometric authentication failed: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Biometric failed: $e'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
     }
   }
 
@@ -159,7 +169,9 @@ class _LoginPageState extends State<LoginPage> {
           final prefs = await SharedPreferences.getInstance();
           final bool fingerprintEnabled = prefs.getBool('fingerprint_enabled') ?? false;
           final bool faceIdEnabled = prefs.getBool('face_id_enabled') ?? false;
-          if (fingerprintEnabled || faceIdEnabled) {
+          final bool cFingerprintEnabled = prefs.getBool('c_fingerprint_enabled') ?? false;
+          final bool cFaceIdEnabled = prefs.getBool('c_face_id_enabled') ?? false;
+          if (fingerprintEnabled || faceIdEnabled || cFingerprintEnabled || cFaceIdEnabled) {
             await prefs.setString('biometric_email', _emailCtrl.text.trim());
             await prefs.setString('biometric_password', _passwordCtrl.text.trim());
           }

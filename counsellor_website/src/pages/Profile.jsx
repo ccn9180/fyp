@@ -69,7 +69,7 @@ export default function Profile() {
         const pData = {
           name: data.fullName || data.name || user.displayName || 'Counsellor',
           specializations: Array.isArray(specs) ? specs : [specs],
-          bio: data.bio || data.motivation || data.applicationMotivation || '',
+          bio: data.counsellorBio || data.bio || data.motivation || data.applicationMotivation || '',
           experience: data.experience || '3-5 Years',
           languages: Array.isArray(langs) ? langs : [langs],
           email: data.email || user.email || '',
@@ -144,7 +144,7 @@ export default function Profile() {
         name: formData.name,
         phone: formData.phone,
         price: formData.price || 'Free',
-        bio: formData.bio,
+        counsellorBio: formData.bio,
         experience: formData.experience,
         specializations: formData.specializations,
         languages: formData.languages,
@@ -340,7 +340,7 @@ export default function Profile() {
             className="card" 
             onClick={() => { setShowDeactivation(true); setDeactivateSuccess(false); }}
             style={{ 
-              width: '100%', borderColor: '#fee2e2', backgroundColor: '#fff5f5', 
+              width: '100%', borderColor: 'rgba(239,68,68,0.35)', backgroundColor: 'rgba(239,68,68,0.06)', 
               cursor: 'pointer', transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
               display: 'flex', flexDirection: 'column'
             }}
@@ -349,23 +349,24 @@ export default function Profile() {
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
               <div>
-                <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#dc2626', display: 'flex', alignItems: 'center', gap: '8px', letterSpacing: '0.5px' }}>
+                <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#ef4444', display: 'flex', alignItems: 'center', gap: '8px', letterSpacing: '0.5px' }}>
                   <ShieldAlert size={18} /> Retire Profile
                 </h3>
-                <p style={{ fontSize: '12px', color: '#b91c1c', marginTop: '6px', lineHeight: 1.4 }}>
+                <p style={{ fontSize: '12px', color: '#f87171', marginTop: '6px', lineHeight: 1.4 }}>
                   Send formal retirement request to the board for review.
                 </p>
               </div>
               <button 
                 className="btn" 
                 style={{ 
-                  backgroundColor: '#fee2e2', 
+                  backgroundColor: 'rgba(239,68,68,0.15)', 
                   color: '#ef4444', 
                   padding: '8px 12px', 
                   fontSize: '12px',
                   fontWeight: 600,
                   pointerEvents: 'none',
-                  whiteSpace: 'nowrap'
+                  whiteSpace: 'nowrap',
+                  border: '1px solid rgba(239,68,68,0.25)'
                 }}
               >
                 Request
@@ -452,14 +453,6 @@ export default function Profile() {
 
               <div style={{ padding: '18px', backgroundColor: 'var(--bg-card)', borderRadius: '16px', border: '1px solid var(--border-color)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px', color: 'var(--text-muted)' }}>
-                  <Award size={16} />
-                  <span style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Clinical License ID</span>
-                </div>
-                <p style={{ fontWeight: '600', color: 'var(--text-darker)', fontSize: '14px' }}>{profile.licenseNumber}</p>
-              </div>
-
-              <div style={{ padding: '18px', backgroundColor: 'var(--bg-card)', borderRadius: '16px', border: '1px solid var(--border-color)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px', color: 'var(--text-muted)' }}>
                   <Briefcase size={16} />
                   <span style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Experience Rank</span>
                 </div>
@@ -526,25 +519,23 @@ export default function Profile() {
                   value={formData.name} 
                   readOnly
                   disabled
-                  style={{ backgroundColor: '#f9fafb', cursor: 'not-allowed', color: 'var(--text-muted)' }}
+                  style={{ backgroundColor: 'var(--bg-main)', cursor: 'not-allowed', color: 'var(--text-muted)' }}
                 />
               </div>
 
               <div className="form-group">
                 <label className="form-label">Phone Contact</label>
                 <div style={{ display: 'flex', alignItems: 'center', border: '1px solid var(--border-color)', borderRadius: '8px', overflow: 'hidden', backgroundColor: 'var(--bg-card)' }}>
-                  <div style={{ padding: '10px 14px', backgroundColor: '#f9fafb', color: 'var(--text-dark)', fontWeight: 600, borderRight: '1px solid var(--border-color)' }}>
+                  <div style={{ padding: '10px 14px', backgroundColor: 'var(--bg-main)', color: 'var(--text-dark)', fontWeight: 600, borderRight: '1px solid var(--border-color)' }}>
                     +60
                   </div>
                   <input 
                     type="text" 
                     className="form-control" 
-                    style={{ border: 'none', borderRadius: 0, padding: '10px' }}
+                    style={{ border: 'none', borderRadius: 0, padding: '10px', backgroundColor: 'var(--bg-main)', cursor: 'not-allowed', color: 'var(--text-muted)' }}
                     value={(formData.phone || '').replace(/^\+?60/, '')} 
-                    onChange={e => {
-                      const val = e.target.value.replace(/\D/g, ''); // Keep only digits
-                      setFormData({ ...formData, phone: '+60' + val });
-                    }} 
+                    readOnly
+                    disabled
                     placeholder="123456789"
                   />
                 </div>
@@ -623,7 +614,7 @@ export default function Profile() {
                           padding: '6px 12px',
                           borderRadius: '8px',
                           border: isSelected ? '1px solid var(--primary-color)' : '1px solid var(--border-color)',
-                          backgroundColor: isSelected ? 'var(--primary-color)' : 'white',
+                          backgroundColor: isSelected ? 'var(--primary-color)' : 'var(--bg-card)',
                           color: isSelected ? 'white' : 'var(--text-dark)',
                           fontSize: '12px',
                           fontWeight: 500,
@@ -653,7 +644,7 @@ export default function Profile() {
                           padding: '6px 12px',
                           borderRadius: '8px',
                           border: isSelected ? '1px solid var(--primary-color)' : '1px solid var(--border-color)',
-                          backgroundColor: isSelected ? 'var(--primary-color)' : 'white',
+                          backgroundColor: isSelected ? 'var(--primary-color)' : 'var(--bg-card)',
                           color: isSelected ? 'white' : 'var(--text-dark)',
                           fontSize: '12px',
                           fontWeight: 500,

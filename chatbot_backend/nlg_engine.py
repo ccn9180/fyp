@@ -218,6 +218,14 @@ class ComponentNLGEngine:
             "No worries — just tell me a bit about how you're doing with this.",
         ]
 
+        # ── Attention Lock System: explicitly name the pivot when the user
+        # introduces a more specific domain than whatever was active before. ──
+        self.attention_shift_templates = [
+            "It sounds like the challenge has shifted from {previous} to {new}.",
+            "It seems like this has moved on from {previous} to {new}.",
+            "It sounds like the focus has changed — less about {previous}, more about {new} now.",
+        ]
+
         # ── Validation-stage light curiosity: gentle, open invitations for
         # early context-gathering -- distinct from exploration's targeted asks ──
         self.light_curiosity = [
@@ -357,11 +365,14 @@ class ComponentNLGEngine:
                     "When a system keeps breaking unexpectedly, it can feel like you're spending more time fixing things than actually moving forward.",
                     "It sounds like you've been putting a lot of energy into getting things working properly.",
                     "Debugging the same thing over and over can be exhausting in a way that's hard to explain unless you've done it.",
+                    "Backend issues can be frustrating because one problem often affects several other parts of the system.",
+                    "Sometimes technical blockers consume more energy than the actual amount of work remaining.",
                 ],
                 "observation_cautious": [
                     "Technical problems can be especially draining because progress often comes with a lot of trial and error before things finally start working.",
                     "It sounds like you've been putting a lot of energy into getting things working properly.",
                     "It sounds like the technical side has been taking up a lot of your energy lately.",
+                    "Sometimes technical blockers consume more energy than the actual amount of work remaining.",
                 ],
                 "next_steps_question": [
                     "Is there one bug or piece that's blocking most of the rest of the work?",
@@ -775,6 +786,8 @@ class ComponentNLGEngine:
         choice_options: Optional[Tuple[str, str]] = None,
         has_evidence: bool = False,
         new_info: bool = False,
+        new_entity_this_turn: bool = False,
+        attention_shift: Optional[Tuple[str, str]] = None,
         recent_phrases: Optional[List[str]] = None,
         recent_categories: Optional[List[str]] = None,
         ask_question: bool = True,
@@ -839,6 +852,16 @@ class ComponentNLGEngine:
                 parts.append(pick(self.clarification_ask_entity))
             else:
                 parts.append(pick(self.clarification_fallback))
+
+        elif attention_shift:
+            # Attention Lock System: the user just introduced a more specific
+            # topic than whatever domain was previously active -- name the
+            # pivot explicitly instead of silently continuing as if nothing
+            # changed (or worse, still reflecting the OLD domain). Deliberately
+            # no question here; the new domain gets explored starting next turn.
+            previous_label, new_label = attention_shift
+            template = pick(self.attention_shift_templates)
+            parts.append(template.format(previous=previous_label, new=new_label))
 
         elif meaning_shift in self.MEANING_SHIFT_BANKS:
             # The user's latest message carries a DIFFERENT meaning than whatever
@@ -959,7 +982,16 @@ class ComponentNLGEngine:
             # validation-stage acknowledgment is more appropriate.
             # event is a verb phrase ("have problems") -- "having to {event}"
             # keeps it grammatical as a clause; entity is already a noun phrase.
-            focus_clause = f"having to {event}" if event else entity
+            # Prefer whichever was actually FRESH this turn -- event is a
+            # persisted field that can be stale (e.g. an old "10 modules to
+            # go" from several turns back) while entity just changed; a stale
+            # event must never outrank a fresh entity just because it's non-None.
+            if entity and (new_entity_this_turn or not event):
+                focus_clause = entity
+            elif event:
+                focus_clause = f"having to {event}"
+            else:
+                focus_clause = entity
             parts.append(f"It sounds like {focus_clause} is carrying most of the weight right now.")
             parts.append(self._event_observation_line(event_category, event, repetition_cue, pick, pick_diverse, has_evidence))
             if ask_question:
