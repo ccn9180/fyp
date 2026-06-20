@@ -39,7 +39,11 @@ class _SessionFeedbackScreenState extends State<SessionFeedbackScreen> {
       _hasExistingFeedback = _selectedRating > 0;
     }
     if (widget.session['feedback'] != null) {
-      _feedbackController.text = widget.session['feedback'].toString();
+      if (widget.session['feedback'] is Map) {
+        _feedbackController.text = (widget.session['feedback']['comment'] ?? '').toString();
+      } else {
+        _feedbackController.text = widget.session['feedback'].toString();
+      }
     }
     
     // Read only if they already left feedback OR if the session was missed
@@ -231,40 +235,65 @@ class _SessionFeedbackScreenState extends State<SessionFeedbackScreen> {
             const SizedBox(height: 32),
 
             // Feedback Field
-            Text(
-              'SHARE MORE (OPTIONAL)',
-              style: GoogleFonts.outfit(
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1.5,
-                color: textColorSub,
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _feedbackController,
-              maxLines: 4,
-              readOnly: _isReadOnly,
-              decoration: InputDecoration(
-                hintText: 'What did you find most helpful? Any areas for improvement?',
-                hintStyle: GoogleFonts.outfit(color: Colors.grey[400], fontSize: 14),
-                filled: true,
-                fillColor: Colors.white,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(20),
-                  borderSide: BorderSide(color: Colors.grey[100]!),
+            if (widget.session['isMissed'] != true && 
+                (!_hasExistingFeedback || _feedbackController.text.trim().isNotEmpty)) ...[
+              Text(
+                _hasExistingFeedback ? 'YOUR FEEDBACK' : 'SHARE MORE (OPTIONAL)',
+                style: GoogleFonts.outfit(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.5,
+                  color: textColorSub,
                 ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(20),
-                  borderSide: BorderSide(color: Colors.grey[100]!),
-                ),
-                contentPadding: const EdgeInsets.all(20),
               ),
-            ),
-
-            const SizedBox(height: 40),
-
-            // Submit Button
+              const SizedBox(height: 12),
+              if (_hasExistingFeedback)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(24),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.02),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Text(
+                    _feedbackController.text.trim(),
+                    style: GoogleFonts.outfit(
+                      fontSize: 14,
+                      color: textColorMain,
+                      height: 1.5,
+                    ),
+                  ),
+                )
+              else
+                TextField(
+                  controller: _feedbackController,
+                  maxLines: 4,
+                  readOnly: _isReadOnly,
+                  decoration: InputDecoration(
+                    hintText: 'What did you find most helpful? Any areas for improvement?',
+                    hintStyle: GoogleFonts.outfit(color: Colors.grey[400], fontSize: 14),
+                    filled: true,
+                    fillColor: Colors.white,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(20),
+                      borderSide: BorderSide(color: Colors.grey[100]!),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(20),
+                      borderSide: BorderSide(color: Colors.grey[100]!),
+                    ),
+                    contentPadding: const EdgeInsets.all(20),
+                  ),
+                ),
+              const SizedBox(height: 40),
+            ],
             if (_hasExistingFeedback)
               Center(
                 child: Column(
@@ -297,6 +326,83 @@ class _SessionFeedbackScreenState extends State<SessionFeedbackScreen> {
                 height: 56,
                 child: InkWell(
                     onTap: (_selectedRating > 0 && !_isSubmitting) ? () async {
+                      bool? confirm = await showDialog<bool>(
+                        context: context,
+                        builder: (context) {
+                          return Dialog(
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(32)),
+                            backgroundColor: Colors.white,
+                            elevation: 0,
+                            child: Padding(
+                              padding: const EdgeInsets.all(32.0),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(16),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF7C9C84).withOpacity(0.1),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(Icons.rate_review_rounded, color: Color(0xFF7C9C84), size: 36),
+                                  ),
+                                  const SizedBox(height: 24),
+                                  Text(
+                                    'Submit Review?',
+                                    textAlign: TextAlign.center,
+                                    style: GoogleFonts.playfairDisplay(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 24,
+                                      color: const Color(0xFF333333),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    'Once submitted, your review is permanent and cannot be changed.\nAre you sure you want to proceed?',
+                                    textAlign: TextAlign.center,
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 15,
+                                      height: 1.5,
+                                      color: const Color(0xFF666666),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 32),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: TextButton(
+                                          onPressed: () => Navigator.pop(context, false),
+                                          style: TextButton.styleFrom(
+                                            padding: const EdgeInsets.symmetric(vertical: 16),
+                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                          ),
+                                          child: Text('Cancel', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.grey[600])),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 16),
+                                      Expanded(
+                                        child: ElevatedButton(
+                                          onPressed: () => Navigator.pop(context, true),
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: const Color(0xFF7C9C84),
+                                            elevation: 0,
+                                            padding: const EdgeInsets.symmetric(vertical: 16),
+                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                          ),
+                                          child: Text('Submit', style: GoogleFonts.outfit(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      );
+
+                      if (confirm != true) return;
+
                       setState(() {
                         _isSubmitting = true;
                       });

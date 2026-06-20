@@ -1,15 +1,16 @@
 {
     "explore_checkin": [
-        "I'm really glad you're doing okay today. Is there anything specific on your mind, or do you just want to hang out and chat?",
-        "That's good to hear. Feel free to just sit in the quiet with me, or we can talk about whatever's floating around in your head today."
+        "Glad to hear it. Anything on your mind, or just want to hang out and chat?",
+        "Nice. Is there something on your mind, or are you just checking in?"
     ],
     "gentle_pivot": [
-        "That's completely okay. Sometimes having a 'neutral' or quiet day is exactly what the mind needs to rest.",
-        "I understand. Not every day has to be a big high or a deep low. A quiet middle ground matters too."
+        "That's okay, a quiet day counts too.",
+        "Fair enough, not every day has to be a big one."
     ],
     "open_chat": [
-        "I'm right here with you. Whatever feels heaviest or most important right now, we can talk about it.",
-        "I'm listening. Take your time, and tell me what's on your mind."
+        "Sounds good 😊. Happy to just chat. How's your day been so far?",
+        "Glad you came by. What's been going on lately?",
+        "Nice, anything interesting happen today?"
     ],
     "validate_confirm": [
         "Got it. Can you tell me a little more about that?",
@@ -360,14 +361,12 @@
         "I completely hear you. Feeling alone in a crowded room is incredibly painful. What specifically makes it feel the most lonely for you right now?"
     ],
     "greeting": [
-        "Hello! I am right here with you. How have you been feeling in your mind and body lately?",
-        "Hey there. I'm really glad you reached out today. How are you holding up?",
-        "Hi. I'm here, and I'm listening. What's on your mind right now?",
-        "Hello! It is so good to see you. Take a breath. How are you doing today?",
-        "Hi there. I'm here for you, no matter what it is. What's been going on?",
-        "Welcome back. Let's take a slow, deep breath together. How are you feeling in this exact moment?",
-        "Hey. I'm listening, without judgment. How has your day been treating you so far?",
-        "Hi! Whatever heavy things you're carrying today, we can talk about them. How are you?"
+        "Hey! How's it going today?",
+        "Hi there! Good to see you. How's your day been so far?",
+        "Hello! What's up?",
+        "Hey, welcome back! How have things been?",
+        "Hi! Nice to hear from you. What's on your mind today, or just saying hi?",
+        "Hey there! How are you doing today?"
     ],
     "close": [
         "Thank you so much for sharing your heart with me today. Please be very gentle with yourself and take care.",

@@ -271,11 +271,33 @@ class _EntrySummaryScreenState extends State<EntrySummaryScreen> {
         _summary           = data['summary']    ?? 'Your thoughts have been securely logged.';
         _confidence        = (data['confidence'] as num?)?.toDouble() ?? 0.0;
         _isCrisis          = data['is_crisis']  ?? false;
-        _emotionPercentages = data['emotion_percentages'] ?? [];
+        // Deduplicate by display name (what the user sees) — keeps highest
+        // confidence entry when multiple raw labels map to the same display name
+        // (e.g. "neutral", "hopeful", "disgust" all render as "Neutral").
+        final rawPercentages = (data['emotion_percentages'] as List?) ?? [];
+        final Map<String, dynamic> seenByDisplay = {};
+        for (final ep in rawPercentages) {
+          final eName = (ep['emotion'] ?? 'neutral').toString();
+          final displayName = _getEmotionDisplayName(eName);
+          final conf = (ep['confidence'] as num?)?.toDouble() ?? 0.0;
+          final existingConf = (seenByDisplay[displayName]?['confidence'] as num?)?.toDouble() ?? -1.0;
+          if (conf > existingConf) {
+            seenByDisplay[displayName] = ep;
+          }
+        }
+        _emotionPercentages = seenByDisplay.values.toList()
+          ..sort((a, b) => ((b['confidence'] as num?) ?? 0).compareTo((a['confidence'] as num?) ?? 0));
         
-        _tags = List<Map<String, dynamic>>.from(
-          _emotionTags[_emotion] ?? _emotionTags['neutral']!,
-        );
+        final List<dynamic> hashtags = data['hashtags'] ?? [];
+        if (hashtags.isNotEmpty) {
+          _tags = hashtags.map((h) => {
+            'label': h.toString(),
+            'icon': Icons.label_outline,
+            'color': const Color(0xFFE8F5E9), // Gentle green pastel background
+          }).toList();
+        } else {
+          _tags = [];
+        }
         
         _apiError = false;
         success = true;
@@ -384,9 +406,22 @@ class _EntrySummaryScreenState extends State<EntrySummaryScreen> {
       _summary = meta['summary']!;
     }
 
-    _tags = List<Map<String, dynamic>>.from(
-      _emotionTags[_emotion] ?? _emotionTags['neutral']!,
-    );
+    // Very basic offline hashtag extraction fallback
+    final words = lowerContent.split(RegExp(r'\W+'))
+      .where((w) => w.length > 3 && !['this', 'that', 'with', 'from', 'have'].contains(w))
+      .toList();
+    final uniqueWords = words.toSet().toList();
+    final topWords = uniqueWords.take(3).toList();
+    
+    if (topWords.isNotEmpty) {
+      _tags = topWords.map((w) => {
+        'label': w[0].toUpperCase() + w.substring(1),
+        'icon': Icons.label_outline,
+        'color': const Color(0xFFE8F5E9),
+      }).toList();
+    } else {
+      _tags = [];
+    }
 
     final crisisKeywords = ['hurt', 'kill', 'end it', 'die', 'suicide', 'self-harm', 'give up', 'hopeless'];
     if (crisisKeywords.any((kw) => lowerContent.contains(kw))) {
@@ -691,7 +726,7 @@ class _EntrySummaryScreenState extends State<EntrySummaryScreen> {
                 ],
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 48),
 
             // Sharing Access Header
             Row(

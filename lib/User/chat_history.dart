@@ -1,8 +1,16 @@
+import 'dart:io';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
+import 'package:flutter/rendering.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:share_plus/share_plus.dart';
 import 'active_chat.dart';
 import 'chat_detail.dart';
 
@@ -19,6 +27,10 @@ class _ChatHistoryScreenState extends State<ChatHistoryScreen> {
   final List<String> _filters = ['All', 'Anxiety', 'Gratitude', 'Sleep', 'Focus'];
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+
+  final GlobalKey _exportKey = GlobalKey();
+  bool _isExporting = false;
+  Map<String, dynamic>? _exportData;
 
   final Color primaryGreen = const Color(0xFF7C9C84);
   final Color backgroundColor = const Color(0xFFFBFBF6);
@@ -58,7 +70,7 @@ class _ChatHistoryScreenState extends State<ChatHistoryScreen> {
     }
   }
 
-  void _showExportSheet(BuildContext context) {
+  void _showExportSheet(BuildContext context, Map<String, dynamic> chatData) {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -97,6 +109,10 @@ class _ChatHistoryScreenState extends State<ChatHistoryScreen> {
               'Export as PDF',
               'Save this chat as a readable document',
               const Color(0xFF7C9C84),
+              () {
+                Navigator.pop(context);
+                _exportAsPdf(chatData);
+              },
             ),
             const SizedBox(height: 16),
             _buildExportOption(
@@ -105,6 +121,10 @@ class _ChatHistoryScreenState extends State<ChatHistoryScreen> {
               'Export as Image',
               'Save a snapshot of the conversation',
               const Color(0xFF8BA882),
+              () {
+                Navigator.pop(context);
+                _exportAsImage(chatData);
+              },
             ),
             const SizedBox(height: 24),
             TextButton(
@@ -123,8 +143,10 @@ class _ChatHistoryScreenState extends State<ChatHistoryScreen> {
     );
   }
 
-  Widget _buildExportOption(BuildContext context, IconData icon, String title, String subtitle, Color color) {
-    return Container(
+  Widget _buildExportOption(BuildContext context, IconData icon, String title, String subtitle, Color color, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: const Color(0xFFFBFBF9),
@@ -165,6 +187,234 @@ class _ChatHistoryScreenState extends State<ChatHistoryScreen> {
             ),
           ),
           Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Colors.grey[300]),
+        ],
+      ),
+    ));
+  }
+
+  // ── PDF Export ────────────────────────────────────────────────
+  Future<void> _exportAsPdf(Map<String, dynamic> data) async {
+    if (_isExporting) return;
+    setState(() => _isExporting = true);
+
+    try {
+      final String title = data['title'] ?? 'AI Chat Session';
+      final String tag = data['tag'] ?? 'FOCUSED';
+      final List<dynamic> messages = data['messages'] ?? [];
+      final String aiSummary = data['aiSummary'] ?? data['preview'] ?? '';
+      
+      String dateStr = '';
+      if (data['createdAt'] != null) {
+        final DateTime dt = (data['createdAt'] as Timestamp).toDate();
+        dateStr = DateFormat('MMMM d, yyyy  •  h:mm a').format(dt);
+      } else {
+        dateStr = DateFormat('MMMM d, yyyy').format(DateTime.now());
+      }
+
+      final doc = pw.Document();
+
+      doc.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.symmetric(horizontal: 48, vertical: 56),
+          build: (pw.Context ctx) => [
+            // Header
+            pw.Container(
+              padding: const pw.EdgeInsets.only(bottom: 20),
+              decoration: const pw.BoxDecoration(
+                border: pw.Border(bottom: pw.BorderSide(color: PdfColor.fromInt(0xFF7C9C84), width: 1.5)),
+              ),
+              child: pw.Row(
+                crossAxisAlignment: pw.CrossAxisAlignment.end,
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text('EUNOIA', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, letterSpacing: 2.0, color: const PdfColor.fromInt(0xFF7C9C84))),
+                      pw.SizedBox(height: 4),
+                      pw.Text('WELLNESS CHAT', style: const pw.TextStyle(fontSize: 9, color: PdfColor.fromInt(0xFF9E9E9E), letterSpacing: 1.5)),
+                    ],
+                  ),
+                  pw.Text(dateStr, style: const pw.TextStyle(fontSize: 11, color: PdfColor.fromInt(0xFF757575))),
+                ],
+              ),
+            ),
+            pw.SizedBox(height: 32),
+            
+            // Title & Emotion
+            pw.Text(title, style: pw.TextStyle(fontSize: 28, fontWeight: pw.FontWeight.bold, color: const PdfColor.fromInt(0xFF333333))),
+            pw.SizedBox(height: 12),
+            pw.Container(
+              padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: pw.BoxDecoration(color: const PdfColor.fromInt(0xFFE8F5E9), borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6))),
+              child: pw.Text('Tag: $tag', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: const PdfColor.fromInt(0xFF43A047))),
+            ),
+            pw.SizedBox(height: 32),
+
+            // AI Summary
+            if (aiSummary.isNotEmpty) ...[
+              pw.Container(
+                padding: const pw.EdgeInsets.all(16),
+                decoration: pw.BoxDecoration(color: const PdfColor.fromInt(0xFFF1F3EE), borderRadius: const pw.BorderRadius.all(pw.Radius.circular(12))),
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text('AI INSIGHTS', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: const PdfColor.fromInt(0xFF5D6D66), letterSpacing: 1.5)),
+                    pw.SizedBox(height: 8),
+                    pw.Text(aiSummary, style: const pw.TextStyle(fontSize: 12, color: PdfColor.fromInt(0xFF4A4A4A), lineSpacing: 4)),
+                  ],
+                ),
+              ),
+              pw.SizedBox(height: 32),
+            ],
+
+            // Transcript
+            pw.Text('TRANSCRIPT', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: const PdfColor.fromInt(0xFFB0B0B0), letterSpacing: 2.0)),
+            pw.SizedBox(height: 16),
+            ...messages.map((m) {
+              final isAI = m['role'] == 'assistant';
+              return pw.Padding(
+                padding: const pw.EdgeInsets.only(bottom: 16),
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(isAI ? 'EUNOIA AI' : 'YOU', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: isAI ? const PdfColor.fromInt(0xFF7C9C84) : const PdfColor.fromInt(0xFFB0B0B0))),
+                    pw.SizedBox(height: 4),
+                    pw.Text(m['text'] ?? '', style: const pw.TextStyle(fontSize: 12, color: PdfColor.fromInt(0xFF333333), lineSpacing: 3)),
+                  ],
+                ),
+              );
+            }).toList(),
+            
+            pw.SizedBox(height: 48),
+            pw.Center(
+              child: pw.Text('Exported from Eunoia · Your personal wellness guide', style: const pw.TextStyle(fontSize: 10, color: PdfColor.fromInt(0xFFBDBDBD))),
+            ),
+          ],
+        ),
+      );
+
+      final output = await getTemporaryDirectory();
+      final safeTitle = title.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_');
+      final file = File('${output.path}/Chat_$safeTitle.pdf');
+      await file.writeAsBytes(await doc.save());
+
+      if (mounted) {
+        await Share.shareXFiles([XFile(file.path)], text: 'My Wellness Chat: $title');
+      }
+    } catch (e) {
+      debugPrint('PDF export error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Export failed: $e'), backgroundColor: Colors.redAccent));
+      }
+    } finally {
+      if (mounted) setState(() => _isExporting = false);
+    }
+  }
+
+  // ── Image Export ──────────────────────────────────────────────
+  Future<void> _exportAsImage(Map<String, dynamic> data) async {
+    if (_isExporting) return;
+    setState(() {
+      _exportData = data;
+      _isExporting = true;
+    });
+
+    await Future.delayed(const Duration(milliseconds: 500));
+
+    try {
+      if (_exportKey.currentContext == null) throw Exception("Export context not found");
+      
+      final RenderRepaintBoundary boundary = _exportKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
+      final ui.Image image = await boundary.toImage(pixelRatio: 3.0);
+      final ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      final Uint8List pngBytes = byteData!.buffer.asUint8List();
+
+      final output = await getTemporaryDirectory();
+      final safeTitle = (data['title'] ?? 'Chat').replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_');
+      final file = File('${output.path}/Chat_$safeTitle.png');
+      await file.writeAsBytes(pngBytes);
+
+      if (mounted) {
+        await Share.shareXFiles([XFile(file.path)], text: 'My Wellness Chat: ${data['title']}');
+      }
+    } catch (e) {
+      debugPrint('Image export error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Export failed: $e'), backgroundColor: Colors.redAccent));
+      }
+    } finally {
+      if (mounted) setState(() {
+        _exportData = null;
+        _isExporting = false;
+      });
+    }
+  }
+
+  Widget _buildExportCard(Map<String, dynamic> data) {
+    final String title = data['title'] ?? 'AI Chat Session';
+    final String tag = data['tag'] ?? 'FOCUSED';
+    final String summary = data['aiSummary'] ?? data['preview'] ?? '';
+    String dateStr = '';
+    if (data['createdAt'] != null) {
+      final DateTime dt = (data['createdAt'] as Timestamp).toDate();
+      dateStr = DateFormat('MMMM d, yyyy').format(dt);
+    } else {
+      dateStr = DateFormat('MMMM d, yyyy').format(DateTime.now());
+    }
+
+    return Container(
+      width: 600,
+      color: const Color(0xFFFBFBF6),
+      padding: const EdgeInsets.all(48),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('EUNOIA', style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 2.0, color: const Color(0xFF7C9C84))),
+                  Text('WELLNESS CHAT', style: GoogleFonts.outfit(fontSize: 10, color: const Color(0xFF9E9E9E), letterSpacing: 1.5)),
+                ],
+              ),
+              Text(dateStr, style: GoogleFonts.outfit(fontSize: 14, color: const Color(0xFF757575))),
+            ],
+          ),
+          const SizedBox(height: 24),
+          const Divider(color: Color(0xFFEBEBE4), thickness: 1.5),
+          const SizedBox(height: 32),
+          Text(title, style: GoogleFonts.playfairDisplay(fontSize: 40, fontWeight: FontWeight.w600, color: const Color(0xFF333333))),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(color: const Color(0xFFE8F5E9), borderRadius: BorderRadius.circular(8)),
+            child: Text('Tag: $tag', style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold, color: const Color(0xFF43A047))),
+          ),
+          const SizedBox(height: 40),
+          if (summary.isNotEmpty) ...[
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(color: const Color(0xFFF1F3EE), borderRadius: BorderRadius.circular(16)),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('AI INSIGHTS', style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFF5D6D66), letterSpacing: 1.5)),
+                  const SizedBox(height: 12),
+                  Text(summary, style: GoogleFonts.outfit(fontSize: 16, color: const Color(0xFF4A4A4A), height: 1.5)),
+                ],
+              ),
+            ),
+            const SizedBox(height: 48),
+          ],
+          Center(
+            child: Text('✨ Exported from Eunoia Wellness Chat', style: GoogleFonts.outfit(fontSize: 14, color: const Color(0xFFB0B0B0))),
+          ),
         ],
       ),
     );
@@ -289,8 +539,21 @@ class _ChatHistoryScreenState extends State<ChatHistoryScreen> {
         centerTitle: true,
         actions: const [],
       ),
-      body: Column(
+      body: Stack(
         children: [
+          if (_exportData != null)
+            Positioned(
+              left: -2000,
+              child: RepaintBoundary(
+                key: _exportKey,
+                child: Material(
+                  color: Colors.transparent,
+                  child: _buildExportCard(_exportData!),
+                ),
+              ),
+            ),
+          Column(
+            children: [
           const SizedBox(height: 16),
           // Search Bar
           Padding(
@@ -595,7 +858,11 @@ class _ChatHistoryScreenState extends State<ChatHistoryScreen> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
+    ],
+  ),
+  floatingActionButton: _isExporting
+          ? null
+          : FloatingActionButton(
         onPressed: () {
           Navigator.push(
             context,
@@ -676,16 +943,21 @@ class _ChatHistoryScreenState extends State<ChatHistoryScreen> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text(
-                              title,
-                              style: GoogleFonts.outfit(
-                                fontSize: 17,
-                                fontWeight: FontWeight.w600,
-                                color: textColorMain,
+                            Expanded(
+                              child: Text(
+                                title,
+                                style: GoogleFonts.outfit(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w600,
+                                  color: textColorMain,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
+                            const SizedBox(width: 8),
                             GestureDetector(
-                              onTap: () => _showChatActionSheet(context, docId, title),
+                              onTap: () => _showChatActionSheet(context, docId, chatData),
                               child: Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                                 decoration: BoxDecoration(
@@ -701,33 +973,40 @@ class _ChatHistoryScreenState extends State<ChatHistoryScreen> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: tagColor,
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: Text(
-                                    tag,
-                                    style: GoogleFonts.outfit(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.bold,
-                                      color: tagTextColor,
+                            Expanded(
+                              child: Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: tagColor,
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Text(
+                                      tag,
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                        color: tagTextColor,
+                                      ),
                                     ),
                                   ),
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  subTag,
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 12,
-                                    color: const Color(0xFFB0B0B0),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      subTag,
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 12,
+                                        color: const Color(0xFFB0B0B0),
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
+                            const SizedBox(width: 8),
                             Text(
                               date,
                               style: GoogleFonts.outfit(
@@ -761,7 +1040,8 @@ class _ChatHistoryScreenState extends State<ChatHistoryScreen> {
     );
   }
 
-  void _showChatActionSheet(BuildContext context, String docId, String chatTitle) {
+  void _showChatActionSheet(BuildContext context, String docId, Map<String, dynamic> chatData) {
+    String chatTitle = chatData['title'] ?? 'AI Chat Session';
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -792,7 +1072,15 @@ class _ChatHistoryScreenState extends State<ChatHistoryScreen> {
               icon: Icons.article_outlined,
               onTap: () {
                 Navigator.pop(context);
-                // Detail will navigate on card tap, or we can use it here too.
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => ChatDetailScreen(
+                      docId: docId,
+                      chatData: chatData,
+                    ),
+                  ),
+                );
               },
             ),
             const SizedBox(height: 12),
@@ -802,7 +1090,7 @@ class _ChatHistoryScreenState extends State<ChatHistoryScreen> {
               icon: Icons.ios_share_rounded,
               onTap: () {
                 Navigator.pop(context);
-                _showExportSheet(context);
+                _showExportSheet(context, chatData);
               },
             ),
             const SizedBox(height: 12),

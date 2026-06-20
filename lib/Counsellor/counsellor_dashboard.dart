@@ -8,7 +8,7 @@ import 'package:intl/intl.dart';
 import 'counsellor_history.dart';
 import 'shared_chats.dart';
 import 'counsellor_availability_management.dart';
-import 'counsellor_notifications.dart';
+import 'session_detail.dart';
 
 class CounsellorDashboardScreen extends StatefulWidget {
   final Function(int)? onTabChange;
@@ -120,11 +120,12 @@ class _CounsellorDashboardScreenState extends State<CounsellorDashboardScreen> {
                     stream: FirebaseFirestore.instance
                         .collection('counsellor_bookings')
                         .where('counsellorId', isEqualTo: currentUserId)
-                        .where('status', isEqualTo: 'approved')
                         .snapshots(),
                     builder: (context, bookingSnapshot) {
                       int todayCount = 0;
                       Map<String, dynamic>? nextSession;
+                      double totalRating = 0;
+                      int reviewCount = 0;
 
                       if (bookingSnapshot.hasData) {
                         final now = DateTime.now();
@@ -135,14 +136,26 @@ class _CounsellorDashboardScreenState extends State<CounsellorDashboardScreen> {
 
                         for (var doc in bookingSnapshot.data!.docs) {
                           final data = doc.data() as Map<String, dynamic>;
+                          
+                          // Calculate dynamic rating
+                          if (data['rating'] != null) {
+                            double r = data['rating'] is int ? (data['rating'] as int).toDouble() : (double.tryParse(data['rating'].toString()) ?? 0);
+                            if (r > 0) {
+                              totalRating += r;
+                              reviewCount++;
+                            }
+                          }
+
                           if (data['startTime'] != null) {
+                            final statusLower = (data['status'] ?? '').toString().toLowerCase();
+                            if (statusLower == 'cancelled' || statusLower == 'missed' || statusLower == 'rejected' || statusLower == 'completed') continue;
+
                             final startTime = (data['startTime'] as Timestamp).toDate();
                             if (startTime.isAfter(todayStart) && startTime.isBefore(todayEnd)) {
                               todayCount++;
                             }
-                            if (startTime.isAfter(now)) {
-                              upcoming.add(data);
-                            }
+                            data['id'] = doc.id; // Added ID for navigation
+                            upcoming.add(data);
                           }
                         }
 
@@ -151,6 +164,8 @@ class _CounsellorDashboardScreenState extends State<CounsellorDashboardScreen> {
                           nextSession = upcoming.first;
                         }
                       }
+
+                      String computedRating = reviewCount > 0 ? (totalRating / reviewCount).toStringAsFixed(1) : '0.0';
 
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -169,7 +184,7 @@ class _CounsellorDashboardScreenState extends State<CounsellorDashboardScreen> {
                             children: [
                               _buildMiniStat('Today', '$todayCount Sessions', Icons.timer_outlined, primaryGreen),
                               const SizedBox(width: 16),
-                              _buildMiniStat('Rating', '$rating ⭐', Icons.star_outline_rounded, const Color(0xFFFFD700)),
+                              _buildMiniStat('Rating', '$computedRating ⭐', Icons.star_outline_rounded, const Color(0xFFFFD700)),
                             ],
                           ),
                         ],
@@ -271,9 +286,19 @@ class _CounsellorDashboardScreenState extends State<CounsellorDashboardScreen> {
     final startTime = (session['startTime'] as Timestamp).toDate();
     final diff = startTime.difference(DateTime.now());
     
+    final int diffMins = diff.inMinutes;
     String timeStr;
-    if (diff.inMinutes < 60) {
-      timeStr = 'IN ${diff.inMinutes} MIN';
+    Color badgeColor = primaryGreen;
+
+    if (diffMins <= 0 && diffMins >= -60) {
+      timeStr = 'ON-GOING';
+      badgeColor = const Color(0xFFD97706);
+    } else if (diffMins < -60) {
+      timeStr = 'PENDING REVIEW';
+      badgeColor = Colors.redAccent;
+    } else if (diffMins <= 60) {
+      timeStr = 'LIVE SOON';
+      badgeColor = const Color(0xFFD97706);
     } else if (diff.inHours < 24) {
       timeStr = 'IN ${diff.inHours} HR';
     } else {
@@ -282,7 +307,19 @@ class _CounsellorDashboardScreenState extends State<CounsellorDashboardScreen> {
 
     final imageUrl = session['patientImageUrl'];
 
-    return Container(
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => SessionDetailScreen(
+              bookingData: session,
+              bookingId: session['id'] ?? '',
+            ),
+          ),
+        );
+      },
+      child: Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -320,17 +357,17 @@ class _CounsellorDashboardScreenState extends State<CounsellorDashboardScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             decoration: BoxDecoration(
-              color: primaryGreen.withOpacity(0.1),
+              color: badgeColor.withOpacity(0.1),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Text(
               timeStr,
-              style: GoogleFonts.outfit(fontSize: 10, fontWeight: FontWeight.bold, color: primaryGreen),
+              style: GoogleFonts.outfit(fontSize: 10, fontWeight: FontWeight.bold, color: badgeColor),
             ),
           ),
         ],
       ),
-    );
+    ));
   }
 
   Widget _buildMiniStat(String label, String val, IconData icon, Color color) {

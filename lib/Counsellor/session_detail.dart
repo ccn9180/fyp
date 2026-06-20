@@ -24,6 +24,8 @@ class SessionDetailScreen extends StatelessWidget {
     
     final now = DateTime.now();
     final bool isSessionPassed = now.isAfter(startTime.add(const Duration(minutes: 60)));
+    final bool isFifteenMinsLate = now.isAfter(startTime.add(const Duration(minutes: 15)));
+    final String statusRaw = bookingData['status']?.toString().toLowerCase() ?? 'upcoming';
 
     return Scaffold(
       backgroundColor: backgroundColor,
@@ -79,14 +81,7 @@ class SessionDetailScreen extends StatelessWidget {
                       color: textColorMain,
                     ),
                   ),
-                  Text(
-                    'Client ID: ${bookingData['patientId'] ?? 'N/A'}',
-                    style: GoogleFonts.outfit(
-                      fontSize: 14,
-                      color: Colors.grey[400],
-                    ),
-                  ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 14),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -130,19 +125,30 @@ class SessionDetailScreen extends StatelessWidget {
                   const Divider(),
                   const SizedBox(height: 20),
                   Text(
+                    statusRaw == 'completed' ? 'PRIVATE CLINICAL NOTES' :
+                    statusRaw == 'missed' ? 'REASON FOR MISSED SESSION' :
+                    statusRaw == 'cancelled' ? 'REASON FOR CANCELLATION' :
                     'PRIVATE CLINICAL NOTES',
                     style: GoogleFonts.outfit(
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
-                      color: Colors.grey[400],
+                      color: (statusRaw == 'missed' || statusRaw == 'cancelled') ? Colors.redAccent : Colors.grey[400],
                       letterSpacing: 1.0,
                     ),
                   ),
                   const SizedBox(height: 12),
-                  Text(
-                    bookingData['notes'] ?? 'No clinical notes recorded for this session yet. Notes are private and only visible to you.',
-                    style: GoogleFonts.outfit(fontSize: 14, color: Colors.grey[600], height: 1.5),
-                  ),
+                  if (statusRaw == 'missed' || statusRaw == 'cancelled')
+                    Text(
+                      statusRaw == 'missed' 
+                        ? (bookingData['missedReason'] ?? bookingData['reason'] ?? 'No reason provided.')
+                        : (bookingData['cancelReason'] ?? 'No reason provided.'),
+                      style: GoogleFonts.outfit(fontSize: 14, color: Colors.grey[600], height: 1.5),
+                    )
+                  else
+                    Text(
+                      bookingData['notes'] ?? 'No clinical notes recorded for this session yet. Notes are private and only visible to you.',
+                      style: GoogleFonts.outfit(fontSize: 14, color: Colors.grey[600], height: 1.5),
+                    ),
                 ],
               ),
             ),
@@ -178,7 +184,32 @@ class SessionDetailScreen extends StatelessWidget {
             ),
             const SizedBox(height: 32),
 
-            if (!isSessionPassed) ...[
+            if (statusRaw == 'completed' || statusRaw == 'missed' || statusRaw == 'cancelled') ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 20),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade50,
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: Colors.grey.shade200),
+                ),
+                child: Column(
+                  children: [
+                    Text(
+                      statusRaw == 'completed' ? 'This session has been completed.' :
+                      statusRaw == 'missed' ? 'This session was missed.' :
+                      'This session was cancelled.',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.outfit(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ] else if (!isSessionPassed) ...[
               // Primary Start Session Button
               SizedBox(
                 width: double.infinity,
@@ -240,28 +271,106 @@ class SessionDetailScreen extends StatelessWidget {
               ),
               const SizedBox(height: 16),
 
-              // Reschedule Button (Counselor Side)
-              SizedBox(
-                width: double.infinity,
-                height: 60,
-                child: OutlinedButton(
-                  onPressed: () => _handleReschedule(context),
-                  style: OutlinedButton.styleFrom(
-                    side: BorderSide(color: primaryGreen.withOpacity(0.3)),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                  ),
-                  child: Text(
-                    'RESCHEDULE APPOINTMENT',
-                    style: GoogleFonts.outfit(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                      color: primaryGreen,
-                      letterSpacing: 1.0,
+              // Reschedule and Missed Buttons
+              Row(
+                children: [
+                  Expanded(
+                    child: SizedBox(
+                      height: 56,
+                      child: OutlinedButton(
+                        onPressed: () => _handleReschedule(context),
+                        style: OutlinedButton.styleFrom(
+                          side: BorderSide(color: primaryGreen.withOpacity(0.3)),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                        ),
+                        child: Text(
+                          'RESCHEDULE',
+                          style: GoogleFonts.outfit(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: primaryGreen,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ),
                     ),
                   ),
-                ),
+                  if (isFifteenMinsLate && statusRaw != 'completed' && statusRaw != 'missed' && statusRaw != 'cancelled') ...[
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: SizedBox(
+                        height: 56,
+                        child: OutlinedButton(
+                          onPressed: () => _showMissedDialog(context),
+                          style: OutlinedButton.styleFrom(
+                            side: BorderSide(color: Colors.red.shade300.withOpacity(0.5)),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                          ),
+                          child: Text(
+                            'MARK MISSED',
+                            style: GoogleFonts.outfit(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.red.shade400,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
               ),
-            ] else ...[
+            ] else if (isSessionPassed && statusRaw != 'completed' && statusRaw != 'missed' && statusRaw != 'cancelled') ...[
+              Row(
+                children: [
+                  Expanded(
+                    child: SizedBox(
+                      height: 56,
+                      child: OutlinedButton(
+                        onPressed: () => _showMissedDialog(context),
+                        style: OutlinedButton.styleFrom(
+                          side: BorderSide(color: Colors.red.shade300.withOpacity(0.5)),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                        ),
+                        child: Text(
+                          'MARK MISSED',
+                          style: GoogleFonts.outfit(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.red.shade400,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: SizedBox(
+                      height: 56,
+                      child: ElevatedButton(
+                        onPressed: () => _showCompletedDialog(context),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: primaryGreen,
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                        ),
+                        child: Text(
+                          'MARK COMPLETED',
+                          style: GoogleFonts.outfit(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ] else if (statusRaw == 'completed' || statusRaw == 'missed' || statusRaw == 'cancelled') ...[
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(vertical: 20),
@@ -271,7 +380,7 @@ class SessionDetailScreen extends StatelessWidget {
                 ),
                 child: Center(
                   child: Text(
-                    'This session has ended.',
+                    'This session is $statusRaw.',
                     style: GoogleFonts.outfit(
                       color: Colors.grey[600],
                       fontWeight: FontWeight.bold,
@@ -328,6 +437,179 @@ class SessionDetailScreen extends StatelessWidget {
                 ),
                 child: Text('Got It', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _updateSessionStatus(BuildContext context, String newStatus, {String? reason, String? summary}) async {
+    try {
+      final updateData = <String, dynamic>{
+        'status': newStatus,
+        'lastModified': FieldValue.serverTimestamp(),
+      };
+      if (reason != null && reason.isNotEmpty) {
+        updateData['missedReason'] = reason;
+        updateData['reason'] = reason; // Save to both for compatibility
+      }
+      if (summary != null && summary.isNotEmpty) {
+        updateData['sessionSummary'] = summary;
+        updateData['notes'] = summary; // Save to both
+      }
+
+      await FirebaseFirestore.instance.collection('counsellor_bookings').doc(bookingId).update(updateData);
+      
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Submitted Successfully! The session has been marked as $newStatus.'), backgroundColor: const Color(0xFF7C9C84)),
+        );
+        Navigator.pop(context); // Go back after marking
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to update status: $e'), backgroundColor: Colors.redAccent),
+        );
+      }
+    }
+  }
+
+  void _showMissedDialog(BuildContext context) {
+    final TextEditingController reasonController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(32)),
+        contentPadding: const EdgeInsets.all(32),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(color: Colors.red.shade50, shape: BoxShape.circle),
+                child: Icon(Icons.cancel_outlined, color: Colors.red.shade400, size: 48),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Center(child: Text('Mark as Missed', style: GoogleFonts.playfairDisplay(fontSize: 24, fontWeight: FontWeight.bold, color: const Color(0xFF333333)))),
+            const SizedBox(height: 16),
+            Text('Reason for missed session:', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: Colors.grey[700])),
+            const SizedBox(height: 8),
+            TextField(
+              controller: reasonController,
+              maxLines: 3,
+              decoration: InputDecoration(
+                hintText: 'E.g., Client did not show up, connection issues...',
+                hintStyle: GoogleFonts.outfit(color: Colors.grey[400]),
+                filled: true,
+                fillColor: Colors.grey[50],
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: Colors.grey.shade200)),
+                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: Colors.grey.shade200)),
+                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: Color(0xFF7C9C84))),
+              ),
+            ),
+            const SizedBox(height: 32),
+            Row(
+              children: [
+                Expanded(
+                  child: TextButton(
+                    onPressed: () => Navigator.pop(dialogContext),
+                    child: Text('Cancel', style: GoogleFonts.outfit(color: Colors.grey[600], fontWeight: FontWeight.bold)),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () {
+                      Navigator.pop(dialogContext);
+                      _updateSessionStatus(context, 'missed', reason: reasonController.text.trim());
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red.shade400,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                    ),
+                    child: Text('Confirm', style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showCompletedDialog(BuildContext context) {
+    final TextEditingController summaryController = TextEditingController();
+    final Color primaryGreen = const Color(0xFF7C9C84);
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(32)),
+        contentPadding: const EdgeInsets.all(32),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                padding: const EdgeInsets.all(20),
+                decoration: const BoxDecoration(color: Color(0xFFF1F5F2), shape: BoxShape.circle),
+                child: Icon(Icons.check_circle_outline_rounded, color: primaryGreen, size: 48),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Center(child: Text('Mark as Completed', style: GoogleFonts.playfairDisplay(fontSize: 24, fontWeight: FontWeight.bold, color: const Color(0xFF333333)))),
+            const SizedBox(height: 16),
+            Text('Session Summary / Notes:', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: Colors.grey[700])),
+            const SizedBox(height: 8),
+            TextField(
+              controller: summaryController,
+              maxLines: 4,
+              decoration: InputDecoration(
+                hintText: 'Brief summary of the session for your records...',
+                hintStyle: GoogleFonts.outfit(color: Colors.grey[400]),
+                filled: true,
+                fillColor: Colors.grey[50],
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: Colors.grey.shade200)),
+                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: Colors.grey.shade200)),
+                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: primaryGreen)),
+              ),
+            ),
+            const SizedBox(height: 32),
+            Row(
+              children: [
+                Expanded(
+                  child: TextButton(
+                    onPressed: () => Navigator.pop(dialogContext),
+                    child: Text('Cancel', style: GoogleFonts.outfit(color: Colors.grey[600], fontWeight: FontWeight.bold)),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () {
+                      Navigator.pop(dialogContext);
+                      _updateSessionStatus(context, 'completed', summary: summaryController.text.trim());
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: primaryGreen,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                    ),
+                    child: Text('Confirm', style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ],
             ),
           ],
         ),

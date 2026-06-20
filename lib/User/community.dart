@@ -797,106 +797,63 @@ class _CommunityScreenState extends State<CommunityScreen> with AutomaticKeepAli
                       SliverToBoxAdapter(
                         child: Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                          child: Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(24),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.02),
-                                  blurRadius: 10,
-                                  offset: const Offset(0, 4),
-                                )
-                              ],
-                            ),
-                            child: Column(
-                              children: [
-                                Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    CircleAvatar(
-                                      radius: 18,
-                                      backgroundColor: const Color(0xFFEAEAEA),
-                                      child: Icon(Icons.person, color: Colors.grey.shade400, size: 20),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: TextField(
-                                        controller: _postController,
-                                        maxLines: 2,
-                                        decoration: InputDecoration(
-                                          hintText: 'Share your thoughts or\nfeelings...',
-                                          hintStyle: GoogleFonts.outfit(
-                                            color: const Color(0xFFBDBDBD),
-                                            fontSize: 15,
-                                            height: 1.4,
-                                          ),
-                                          border: InputBorder.none,
-                                          isDense: true,
-                                        ),
+                          child: GestureDetector(
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                PageRouteBuilder(
+                                  pageBuilder: (context, animation, secondaryAnimation) => const PostFeedsPage(),
+                                  transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                                    const begin = Offset(0.0, 0.1);
+                                    const end = Offset.zero;
+                                    const curve = Curves.easeOutCubic;
+                                    var tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+                                    return FadeTransition(
+                                      opacity: animation,
+                                      child: SlideTransition(
+                                        position: animation.drive(tween),
+                                        child: child,
                                       ),
-                                    ),
-                                  ],
+                                    );
+                                  },
+                                  transitionDuration: const Duration(milliseconds: 400),
                                 ),
-                                const SizedBox(height: 12),
-                                const Divider(color: Color(0xFFF0F0F0), thickness: 1),
-                                const SizedBox(height: 8),
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        IconButton(
-                                          icon: Icon(Icons.sentiment_satisfied_alt, color: primaryGreen, size: 22),
-                                          onPressed: _showMoodPicker,
-                                          constraints: const BoxConstraints(),
-                                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                                        ),
-                                        IconButton(
-                                          icon: Icon(Icons.image_outlined, color: primaryGreen, size: 22),
-                                          onPressed: _pickPostImage,
-                                          constraints: const BoxConstraints(),
-                                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                                        ),
-
-                                        IconButton(
-                                          icon: Icon(
-                                              _isAnonymous ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                                              color: _isAnonymous ? Colors.orange : primaryGreen,
-                                              size: 22
-                                          ),
-                                          onPressed: () {
-                                            setState(() {
-                                              _isAnonymous = !_isAnonymous;
-                                            });
-                                          },
-                                          constraints: const BoxConstraints(),
-                                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                                        ),
-                                      ],
-                                    ),
-                                    GestureDetector(
-                                      onTap: _handlePost,
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                                        decoration: BoxDecoration(
-                                          color: primaryGreen,
-                                          borderRadius: BorderRadius.circular(20),
-                                        ),
-                                        child: Text(
-                                          'Post',
-                                          style: GoogleFonts.outfit(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 13,
-                                          ),
-                                        ),
+                              );
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(24),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.02),
+                                    blurRadius: 10,
+                                    offset: const Offset(0, 4),
+                                  )
+                                ],
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  CircleAvatar(
+                                    radius: 18,
+                                    backgroundColor: const Color(0xFFEAEAEA),
+                                    child: Icon(Icons.person, color: Colors.grey.shade400, size: 20),
+                                  ),
+                                  const SizedBox(width: 16),
+                                  Expanded(
+                                    child: Text(
+                                      'Share your thoughts or\nfeelings...',
+                                      style: GoogleFonts.outfit(
+                                        color: const Color(0xFFBDBDBD),
+                                        fontSize: 15,
+                                        height: 1.4,
                                       ),
                                     ),
-                                  ],
-                                )
-                              ],
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                         ),
@@ -1205,17 +1162,27 @@ class _CommunityScreenState extends State<CommunityScreen> with AutomaticKeepAli
                   ),
                   child: Row(
                     children: [
-                      CircleAvatar(
-                        radius: 20,
-                        backgroundColor: const Color(0xFFEAF0ED),
-                        backgroundImage: ( (isOwner || !post.isAnonymous) && post.authorProfileImage != null)
-                            ? (post.authorProfileImage!.startsWith('data:image')
-                            ? MemoryImage(base64Decode(post.authorProfileImage!.split(',').last))
-                            : NetworkImage(post.authorProfileImage!) as ImageProvider)
-                            : null,
-                        child: ( (!isOwner && post.isAnonymous) || post.authorProfileImage == null)
-                            ? Icon(Icons.person, color: primaryGreen, size: 22)
-                            : null,
+                      FutureBuilder<DocumentSnapshot>(
+                        future: FirebaseFirestore.instance.collection('users').doc(post.authorId).get(),
+                        builder: (context, userSnap) {
+                          String? latestProfileImage = post.authorProfileImage;
+                          if (userSnap.hasData && userSnap.data!.exists) {
+                            final userData = userSnap.data!.data() as Map<String, dynamic>;
+                            latestProfileImage = userData['profileImageUrl'] ?? latestProfileImage;
+                          }
+                          return CircleAvatar(
+                            radius: 20,
+                            backgroundColor: const Color(0xFFEAF0ED),
+                            backgroundImage: ( (isOwner || !post.isAnonymous) && latestProfileImage != null)
+                                ? (latestProfileImage!.startsWith('data:image')
+                                ? MemoryImage(base64Decode(latestProfileImage!.split(',').last))
+                                : NetworkImage(latestProfileImage!) as ImageProvider)
+                                : null,
+                            child: ( (!isOwner && post.isAnonymous) || latestProfileImage == null)
+                                ? Icon(Icons.person, color: primaryGreen, size: 22)
+                                : null,
+                          );
+                        }
                       ),
                       const SizedBox(width: 12),
                       Column(

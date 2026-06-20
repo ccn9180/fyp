@@ -524,6 +524,7 @@ class _CounsellorAvailabilityManagementState extends State<CounsellorAvailabilit
     bool isTooSoon = false;
     bool isTooClose = false;
     bool isDuplicate = false;
+    bool isSaving = false;
 
     showModalBottomSheet(
       context: context,
@@ -652,38 +653,43 @@ class _CounsellorAvailabilityManagementState extends State<CounsellorAvailabilit
                         width: double.infinity,
                         height: 56,
                         child: ElevatedButton(
-                          onPressed: (!isPastTime && !isTooSoon && !isTooClose && !isDuplicate && !isChecking) ? () async {
-                            final user = FirebaseAuth.instance.currentUser;
-                            final String timeStr = DateFormat('hh:mm a').format(currentSelectedDT);
-                            final String dayStr = DateFormat('EEEE').format(modalSelectedDate);
-                            final String dateStr = DateFormat('dd MMM yyyy').format(modalSelectedDate);
-                            final DateTime sortDate = DateTime(modalSelectedDate.year, modalSelectedDate.month, modalSelectedDate.day);
+                          onPressed: (!isPastTime && !isTooSoon && !isTooClose && !isDuplicate && !isChecking && !isSaving) ? () async {
+                            setModalState(() => isSaving = true);
+                            try {
+                              final user = FirebaseAuth.instance.currentUser;
+                              final String timeStr = DateFormat('hh:mm a').format(currentSelectedDT);
+                              final String dayStr = DateFormat('EEEE').format(modalSelectedDate);
+                              final String dateStr = DateFormat('dd MMM yyyy').format(modalSelectedDate);
+                              final DateTime sortDate = DateTime(modalSelectedDate.year, modalSelectedDate.month, modalSelectedDate.day);
 
-                            final data = {
-                              'counsellorId': user?.uid,
-                              'day': dayStr,
-                              'date': dateStr,
-                              'timeRange': timeStr,
-                              'sortTimestamp': Timestamp.fromDate(sortDate),
-                            };
+                              final data = {
+                                'counsellorId': user?.uid,
+                                'day': dayStr,
+                                'date': dateStr,
+                                'timeRange': timeStr,
+                                'sortTimestamp': Timestamp.fromDate(sortDate),
+                              };
 
-                            if (isEditing) {
-                              await FirebaseFirestore.instance.collection('counsellor_availability').doc(slot!['id']).update(data);
-                            } else {
-                              data['createdAt'] = FieldValue.serverTimestamp();
-                              await FirebaseFirestore.instance.collection('counsellor_availability').add(data);
-                            }
+                              if (isEditing) {
+                                await FirebaseFirestore.instance.collection('counsellor_availability').doc(slot!['id']).update(data);
+                              } else {
+                                data['createdAt'] = FieldValue.serverTimestamp();
+                                await FirebaseFirestore.instance.collection('counsellor_availability').add(data);
+                              }
 
-                            if (mounted) {
-                              Navigator.pop(context);
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(isEditing ? 'Shift updated successfully!' : 'Availability added successfully!', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
-                                  backgroundColor: primaryGreen,
-                                  behavior: SnackBarBehavior.floating,
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                ),
-                              );
+                              if (mounted) {
+                                Navigator.pop(context);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(isEditing ? 'Shift updated successfully!' : 'Availability added successfully!', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+                                    backgroundColor: primaryGreen,
+                                    behavior: SnackBarBehavior.floating,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                  ),
+                                );
+                              }
+                            } finally {
+                              if (mounted) setModalState(() => isSaving = false);
                             }
                           } : null,
                           style: ElevatedButton.styleFrom(
@@ -692,7 +698,7 @@ class _CounsellorAvailabilityManagementState extends State<CounsellorAvailabilit
                             elevation: 0,
                             disabledBackgroundColor: Colors.grey[200],
                           ),
-                          child: isChecking
+                          child: isChecking || isSaving
                               ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                               : Text(isEditing ? 'Save Changes' : 'Confirm Availability', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: Colors.white)),
                         ),

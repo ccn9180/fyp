@@ -10,6 +10,7 @@ import 'entry_summary.dart';
 import '../services/gamification_service.dart';
 import '../widgets/level_up_dialog.dart';
 import '../widgets/quest_completed_dialog.dart';
+import '../widgets/badge_unlocked_dialog.dart';
 import '../services/crisis_service.dart';
 
 
@@ -769,6 +770,29 @@ class _AddDiaryScreenState extends State<AddDiaryScreen> {
             }
           } catch (e) {
             debugPrint("Error completing journal tasks: $e");
+          }
+          // Always re-check badges (e.g. diary_count) even if tasks were
+          // already completed today
+          List<Map<String, dynamic>> newlyUnlockedBadges = [];
+          try {
+            newlyUnlockedBadges = await GamificationService.checkAndUnlockBadges(user.uid);
+          } catch (e) {
+            debugPrint("Error checking badges after diary save: $e");
+          }
+
+          if (mounted && newlyUnlockedBadges.isNotEmpty) {
+            for (final badge in newlyUnlockedBadges) {
+              await showDialog(
+                context: context,
+                barrierColor: Colors.black87,
+                builder: (_) => BadgeUnlockedDialog(
+                  badgeName: badge['name'] ?? 'Achievement Unlocked',
+                  badgeDescription: badge['description'] ?? 'You earned a new badge!',
+                  tier: badge['tier'] ?? 'Bronze',
+                  icon: GamificationService.getIconData(badge['icon']),
+                ),
+              );
+            }
           }
         }
 

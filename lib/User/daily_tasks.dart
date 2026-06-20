@@ -667,43 +667,92 @@ class _DailyTasksScreenState extends State<DailyTasksScreen> with SingleTickerPr
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
       child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          _buildHeaderStat('$streak Days', '🔥'),
-          const SizedBox(width: 8),
-          _buildHeaderStat('$coins Coins', '🪙'),
+          Expanded(
+            child: _buildPremiumStat(
+              label: 'Current Streak',
+              value: '$streak Days',
+              icon: Icons.local_fire_department_rounded,
+              iconColor: const Color(0xFFFF8A65), 
+              bgColor: const Color(0xFFFFF6F3),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: _buildPremiumStat(
+              label: 'Total Coins',
+              value: '$coins',
+              icon: Icons.monetization_on_rounded,
+              iconColor: const Color(0xFFFFB300), 
+              bgColor: const Color(0xFFFFFBF0),
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildHeaderStat(String label, String icon) {
+  Widget _buildPremiumStat({
+    required String label,
+    required String value,
+    required IconData icon,
+    required Color iconColor,
+    required Color bgColor,
+  }) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(24),
         border: Border.all(color: const Color(0xFFE5E4DE), width: 1.5),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.01),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
+            color: const Color(0xFFD9D7CE).withOpacity(0.3),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            '$icon ',
-            style: const TextStyle(fontSize: 12),
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: bgColor,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: iconColor, size: 24),
           ),
-          Text(
-            label,
-            style: GoogleFonts.outfit(
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-              color: const Color(0xFF2E3D32),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  value,
+                  style: GoogleFonts.outfit(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: const Color(0xFF2E3D32),
+                    height: 1.1,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  label,
+                  style: GoogleFonts.outfit(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey[500],
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
             ),
           ),
         ],
@@ -876,13 +925,19 @@ class _DailyTasksScreenState extends State<DailyTasksScreen> with SingleTickerPr
                                 color: const Color(0xFFFFF9E6),
                                 borderRadius: BorderRadius.circular(8),
                               ),
-                              child: Text(
-                                '+${task['coin_reward']} 🪙',
-                                style: GoogleFonts.outfit(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                  color: const Color(0xFFB58A3D),
-                                ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    '+${task['coin_reward']} ',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      color: const Color(0xFFB58A3D),
+                                    ),
+                                  ),
+                                  const Icon(Icons.monetization_on_rounded, size: 10, color: Color(0xFFB58A3D)),
+                                ],
                               ),
                             ),
                           ],

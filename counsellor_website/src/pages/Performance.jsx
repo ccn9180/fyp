@@ -58,24 +58,40 @@ export default function Performance() {
         setCounsellorName(realName);
 
         const qBookings = query(collection(db, 'counsellor_bookings'), where('counsellorId', '==', user.uid));
-        const qReviews = query(collection(db, 'counsellor_reviews'), where('counsellorId', '==', user.uid));
 
-        const [snapBookings, snapReviews] = await Promise.all([getDocs(qBookings), getDocs(qReviews)]);
+        const snapBookings = await getDocs(qBookings);
 
         const bookings = [];
+        const reviews = [];
+        
         snapBookings.forEach(doc => {
           const d = doc.data();
           let dt = null;
           if (d.startTime?.toDate) dt = d.startTime.toDate();
           else if (d.date) dt = new Date(d.date);
           bookings.push({ id: doc.id, ...d, parsedDate: dt });
+
+          if (d.rating) {
+            let r = typeof d.rating === 'number' ? d.rating : parseFloat(d.rating);
+            if (r > 0) {
+              let commentText = '';
+              if (d.feedback && typeof d.feedback === 'object') {
+                commentText = d.feedback.comment || '';
+              } else if (typeof d.feedback === 'string') {
+                commentText = d.feedback;
+              }
+              let ts = d.feedbackSubmittedAt?.toDate ? d.feedbackSubmittedAt.toDate() : (d.startTime?.toDate ? d.startTime.toDate() : new Date());
+              reviews.push({
+                id: doc.id,
+                rating: r,
+                comment: commentText,
+                timestamp: ts,
+                patientName: d.patientName || d.userName || 'Anonymous',
+              });
+            }
+          }
         });
 
-        const reviews = [];
-        snapReviews.forEach(doc => {
-          const d = doc.data();
-          reviews.push({ id: doc.id, ...d, timestamp: d.timestamp?.toDate ? d.timestamp.toDate() : new Date() });
-        });
         reviews.sort((a, b) => b.timestamp - a.timestamp);
 
         setAllBookings(bookings);

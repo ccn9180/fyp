@@ -369,21 +369,31 @@ class _PostDetailScreenState extends State<PostDetailScreen>
                           )),
                   child: Stack(
                     children: [
-                      CircleAvatar(
-                        radius: 24,
-                        backgroundColor: const Color(0xFFDEECE3),
-                        backgroundImage: ((isOwner || !post.isAnonymous) &&
-                                post.authorProfileImage != null)
-                            ? (post.authorProfileImage!.startsWith('data:image')
-                                ? MemoryImage(base64Decode(
-                                    post.authorProfileImage!.split(',').last))
-                                : NetworkImage(post.authorProfileImage!)
-                                    as ImageProvider)
-                            : null,
-                        child: ((!isOwner && post.isAnonymous) ||
-                                post.authorProfileImage == null)
-                            ? const Icon(Icons.person, color: _green, size: 24)
-                            : null,
+                      FutureBuilder<DocumentSnapshot>(
+                        future: FirebaseFirestore.instance.collection('users').doc(post.authorId).get(),
+                        builder: (context, userSnap) {
+                          String? latestProfileImage = post.authorProfileImage;
+                          if (userSnap.hasData && userSnap.data!.exists) {
+                            final userData = userSnap.data!.data() as Map<String, dynamic>;
+                            latestProfileImage = userData['profileImageUrl'] ?? latestProfileImage;
+                          }
+                          return CircleAvatar(
+                            radius: 24,
+                            backgroundColor: const Color(0xFFDEECE3),
+                            backgroundImage: ((isOwner || !post.isAnonymous) &&
+                                    latestProfileImage != null)
+                                ? (latestProfileImage!.startsWith('data:image')
+                                    ? MemoryImage(base64Decode(
+                                        latestProfileImage!.split(',').last))
+                                    : NetworkImage(latestProfileImage!)
+                                        as ImageProvider)
+                                : null,
+                            child: ((!isOwner && post.isAnonymous) ||
+                                    latestProfileImage == null)
+                                ? const Icon(Icons.person, color: _green, size: 24)
+                                : null,
+                          );
+                        }
                       ),
                       if (!post.isAnonymous)
                         Positioned(
@@ -898,17 +908,27 @@ class _PostDetailScreenState extends State<PostDetailScreen>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Avatar
-          CircleAvatar(
-            radius: isReply ? 16 : 20,
-            backgroundColor: const Color(0xFFDEECE3),
-            backgroundImage: (!isAnon && photo != null)
-                ? (photo.startsWith('data:image')
-                    ? MemoryImage(base64Decode(photo.split(',').last))
-                    : NetworkImage(photo) as ImageProvider)
-                : null,
-            child: (isAnon || photo == null)
-                ? Icon(Icons.person, color: _green, size: isReply ? 16 : 20)
-                : null,
+          FutureBuilder<DocumentSnapshot>(
+            future: FirebaseFirestore.instance.collection('users').doc(authorId).get(),
+            builder: (context, userSnap) {
+              String? latestPhoto = photo;
+              if (userSnap.hasData && userSnap.data!.exists) {
+                final userData = userSnap.data!.data() as Map<String, dynamic>;
+                latestPhoto = userData['profileImageUrl'] ?? latestPhoto;
+              }
+              return CircleAvatar(
+                radius: isReply ? 16 : 20,
+                backgroundColor: const Color(0xFFDEECE3),
+                backgroundImage: (!isAnon && latestPhoto != null)
+                    ? (latestPhoto.startsWith('data:image')
+                        ? MemoryImage(base64Decode(latestPhoto.split(',').last))
+                        : NetworkImage(latestPhoto) as ImageProvider)
+                    : null,
+                child: (isAnon || latestPhoto == null)
+                    ? Icon(Icons.person, color: _green, size: isReply ? 16 : 20)
+                    : null,
+              );
+            }
           ),
           const SizedBox(width: 10),
 

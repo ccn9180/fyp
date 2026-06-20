@@ -30,11 +30,16 @@ class _MoodTrendScreenState extends State<MoodTrendScreen> {
   List<FlSpot> _chartSpots = [];
   
   Map<String, dynamic> _stats = {
-    'avgMood': 'Neutral-Calm',
-    'frequent': 'Peaceful Reflective',
-    'highest': 'Oct 14',
-    'lowest': 'Oct 11',
+    'avgMood': 'Neutral',
+    'frequent': 'Neutral',
+    'highest': 'N/A',
+    'lowest': 'N/A',
+    'consistency': '0%',
+    'pieA': 33,
+    'pieB': 34,
+    'pieC': 33,
   };
+  bool _isGrouped = false;
 
   @override
   void initState() {
@@ -52,17 +57,17 @@ class _MoodTrendScreenState extends State<MoodTrendScreen> {
 
     try {
       final now = DateTime.now();
-      // Fetch for the current month for calendar
-      final startOfMonth = DateTime(now.year, now.month, 1);
-      final endOfMonth = DateTime(now.year, now.month + 1, 0, 23, 59, 59);
+      
+      final fetchStart = DateTime(_selectedDateRange.start.year, _selectedDateRange.start.month, _selectedDateRange.start.day);
+      final fetchEnd = DateTime(_selectedDateRange.end.year, _selectedDateRange.end.month, _selectedDateRange.end.day, 23, 59, 59);
 
       // Fetch Mood Check-ins
       final checkinsSnap = await FirebaseFirestore.instance
           .collection('users')
           .doc(uid)
           .collection('mood_checkins')
-          .where('timestamp', isGreaterThanOrEqualTo: Timestamp.fromDate(startOfMonth))
-          .where('timestamp', isLessThanOrEqualTo: Timestamp.fromDate(endOfMonth))
+          .where('timestamp', isGreaterThanOrEqualTo: Timestamp.fromDate(fetchStart))
+          .where('timestamp', isLessThanOrEqualTo: Timestamp.fromDate(fetchEnd))
           .get();
 
       // Fetch Diary Entries
@@ -70,16 +75,16 @@ class _MoodTrendScreenState extends State<MoodTrendScreen> {
           .collection('users')
           .doc(uid)
           .collection('diary_entries')
-          .where('timestamp', isGreaterThanOrEqualTo: Timestamp.fromDate(startOfMonth))
-          .where('timestamp', isLessThanOrEqualTo: Timestamp.fromDate(endOfMonth))
+          .where('timestamp', isGreaterThanOrEqualTo: Timestamp.fromDate(fetchStart))
+          .where('timestamp', isLessThanOrEqualTo: Timestamp.fromDate(fetchEnd))
           .get();
 
       // Fetch Chat Sessions
       final chatSnap = await FirebaseFirestore.instance
           .collection('chat_sessions')
           .where('userId', isEqualTo: uid)
-          .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(startOfMonth))
-          .where('createdAt', isLessThanOrEqualTo: Timestamp.fromDate(endOfMonth))
+          .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(fetchStart))
+          .where('createdAt', isLessThanOrEqualTo: Timestamp.fromDate(fetchEnd))
           .get();
 
       List<Map<String, dynamic>> records = [];
@@ -124,31 +129,122 @@ class _MoodTrendScreenState extends State<MoodTrendScreen> {
       List<FlSpot> newSpots = [];
       final daysDiff = _selectedDateRange.end.difference(_selectedDateRange.start).inDays + 1;
       
-      for (int i = 0; i < daysDiff; i++) {
-        final targetDate = _selectedDateRange.start.add(Duration(days: i));
-        
-        // Find records for this exact day
-        final dayRecords = records.where((r) {
-          final d = r['date'] as DateTime;
-          return d.year == targetDate.year && d.month == targetDate.month && d.day == targetDate.day;
-        }).toList();
+      bool isWeeklyGrouped = _selectedFilter == 'Monthly' || daysDiff > 14;
+      _isGrouped = isWeeklyGrouped;
+      
+      int binSize = 7;
+      int numBins = isWeeklyGrouped ? (daysDiff / binSize).ceil() : daysDiff;
 
-        double dailyVal = 0;
-        if (dayRecords.isNotEmpty) {
-          double sum = 0;
-          for (var r in dayRecords) {
-            final m = (r['mood'] as String).toLowerCase();
-            if (m.contains('happy') || m.contains('joy') || m.contains('great')) sum += 5;
-            else if (m.contains('calm') || m.contains('grateful') || m.contains('peace')) sum += 4;
-            else if (m.contains('neutral') || m.contains('focus')) sum += 3;
-            else if (m.contains('anxious') || m.contains('sleepy')) sum += 2;
-            else if (m.contains('angry') || m.contains('sad') || m.contains('low')) sum += 1;
-            else sum += 3;
+      int daysWithRecord = 0;
+      double maxDayAvg = -1;
+      double minDayAvg = 10;
+      int maxDayIndex = -1;
+      int minDayIndex = -1;
+
+      for (int i = 0; i < numBins; i++) {
+        int startDay = isWeeklyGrouped ? i * binSize : i;
+        int endDay = isWeeklyGrouped ? startDay + binSize : startDay + 1;
+        if (endDay > daysDiff) endDay = daysDiff;
+        
+        double sum = 0;
+        int count = 0;
+        
+        for (int j = startDay; j < endDay; j++) {
+          final targetDate = _selectedDateRange.start.add(Duration(days: j));
+          final dayRecords = records.where((r) {
+            final d = r['date'] as DateTime;
+            return d.year == targetDate.year && d.month == targetDate.month && d.day == targetDate.day;
+          }).toList();
+
+          if (dayRecords.isNotEmpty) {
+            if (!isWeeklyGrouped) daysWithRecord++;
+            double dSum = 0;
+            for (var r in dayRecords) {
+              final m = (r['mood'] as String).toLowerCase();
+              double score = 3;
+              if (m.contains('happy') || m.contains('joy') || m.contains('great')) score = 5;
+              else if (m.contains('calm') || m.contains('grateful') || m.contains('peace')) score = 4;
+              else if (m.contains('neutral') || m.contains('focus')) score = 3;
+              else if (m.contains('anxious') || m.contains('sleepy')) score = 2;
+              else if (m.contains('angry') || m.contains('sad') || m.contains('low')) score = 1;
+              dSum += score;
+            }
+            double dAvg = dSum / dayRecords.length;
+            sum += dSum;
+            count += dayRecords.length;
+            
+            if (dAvg > maxDayAvg) { maxDayAvg = dAvg; maxDayIndex = j; }
+            if (dAvg < minDayAvg) { minDayAvg = dAvg; minDayIndex = j; }
           }
-          dailyVal = sum / dayRecords.length;
         }
         
-        newSpots.add(FlSpot(i.toDouble(), dailyVal == 0 ? 3.0 : dailyVal)); // Default 3 if no record
+        double binAvg = count > 0 ? sum / count : 3.0; // Default 3
+        newSpots.add(FlSpot(i.toDouble(), binAvg));
+      }
+
+      if (isWeeklyGrouped) {
+        for (int j = 0; j < daysDiff; j++) {
+          final targetDate = _selectedDateRange.start.add(Duration(days: j));
+          if (records.any((r) {
+            final d = r['date'] as DateTime;
+            return d.year == targetDate.year && d.month == targetDate.month && d.day == targetDate.day;
+          })) {
+            daysWithRecord++;
+          }
+        }
+      }
+
+      // Calculate Stats
+      if (records.isNotEmpty) {
+        Map<String, int> moodCounts = {};
+        double totalScore = 0;
+        int catA = 0, catB = 0, catC = 0;
+        
+        for (var r in records) {
+          final m = (r['mood'] as String);
+          moodCounts[m] = (moodCounts[m] ?? 0) + 1;
+          
+          double score = 3;
+          final ml = m.toLowerCase();
+          if (ml.contains('happy') || ml.contains('joy') || ml.contains('great')) score = 5;
+          else if (ml.contains('calm') || ml.contains('grateful') || ml.contains('peace')) score = 4;
+          else if (ml.contains('neutral') || ml.contains('focus')) score = 3;
+          else if (ml.contains('anxious') || ml.contains('sleepy')) score = 2;
+          else if (ml.contains('angry') || ml.contains('sad') || ml.contains('low')) score = 1;
+          
+          if (score >= 4) catA++;
+          else if (score == 3) catB++;
+          else catC++;
+          
+          totalScore += score;
+        }
+        
+        String mostFrequent = moodCounts.entries.reduce((a, b) => a.value > b.value ? a : b).key;
+        double avgScore = totalScore / records.length;
+        String highestDateStr = maxDayIndex >= 0 ? DateFormat('MMM d').format(_selectedDateRange.start.add(Duration(days: maxDayIndex))) : 'N/A';
+        String lowestDateStr = minDayIndex >= 0 ? DateFormat('MMM d').format(_selectedDateRange.start.add(Duration(days: minDayIndex))) : 'N/A';
+        
+        int totalCat = catA + catB + catC;
+        
+        _stats = {
+          'avgMood': _getMoodLabel(avgScore),
+          'frequent': mostFrequent.length > 15 ? mostFrequent.substring(0, 15) : mostFrequent,
+          'highest': highestDateStr,
+          'lowest': lowestDateStr,
+          'consistency': '${((daysWithRecord / daysDiff) * 100).toInt()}%',
+          'pieA': totalCat > 0 ? ((catA / totalCat) * 100).toInt() : 33,
+          'pieB': totalCat > 0 ? ((catB / totalCat) * 100).toInt() : 34,
+          'pieC': totalCat > 0 ? ((catC / totalCat) * 100).toInt() : 33,
+        };
+      } else {
+        _stats = {
+          'avgMood': 'No Data',
+          'frequent': 'No Data',
+          'highest': 'No Data',
+          'lowest': 'No Data',
+          'consistency': '0%',
+          'pieA': 33, 'pieB': 34, 'pieC': 33,
+        };
       }
 
       if (mounted) {
@@ -203,7 +299,7 @@ class _MoodTrendScreenState extends State<MoodTrendScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _buildHeaderSection(),
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 12),
                   _buildTimeFilter(),
                   const SizedBox(height: 32),
                   _buildChartCard(),
@@ -521,7 +617,15 @@ class _MoodTrendScreenState extends State<MoodTrendScreen> {
                 if (label == 'Custom') {
                   _showCustomRangePicker(context);
                 } else {
-                  setState(() => _selectedFilter = label);
+                  setState(() {
+                    _selectedFilter = label;
+                    final now = DateTime.now();
+                    if (label == 'Weekly') {
+                      _selectedDateRange = DateTimeRange(start: now.subtract(const Duration(days: 7)), end: now);
+                    } else if (label == 'Monthly') {
+                      _selectedDateRange = DateTimeRange(start: now.subtract(const Duration(days: 30)), end: now);
+                    }
+                  });
                   _loadMoodData();
                 }
               },
@@ -560,10 +664,19 @@ class _MoodTrendScreenState extends State<MoodTrendScreen> {
             ],
           ),
           const SizedBox(height: 48),
-          SizedBox(
-            height: 220,
-            child: _chartType == 'Line' ? _buildLineChart() : _buildBarChart(),
-          ),
+          _isGrouped 
+          ? SizedBox(
+              height: 220,
+              child: _chartType == 'Line' ? _buildLineChart() : _buildBarChart(),
+            )
+          : SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: SizedBox(
+                height: 220,
+                width: _chartSpots.length > 7 ? _chartSpots.length * 40.0 : MediaQuery.of(context).size.width - 96,
+                child: _chartType == 'Line' ? _buildLineChart() : _buildBarChart(),
+              ),
+            ),
         ],
       ),
     );
@@ -587,7 +700,10 @@ class _MoodTrendScreenState extends State<MoodTrendScreen> {
         lineTouchData: LineTouchData(
           touchTooltipData: LineTouchTooltipData(
             getTooltipColor: (_) => primaryGreen,
-            getTooltipItems: (touchedSpots) => touchedSpots.map((spot) => LineTooltipItem("${DateFormat('MMM d').format(_selectedDateRange.start.add(Duration(days: spot.x.toInt())))}\n${_getMoodLabel(spot.y)}", GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11))).toList(),
+            getTooltipItems: (touchedSpots) => touchedSpots.map((spot) {
+              String xLabel = _isGrouped ? "Week ${spot.x.toInt() + 1}" : DateFormat('MMM d').format(_selectedDateRange.start.add(Duration(days: spot.x.toInt())));
+              return LineTooltipItem("$xLabel\n${_getMoodLabel(spot.y)}", GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11));
+            }).toList(),
           ),
         ),
         gridData: FlGridData(show: true, drawVerticalLine: false, horizontalInterval: 1, getDrawingHorizontalLine: (v) => FlLine(color: Colors.grey[100]!, strokeWidth: 1)),
@@ -596,10 +712,19 @@ class _MoodTrendScreenState extends State<MoodTrendScreen> {
           rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
           topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
           leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, interval: 1, getTitlesWidget: (v, m) => Text(_getMoodEmoji(v), style: const TextStyle(fontSize: 14)), reservedSize: 30)),
-          bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, getTitlesWidget: (v, m) => Text(DateFormat('dd').format(_selectedDateRange.start.add(Duration(days: v.toInt()))), style: GoogleFonts.outfit(fontSize: 10, color: Colors.grey)), reservedSize: 22)),
+          bottomTitles: AxisTitles(sideTitles: SideTitles(
+            showTitles: true, 
+            interval: _isGrouped ? 1 : (_chartSpots.length > 7 ? (_chartSpots.length / 5).ceilToDouble() : 1),
+            getTitlesWidget: (v, m) {
+              if (v < 0 || v >= _chartSpots.length) return const SizedBox.shrink();
+              String xLabel = _isGrouped ? "W${v.toInt() + 1}" : DateFormat('dd').format(_selectedDateRange.start.add(Duration(days: v.toInt())));
+              return Text(xLabel, style: GoogleFonts.outfit(fontSize: 10, color: Colors.grey));
+            }, 
+            reservedSize: 22
+          )),
         ),
         borderData: FlBorderData(show: false),
-        minX: 0, maxX: 6, minY: 0, maxY: 5,
+        minX: 0, maxX: _chartSpots.isEmpty ? 6 : (_chartSpots.length - 1).toDouble(), minY: 0, maxY: 5.5,
         lineBarsData: [
           LineChartBarData(
             spots: _chartSpots, isCurved: true, color: primaryGreen, barWidth: 4, isStrokeCapRound: true,
@@ -614,17 +739,36 @@ class _MoodTrendScreenState extends State<MoodTrendScreen> {
   Widget _buildBarChart() {
     return BarChart(
       BarChartData(
-        barTouchData: BarTouchData(touchTooltipData: BarTouchTooltipData(getTooltipColor: (_) => primaryGreen)),
+        barTouchData: BarTouchData(
+          touchTooltipData: BarTouchTooltipData(
+            getTooltipColor: (_) => primaryGreen,
+            getTooltipItem: (group, groupIndex, rod, rodIndex) {
+              String xLabel = _isGrouped ? "Week ${group.x.toInt() + 1}" : DateFormat('MMM d').format(_selectedDateRange.start.add(Duration(days: group.x.toInt())));
+              return BarTooltipItem(
+                "$xLabel\n${_getMoodLabel(rod.toY)}",
+                GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11)
+              );
+            }
+          )
+        ),
         gridData: const FlGridData(show: false),
         titlesData: FlTitlesData(
           show: true,
           rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
           topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, interval: 1, getTitlesWidget: (v, m) => Text(_getMoodEmoji(v), style: const TextStyle(fontSize: 14)))),
-          bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, getTitlesWidget: (v, m) => Text(DateFormat('dd').format(_selectedDateRange.start.add(Duration(days: v.toInt()))), style: GoogleFonts.outfit(fontSize: 10, color: Colors.grey)))),
+          leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, interval: 1, getTitlesWidget: (v, m) => Text(_getMoodEmoji(v), style: const TextStyle(fontSize: 14)), reservedSize: 30)),
+          bottomTitles: AxisTitles(sideTitles: SideTitles(
+            showTitles: true, 
+            getTitlesWidget: (v, m) {
+              if (v < 0 || v >= _chartSpots.length) return const SizedBox.shrink();
+              String xLabel = _isGrouped ? "W${v.toInt() + 1}" : DateFormat('dd').format(_selectedDateRange.start.add(Duration(days: v.toInt())));
+              return Text(xLabel, style: GoogleFonts.outfit(fontSize: 10, color: Colors.grey));
+            },
+            reservedSize: 22
+          )),
         ),
         borderData: FlBorderData(show: false),
-        barGroups: _chartSpots.map((spot) => BarChartGroupData(x: spot.x.toInt(), barRods: [BarChartRodData(toY: spot.y, color: primaryGreen, width: 14, borderRadius: BorderRadius.circular(6), backDrawRodData: BackgroundBarChartRodData(show: true, toY: 5, color: const Color(0xFFFBFBF6)))] )).toList(),
+        barGroups: _chartSpots.map((spot) => BarChartGroupData(x: spot.x.toInt(), barRods: [BarChartRodData(toY: spot.y, color: primaryGreen, width: _isGrouped ? 20 : 14, borderRadius: BorderRadius.circular(6), backDrawRodData: BackgroundBarChartRodData(show: true, toY: 5, color: const Color(0xFFFBFBF6)))] )).toList(),
         maxY: 5,
       ),
     );
@@ -654,7 +798,9 @@ class _MoodTrendScreenState extends State<MoodTrendScreen> {
           ),
           const SizedBox(height: 20),
           Text(
-            "Your 'Stability Score' is up by 12% this week. You show significant emotional resilience during evening hours, often after completing a therapy task.",
+            _monthlyRecords.isEmpty 
+              ? "No sufficient data to generate insights for this period. Try checking in or logging more diaries!"
+              : "Your average mood is ${_stats['avgMood']}, with '${_stats['frequent']}' being your most common state. Your mood peaked on ${_stats['highest']} and dropped on ${_stats['lowest']}. Keep checking in to build better resilience patterns!",
             style: GoogleFonts.outfit(fontSize: 14, color: textColorMain, height: 1.6),
           ),
         ],
@@ -668,8 +814,8 @@ class _MoodTrendScreenState extends State<MoodTrendScreen> {
       physics: const NeverScrollableScrollPhysics(),
       crossAxisCount: 2, crossAxisSpacing: 16, mainAxisSpacing: 16, childAspectRatio: 1.3,
       children: [
-        _buildStatCard('Most Frequent', 'Calm', Icons.favorite_outline),
-        _buildStatCard('Consistency', '84%', Icons.check_circle_outline),
+        _buildStatCard('Most Frequent', _stats['frequent'], Icons.favorite_outline),
+        _buildStatCard('Consistency', _stats['consistency'], Icons.check_circle_outline),
       ],
     );
   }
@@ -706,9 +852,9 @@ class _MoodTrendScreenState extends State<MoodTrendScreen> {
                 sectionsSpace: 4,
                 centerSpaceRadius: 30,
                 sections: [
-                  PieChartSectionData(value: 45, color: primaryGreen, title: '45%', radius: 40, titleStyle: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
-                  PieChartSectionData(value: 30, color: const Color(0xFFBBCBC2), title: '30%', radius: 35, titleStyle: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
-                  PieChartSectionData(value: 25, color: const Color(0xFFF0EFE9), title: '25%', radius: 30, titleStyle: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold, color: primaryGreen)),
+                  PieChartSectionData(value: _stats['pieA'].toDouble(), color: primaryGreen, title: '${_stats['pieA']}%', radius: 40, titleStyle: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
+                  PieChartSectionData(value: _stats['pieB'].toDouble(), color: const Color(0xFFBBCBC2), title: '${_stats['pieB']}%', radius: 35, titleStyle: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
+                  PieChartSectionData(value: _stats['pieC'].toDouble(), color: const Color(0xFFF0EFE9), title: '${_stats['pieC']}%', radius: 30, titleStyle: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold, color: primaryGreen)),
                 ],
               ),
             ),

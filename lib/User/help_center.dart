@@ -92,7 +92,7 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> {
     {
       'q': 'How do I deactivate my professional profile?',
       'a':
-          'If you need to take an extended leave or retire, go to Profile → Account & Status → Retire / Deactivate Profile. Your current patients will be notified and your profile will be hidden from the directory.',
+          'If you need to take an extended leave or pause your practice, go to Profile → Account & Status → Deactivate Profile. Your profile will be hidden from the directory. Your data is kept safe, and you can simply log back in and reactivate it whenever you are ready to resume!',
     },
   ];
 

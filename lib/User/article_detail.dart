@@ -4,6 +4,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_html/flutter_html.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:fyp/services/gamification_service.dart';
+import 'package:fyp/widgets/badge_unlocked_dialog.dart';
+import 'package:fyp/widgets/quest_completed_dialog.dart';
+import 'package:fyp/widgets/level_up_dialog.dart';
 class ArticleDetailScreen extends StatefulWidget {
   final String title;
   final String subtitle;
@@ -44,6 +48,7 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
   bool _isRecordDone = false;
   late bool _isFavorite;
   int _userRating = 0;
+  bool _hasRated = false;
 
   @override
   void initState() {
@@ -79,13 +84,116 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
     final user = FirebaseAuth.instance.currentUser;
     if (user != null && _progress > 0) {
       _isRecordDone = true;
-      FirebaseFirestore.instance.collection('user_activity').add({
+      await FirebaseFirestore.instance.collection('user_activity').add({
         'userId': user.uid,
         'type': 'article',
         'title': widget.title,
         'imageUrl': widget.imageUrl,
-        'progress': (_progress * 100).toInt(),
+        'progress': 100, // Record as fully read once they cross 90%
         'timestamp': FieldValue.serverTimestamp(),
+      });
+      int totalXp = 0;
+      int totalCoins = 0;
+      bool showLevelUp = false;
+      bool hasSuccessfulCompletion = false;
+
+      try {
+        final results = await GamificationService.completeTasksByType(user.uid, 'article');
+        for (final res in results) {
+          if (res['success'] == true) {
+            hasSuccessfulCompletion = true;
+            totalXp += (res['xp'] ?? 0) as int;
+            totalCoins += (res['coins'] ?? 0) as int;
+            if (res['levelled_up'] == true) {
+              showLevelUp = true;
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint("Error completing article tasks: $e");
+      }
+
+      try {
+        final newlyUnlocked = await GamificationService.checkAndUnlockBadges(user.uid);
+        if (mounted && newlyUnlocked.isNotEmpty) {
+          for (final badge in newlyUnlocked) {
+            await showDialog(
+              context: context,
+              barrierColor: Colors.black87,
+              builder: (_) => BadgeUnlockedDialog(
+                badgeName: badge['name'] ?? 'Achievement Unlocked',
+                badgeDescription: badge['description'] ?? 'You earned a new badge!',
+                tier: badge['tier'] ?? 'Bronze',
+                icon: GamificationService.getIconData(badge['icon']),
+              ),
+            );
+          }
+        }
+      } catch (e) {
+        debugPrint("Error checking badges after reading article: $e");
+      }
+
+      if (mounted) {
+        if (showLevelUp) {
+          await showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (context) => const LevelUpDialog(),
+          );
+        } else if (hasSuccessfulCompletion) {
+          await showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (context) => QuestCompletedDialog(
+              xpEarned: totalXp,
+              coinsEarned: totalCoins,
+              title: 'Article Completed',
+              subtitle: 'Great job learning something new today!',
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _submitRating(int rating) async {
+    if (_hasRated) return;
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    setState(() => _hasRated = true);
+
+    // 1. Save the individual rating record
+    await FirebaseFirestore.instance.collection('resource_ratings').add({
+      'userId': user.uid,
+      'type': 'article',
+      'title': widget.title,
+      'rating': rating,
+      'timestamp': FieldValue.serverTimestamp(),
+    });
+
+    // 2. Recalculate the average rating in the articles collection
+    final snapshot = await FirebaseFirestore.instance
+        .collection('articles')
+        .where('title', isEqualTo: widget.title)
+        .limit(1)
+        .get();
+
+    if (snapshot.docs.isNotEmpty) {
+      final doc = snapshot.docs.first;
+      final data = doc.data();
+
+      final int currentCount =
+          data.containsKey('ratingCount') ? (data['ratingCount'] as num).toInt() : 0;
+      final double currentRating =
+          data.containsKey('rating') ? (data['rating'] as num).toDouble() : 0.0;
+
+      final double newRating =
+          ((currentRating * currentCount) + rating) / (currentCount + 1);
+
+      await doc.reference.update({
+        'rating': newRating,
+        'ratingCount': currentCount + 1,
       });
     }
   }
@@ -324,7 +432,7 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
     return Column(
       children: [
         Text(
-          'How was this article?',
+          _hasRated ? 'Thanks for your rating!' : 'How was this article?',
           style: GoogleFonts.outfit(
             fontSize: 16,
             fontWeight: FontWeight.w600,
@@ -336,31 +444,51 @@ class _ArticleDetailScreenState extends State<ArticleDetailScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: List.generate(5, (index) {
             return GestureDetector(
-              onTap: () {
-                setState(() {
-                  _userRating = index + 1;
-                });
-                
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Thank you for rating $_userRating stars!'),
-                    backgroundColor: const Color(0xFF7C9C84),
-                    duration: const Duration(seconds: 2),
-                  ),
-                );
-              },
+              onTap: _hasRated
+                  ? null
+                  : () {
+                      final selectedRating = index + 1;
+                      setState(() {
+                        _userRating = selectedRating;
+                      });
+                      _submitRating(selectedRating);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Thank you for rating $selectedRating stars!'),
+                          backgroundColor: const Color(0xFF7C9C84),
+                          behavior: SnackBarBehavior.floating,
+                          duration: const Duration(seconds: 2),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10)),
+                        ),
+                      );
+                    },
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4.0),
                 child: Icon(
                   index < _userRating ? Icons.star_rounded : Icons.star_border_rounded,
-                  color: const Color(0xFFEAB308), // Gold color
+                  color: _hasRated
+                      ? const Color(0xFFEAB308)
+                      : const Color(0xFFEAB308),
                   size: 32,
                 ),
               ),
             );
           }),
         ),
+        if (_hasRated) ...[  
+          const SizedBox(height: 8),
+          Text(
+            'Your rating has been saved.',
+            style: GoogleFonts.outfit(
+              fontSize: 12,
+              color: const Color(0xFF7C9C84),
+            ),
+          ),
+        ],
       ],
     );
   }
+
+
 }

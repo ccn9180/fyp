@@ -502,6 +502,48 @@ class ComponentNLGEngine:
             ],
         }
 
+        # ── Assumption Safety Layer (emotional): topic mention != emotional
+        # state. When answer_previous_question only surfaces a topic ("I'm
+        # doing my FYP") and no distress/emotion has actually been expressed
+        # yet (has_emotional_evidence), the follow-up must stay strictly in
+        # attention/focus/time-occupied territory -- never infer stress,
+        # pressure, exhaustion, frustration, or anxiety until that evidence
+        # appears. Once it does, _investigate_line's richer content applies
+        # instead (see the answer_previous_question branch below). ──────────
+        self.answer_neutral_followup = {
+            "statement": {
+                "general": [
+                    "Sounds like {topic} has been keeping you busy lately.",
+                    "Looks like you've been spending a lot of time on {topic}.",
+                    "{Topic} seems to be taking up quite a bit of your attention recently.",
+                ],
+                "event": [
+                    "Sounds like having to {event} has been keeping you busy lately.",
+                    "Looks like you've been spending a lot of time on having to {event}.",
+                    "Having to {event} seems to be taking up quite a bit of your attention recently.",
+                ],
+                "fallback": [
+                    "Sounds like that's been keeping you busy lately.",
+                    "Looks like that's taken up quite a bit of your time recently.",
+                ],
+            },
+            "question": {
+                "general": [
+                    "How much of your time has {topic} been taking up lately?",
+                    "Is {topic} the main thing you've been focused on lately?",
+                    "What's been on your plate the most when it comes to {topic}?",
+                ],
+                "event": [
+                    "How much time has having to {event} been taking up lately?",
+                    "Is having to {event} the main thing you've been focused on?",
+                ],
+                "fallback": [
+                    "What's been taking up most of your time lately?",
+                    "Is that the main thing you've been focused on?",
+                ],
+            },
+        }
+
         # ── Encouragement: forward-looking, supportive, no question ──
         self.encouragements = [
             "You've already shown you can keep going even when it's hard.",
@@ -535,6 +577,34 @@ class ComponentNLGEngine:
                 "It makes sense that this would feel like a lot to carry.",
                 "That sounds like it's been weighing on you for a bit.",
                 "There's clearly a lot going on beneath the surface right now.",
+            ],
+        }
+        # ── Label Reframe Layer: when the resolved topic/entity is itself a
+        # diagnostic or clinical-sounding label ("toxic relationship",
+        # "depression", "anxiety", "stress") rather than a concrete topic
+        # noun (backend, database, deadline, exam), a templated "It sounds
+        # like {topic} is carrying most of the weight" just parrots the
+        # label back. These full, ready-made observations replace that
+        # template instead, turning the label into a reflective insight
+        # about the person's experience. Matched by substring against the
+        # lowercased focus_clause/entity (see _label_reframe below), so
+        # "your anxiety"/"this anxiety" etc. still match.
+        self.label_reframe_observations = {
+            "toxic relationship": [
+                "You're questioning whether this relationship is healthy for you.",
+                "Part of you seems unsure whether your emotional needs are being met.",
+            ],
+            "depression": [
+                "It sounds like you've been carrying a heaviness that's hard to put into words.",
+                "Part of you seems to be struggling to feel like yourself lately.",
+            ],
+            "anxiety": [
+                "It sounds like your mind has been racing ahead, bracing for what might go wrong.",
+                "Part of you seems to be on edge, like it's hard to fully relax.",
+            ],
+            "stress": [
+                "It sounds like there's just been too much landing on you all at once.",
+                "Part of you seems stretched thin trying to keep up with everything.",
             ],
         }
         self.observations_event = {
@@ -586,6 +656,65 @@ class ComponentNLGEngine:
             ],
             "event": [
                 "It might help to break having to {event} down into smaller, more manageable pieces.",
+            ],
+        }
+        # ── Relationship decision problem-solving (Problem 3): a "what
+        # should I do" about a relationship isn't a blocker to break into
+        # smaller pieces -- it needs validation, permission to not decide
+        # right away, a few honest reflection points, and ONE gentle
+        # decision-focused question, never generic "break it down further"
+        # exploration. See _relationship_decision_line below.
+        self.relationship_decision_content = {
+            "validations": [
+                "That's a difficult place to be, especially when you still care about them and also fear what comes after a breakup.",
+                "That's a genuinely hard spot to be in -- caring about someone while still feeling unsure can pull you in two directions at once.",
+                "It makes sense this feels so hard -- you're weighing what you have against what you're afraid of losing.",
+            ],
+            "normalizers": [
+                "You don't necessarily need to decide immediately.",
+                "This isn't something you have to figure out all at once.",
+                "There's no rush to land on a clear answer right now.",
+            ],
+            "reflection_points": [
+                "Do I feel loved and respected most of the time?",
+                "Have I told them what feels missing?",
+                "Am I staying because I truly want to, or because I'm afraid of being alone?",
+                "What would I tell a close friend in this exact situation?",
+                "Has anything actually changed when I've raised this before?",
+                "What do I need emotionally?",
+                "Have I communicated those needs?",
+                "Am I staying because I want to, or because I fear loneliness?",
+            ],
+            "decision_questions": [
+                "Which feels scarier right now -- leaving, or staying?",
+                "What would need to change for you to feel sure about staying?",
+                "If the fear of being alone wasn't part of it, what would you want?",
+            ],
+        }
+        # ── Synthesis stage (Problem 3/4): after a couple of exploration
+        # turns, recap the pattern across what's been shared instead of
+        # asking a third exploration question in a row -- show
+        # understanding, don't advance the topic. Relationship situations
+        # get their own bank (the same "cares, but something's still
+        # missing" tension _relationship_decision_line validates), other
+        # categories get a generic event/topic-aware recap.
+        self.relationship_synthesis_observations = [
+            "It sounds like you appreciate how he treats you and the care he shows, but emotionally something still feels missing. That's leaving you feeling torn about whether breaking up would solve the pain or create a different kind of pain.",
+            "Putting it together, there's real care here, but also a quieter sense that something isn't being met -- and that mix is exactly what makes this so hard to sit with.",
+            "It sounds like this isn't really about whether they're a good person -- it's about whether what you're getting is enough for what you actually need.",
+        ]
+        self.synthesis_observations = {
+            "general": [
+                "Putting it together, it sounds like {topic} has been the thread running through a lot of this.",
+                "Stepping back, {topic} keeps showing up as the thing underneath everything else you've shared.",
+            ],
+            "event": [
+                "Putting it together, it sounds like having to {event} keeps being the thing underneath everything else.",
+                "Stepping back, having to {event} seems to be the thread running through a lot of this.",
+            ],
+            "fallback": [
+                "Putting everything together, it sounds like there's a real mix of feelings here, all tangled up with each other.",
+                "Stepping back, there's clearly a lot happening underneath the surface that's hard to untangle into just one feeling.",
             ],
         }
 
@@ -648,6 +777,21 @@ class ComponentNLGEngine:
                 return cautious
         return cat.get(key)
 
+    def _answer_neutral_followup(self, event, entity, ask_question, pick):
+        """Strictly neutral continuation for answer_previous_question when
+        has_emotional_evidence is False -- attention/focus/time-occupied
+        framing only. See answer_neutral_followup for the principle this
+        enforces: topic mention != emotional state."""
+        bank = self.answer_neutral_followup["question" if ask_question else "statement"]
+        if event:
+            pool = [t.replace("{event}", event) for t in bank["event"]]
+        elif entity:
+            pool = [t.replace("{topic}", entity).replace("{Topic}", _cap(entity)) for t in bank["general"]]
+        else:
+            pool = list(bank["fallback"])
+        chosen = pick(pool)
+        return chosen if ask_question else _cap(chosen)
+
     def _investigate_line(self, event_category, event, entity, action_options, ask_question, pick, pick_diverse=None, has_evidence=False):
         """Resolve the exploration-stage investigative line. A *specific* category
         (technical/deadline/supervisor_feedback/relationship/family) has its own
@@ -702,12 +846,61 @@ class ComponentNLGEngine:
             chosen = chosen.replace("{topic}", entity)
         return _cap(chosen)
 
+    def _synthesis_line(self, event_category, event, entity, pick) -> str:
+        """Synthesis stage (Problem 3/4): summarize the pattern across the
+        last couple of exploration turns instead of asking another
+        question -- show understanding, don't advance. Deliberately
+        ignores ask_question entirely (the caller never appends one for
+        this stage either) since the whole point is to NOT ask something
+        new immediately after recapping."""
+        if event_category == "relationship":
+            return pick(self.relationship_synthesis_observations)
+        reframed = self._label_reframe(entity, pick) if entity else None
+        if reframed:
+            return reframed
+        bank = self.synthesis_observations
+        if event:
+            return pick(bank["event"]).replace("{event}", event)
+        if entity:
+            return pick(bank["general"]).replace("{topic}", entity)
+        return pick(bank["fallback"])
+
+    def _relationship_decision_line(self, pick) -> str:
+        """Problem-solving content for a relationship decision dilemma
+        ("What should I do?" about staying/leaving) -- validate, normalize
+        that there's no rush to decide, offer a few honest reflection
+        points, then ask ONE gentle decision-focused question. Deliberately
+        does not branch on ask_question -- this structure's whole point is
+        the closing decision question, unlike the generic blocker/
+        breakdown framing _problem_solving_line uses for technical/
+        academic problem-solving below."""
+        bank = self.relationship_decision_content
+        validation = pick(bank["validations"])
+        normalizer = pick(bank["normalizers"])
+        points = random.sample(
+            bank["reflection_points"], k=min(3, len(bank["reflection_points"]))
+        )
+        points_text = "\n".join(f"- {p}" for p in points)
+        question = pick(bank["decision_questions"])
+        return (
+            f"{validation} {normalizer}\n\n"
+            f"Sometimes it helps to ask:\n\n{points_text}\n\n{question}"
+        )
+
     def _problem_solving_line(self, event_category, event, entity, ask_question, pick, pick_diverse=None, has_evidence=False):
         """Resolve problem-solving-stage content: identify blockers, break the
         problem down, prioritize -- never a generic exploration question.
         Same priority pattern as _investigate_line: specific category bank
         first (it names the actual blocker-type), then event/topic-aware
-        generic next-step content, then a content-free fallback."""
+        generic next-step content, then a content-free fallback.
+
+        Relationship decision dilemmas are the one exception (Problem 3):
+        "Should I stay or leave?" isn't a blocker to break into smaller
+        pieces, so event_category == "relationship" routes to
+        _relationship_decision_line above instead of the blocker-style
+        content below."""
+        if event_category == "relationship":
+            return self._relationship_decision_line(pick)
         pick_stmt = pick_diverse or pick
         cat = self.category_content.get(event_category) if event_category else None
         is_specific = event_category in self.SPECIFIC_CATEGORIES
@@ -741,6 +934,17 @@ class ComponentNLGEngine:
             pool = list(bank["fallback"])
         return _cap(pick_stmt(pool))
 
+    def _label_reframe(self, focus_clause: Optional[str], pick) -> Optional[str]:
+        """Returns a reflective observation when `focus_clause` is a
+        diagnostic/clinical label rather than a concrete topic noun, else
+        None so the caller falls back to its normal {topic}-templated
+        phrasing. See label_reframe_observations above."""
+        fc = (focus_clause or "").lower()
+        for label, lines in self.label_reframe_observations.items():
+            if label in fc:
+                return pick(lines)
+        return None
+
     def _event_observation_line(self, event_category, event, repetition_cue, pick, pick_diverse=None, has_evidence=False):
         """Resolve the event-acknowledgment line for encouragement/validation,
         preferring category-specific phrasing (e.g. the technical "trial and
@@ -767,6 +971,9 @@ class ComponentNLGEngine:
         if entity:
             if emotion_intent in self.STUCK_INTENTS:
                 return pick(self.conversation_paths["general"]).replace("{topic}", entity)
+            reframed = self._label_reframe(entity, pick)
+            if reframed:
+                return _cap(reframed)
             return _cap(pick(self.observations["general"]).replace("{topic}", entity).replace("{Topic}", _cap(entity)))
         if emotion_intent in self.STUCK_INTENTS:
             return pick(self.conversation_paths["fallback"])
@@ -785,6 +992,7 @@ class ComponentNLGEngine:
         progress_detail: Optional[str] = None,
         choice_options: Optional[Tuple[str, str]] = None,
         has_evidence: bool = False,
+        has_emotional_evidence: bool = False,
         new_info: bool = False,
         new_entity_this_turn: bool = False,
         attention_shift: Optional[Tuple[str, str]] = None,
@@ -963,7 +1171,15 @@ class ComponentNLGEngine:
                 ack = pick(self.answer_ack["fallback"])
                 follow_event = None
             parts.append(ack)
-            if stage == "problem_solving":
+            if not has_emotional_evidence:
+                # Assumption Safety Layer (emotional): the user has only named
+                # a topic so far ("I'm doing my FYP") -- topic mention is NOT
+                # an emotional disclosure, so stay strictly in attention/
+                # focus/time-occupied territory regardless of stage. Once the
+                # user actually expresses distress/emotion (has_emotional_
+                # evidence flips True), the branches below apply instead.
+                parts.append(self._answer_neutral_followup(follow_event, entity, ask_question, pick))
+            elif stage == "problem_solving":
                 parts.append(self._problem_solving_line(event_category, follow_event, entity, ask_question, pick, pick_diverse, has_evidence))
             else:
                 parts.append(self._investigate_line(event_category, follow_event, entity, action_options, ask_question, pick, pick_diverse, has_evidence))
@@ -992,7 +1208,11 @@ class ComponentNLGEngine:
                 focus_clause = f"having to {event}"
             else:
                 focus_clause = entity
-            parts.append(f"It sounds like {focus_clause} is carrying most of the weight right now.")
+            reframed = self._label_reframe(focus_clause, pick)
+            if reframed:
+                parts.append(reframed)
+            else:
+                parts.append(f"It sounds like {focus_clause} is carrying most of the weight right now.")
             parts.append(self._event_observation_line(event_category, event, repetition_cue, pick, pick_diverse, has_evidence))
             if ask_question:
                 parts.append(self._investigate_line(event_category, event, entity, action_options, True, pick, pick_diverse, has_evidence))
@@ -1005,7 +1225,7 @@ class ComponentNLGEngine:
             elif event:
                 line = pick_diverse(self.reflection_summary["event"]).replace("{event}", event)
             elif entity:
-                line = pick_diverse(self.reflection_summary["general"]).replace("{topic}", entity)
+                line = self._label_reframe(entity, pick) or pick_diverse(self.reflection_summary["general"]).replace("{topic}", entity)
             else:
                 line = pick_diverse(self.reflection_summary["fallback"])
             parts.append(_cap(line))
@@ -1015,6 +1235,12 @@ class ComponentNLGEngine:
         elif stage == "exploration":
             parts.append(self._investigate_line(event_category, event, entity, action_options, ask_question, pick, pick_diverse, has_evidence))
 
+        elif stage == "synthesis":
+            # Problem 3/4: recap, don't interrogate -- no question appended
+            # here regardless of ask_question, since synthesis's whole
+            # point is to summarize before moving on.
+            parts.append(self._synthesis_line(event_category, event, entity, pick))
+
         elif stage == "encouragement":
             parts.append(pick(self.encouragements))
             has_insight = False
@@ -1022,8 +1248,12 @@ class ComponentNLGEngine:
                 parts.append(self._event_observation_line(event_category, event, repetition_cue, pick, pick_diverse, has_evidence))
                 has_insight = True
             elif entity and not ask_question:
-                template = pick(self.observations["general"])
-                parts.append(_cap(template.replace("{topic}", entity).replace("{Topic}", _cap(entity))))
+                reframed = self._label_reframe(entity, pick)
+                if reframed:
+                    parts.append(_cap(reframed))
+                else:
+                    template = pick(self.observations["general"])
+                    parts.append(_cap(template.replace("{topic}", entity).replace("{Topic}", _cap(entity))))
                 has_insight = True
             if ask_question:
                 parts.append(pick(self.encouragement_followup))

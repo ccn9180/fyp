@@ -1,11 +1,14 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:http/http.dart' as http;
 import '../models/post.dart';
+import '../services/backend_config.dart';
 
 class PostFeedsPage extends StatefulWidget {
   const PostFeedsPage({super.key});
@@ -21,26 +24,123 @@ class _PostFeedsPageState extends State<PostFeedsPage> {
   final Color textColorMain = const Color(0xFF333333);
   final Color textColorSub = const Color(0xFFA3A3A3);
   
-  String _selectedTopic = 'General';
-  String _selectedMood = 'Calm';
+  List<String> _selectedTopics = ['General'];
+  String _selectedMood = 'Neutral';
   bool _isAnonymous = false;
   File? _selectedImage;
   bool _isPosting = false;
 
   final List<String> _topics = ['Self-Love', 'Anxiety', 'Hope', 'Relationship', 'General'];
   final List<Map<String, dynamic>> _moods = [
-    {'name': 'Calm', 'icon': Icons.spa, 'color': Color(0xFF7C9C84)},
-    {'name': 'Grateful', 'icon': Icons.wb_sunny, 'color': Color(0xFF6B8E78)},
-    {'name': 'Tired', 'icon': Icons.nightlight_round, 'color': Color(0xFF90A492)},
-    {'name': 'Anxious', 'icon': Icons.water_drop, 'color': Color(0xFFEF4444)},
-    {'name': 'Hopeful', 'icon': Icons.auto_awesome, 'color': Color(0xFF3B82F6)},
-    {'name': 'Soft', 'icon': Icons.cloud, 'color': Color(0xFFBBCBC2)},
+    {'name': 'Happy', 'icon': Icons.sentiment_very_satisfied_rounded, 'color': Color(0xFF4CAF50), 'bgColor': Color(0xFFE8F5E9)},
+    {'name': 'Calm', 'icon': Icons.sentiment_satisfied_rounded, 'color': Color(0xFF2196F3), 'bgColor': Color(0xFFE3F2FD)},
+    {'name': 'Neutral', 'icon': Icons.sentiment_neutral_rounded, 'color': Color(0xFF9E9E9E), 'bgColor': Color(0xFFF5F5F5)},
+    {'name': 'Sad', 'icon': Icons.sentiment_dissatisfied_rounded, 'color': Color(0xFF9C27B0), 'bgColor': Color(0xFFF3E5F5)},
+    {'name': 'Anxious', 'icon': Icons.mood_bad_rounded, 'color': Color(0xFFFF9800), 'bgColor': Color(0xFFFFF3E0)},
+    {'name': 'Angry', 'icon': Icons.sentiment_very_dissatisfied_rounded, 'color': Color(0xFFF44336), 'bgColor': Color(0xFFFFEBEE)},
   ];
+
+  final ScrollController _moodScrollController = ScrollController();
+  bool _isDetecting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _contentController.addListener(_onTextChanged);
+  }
+
+  void _onTextChanged() {
+    setState(() {});
+  }
 
   @override
   void dispose() {
+    _contentController.removeListener(_onTextChanged);
     _contentController.dispose();
+    _moodScrollController.dispose();
     super.dispose();
+  }
+
+  Future<void> _detectEmotionAndTopic(String text) async {
+    setState(() => _isDetecting = true);
+    try {
+      final response = await BackendConfig.withRetry(
+        (baseUrl) => http.post(
+          Uri.parse('$baseUrl/predict_emotion'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'text': text}),
+        ),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final emotion = data['emotion'] as String?;
+        final hashtags = data['hashtags'] as List<dynamic>?;
+
+        if (emotion != null && mounted) {
+          String newMood = 'Neutral';
+          switch (emotion.toLowerCase()) {
+            case 'joy':
+            case 'hopeful':
+              newMood = 'Happy';
+              break;
+            case 'calm':
+              newMood = 'Calm';
+              break;
+            case 'sadness':
+              newMood = 'Sad';
+              break;
+            case 'anxiety':
+              newMood = 'Anxious';
+              break;
+            case 'anger':
+              newMood = 'Angry';
+              break;
+            default:
+              newMood = 'Neutral';
+          }
+          
+          List<String> newTopics = List.from(_selectedTopics);
+          if (hashtags != null && hashtags.isNotEmpty) {
+            for (var tag in hashtags) {
+              if (!newTopics.contains(tag.toString())) {
+                newTopics.add(tag.toString());
+              }
+            }
+            if (newTopics.length > 1 && newTopics.contains('General')) {
+              newTopics.remove('General');
+            }
+          }
+
+          setState(() {
+            _selectedMood = newMood;
+            if (newTopics.isNotEmpty) {
+              _selectedTopics = newTopics;
+            }
+          });
+          
+          int moodIndex = _moods.indexWhere((m) => m['name'] == newMood);
+          if (moodIndex != -1) {
+            Future.delayed(const Duration(milliseconds: 100), () {
+              if (_moodScrollController.hasClients) {
+                // Approximate item width 75 + 12 margin = 87
+                double offset = moodIndex * 87.0;
+                double maxScroll = _moodScrollController.position.maxScrollExtent;
+                _moodScrollController.animateTo(
+                  offset > maxScroll ? maxScroll : offset,
+                  duration: const Duration(milliseconds: 400),
+                  curve: Curves.easeOutCubic,
+                );
+              }
+            });
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint("Error detecting emotion: $e");
+    } finally {
+      if (mounted) setState(() => _isDetecting = false);
+    }
   }
 
   Future<void> _pickImage() async {
@@ -92,7 +192,7 @@ class _PostFeedsPageState extends State<PostFeedsPage> {
         content: _contentController.text.trim(),
         timestamp: DateTime.now(),
         isAnonymous: _isAnonymous,
-        topic: _selectedTopic,
+        topic: _selectedTopics.join(', '),
         moodText: _selectedMood,
         moodColorValue: _getMoodColor(_selectedMood).value,
         likes: [],
@@ -220,22 +320,72 @@ class _PostFeedsPageState extends State<PostFeedsPage> {
                     ),
                   ),
 
+                  const SizedBox(height: 20),
+
+                  // Magic Wand Button
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: GestureDetector(
+                      onTap: _isDetecting || _contentController.text.trim().isEmpty
+                          ? null
+                          : () {
+                              FocusScope.of(context).unfocus(); // hide keyboard
+                              _detectEmotionAndTopic(_contentController.text.trim());
+                            },
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 300),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: _contentController.text.trim().isEmpty ? Colors.grey[300] : primaryGreen.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: _contentController.text.trim().isEmpty ? Colors.transparent : primaryGreen.withOpacity(0.5)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (_isDetecting)
+                              const SizedBox(
+                                width: 14, height: 14,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF7C9C84)),
+                              )
+                            else
+                              Icon(Icons.auto_awesome, color: _contentController.text.trim().isEmpty ? Colors.grey : primaryGreen, size: 16),
+                            const SizedBox(width: 8),
+                            Text(
+                              _isDetecting ? 'Analyzing...' : 'Suggest Mood & Topic',
+                              style: GoogleFonts.outfit(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: _contentController.text.trim().isEmpty ? Colors.grey : primaryGreen,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+
                   const SizedBox(height: 32),
 
                   // Mood Selection
-                  Text(
-                    'WHAT\'S YOUR RESONANCE?',
-                    style: GoogleFonts.outfit(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      color: textColorSub,
-                      letterSpacing: 1.5,
-                    ),
+                  Row(
+                    children: [
+                      Text(
+                        'EMOTION (MANUAL OR AUTO)',
+                        style: GoogleFonts.outfit(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: textColorSub,
+                          letterSpacing: 1.5,
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 16),
                   SizedBox(
                     height: 90,
                     child: ListView.builder(
+                      controller: _moodScrollController,
                       scrollDirection: Axis.horizontal,
                       itemCount: _moods.length,
                       itemBuilder: (context, index) {
@@ -244,35 +394,39 @@ class _PostFeedsPageState extends State<PostFeedsPage> {
                         return GestureDetector(
                           onTap: () => setState(() => _selectedMood = mood['name']),
                           child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 300),
-                            width: 70,
+                            duration: const Duration(milliseconds: 250),
+                            width: 75,
                             margin: const EdgeInsets.only(right: 12),
                             decoration: BoxDecoration(
-                              color: isSelected ? mood['color'] : Colors.white,
+                              color: isSelected ? mood['bgColor'] : Colors.white,
                               borderRadius: BorderRadius.circular(20),
-                              boxShadow: isSelected ? [
+                              border: Border.all(
+                                color: isSelected ? mood['color'] : Colors.transparent,
+                                width: 1.5,
+                              ),
+                              boxShadow: isSelected ? [] : [
                                 BoxShadow(
-                                  color: (mood['color'] as Color).withOpacity(0.3),
-                                  blurRadius: 10,
-                                  offset: const Offset(0, 5),
+                                  color: Colors.black.withOpacity(0.02),
+                                  blurRadius: 5,
+                                  offset: const Offset(0, 2),
                                 )
-                              ] : [],
+                              ],
                             ),
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
                                 Icon(
                                   mood['icon'], 
-                                  color: isSelected ? Colors.white : textColorSub,
-                                  size: 24,
+                                  color: isSelected ? mood['color'] : textColorSub.withOpacity(0.6),
+                                  size: 26,
                                 ),
                                 const SizedBox(height: 6),
                                 Text(
                                   mood['name'],
                                   style: GoogleFonts.outfit(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                    color: isSelected ? Colors.white : textColorSub,
+                                    fontSize: 11,
+                                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                                    color: isSelected ? mood['color'] : textColorSub,
                                   ),
                                 ),
                               ],
@@ -299,7 +453,9 @@ class _PostFeedsPageState extends State<PostFeedsPage> {
                   
                   _buildOptionTile(
                     label: 'Choose Topic',
-                    value: _selectedTopic,
+                    value: _selectedTopics.join(', ').length > 20 
+                        ? '${_selectedTopics.join(', ').substring(0, 20)}...' 
+                        : _selectedTopics.join(', '),
                     icon: Icons.auto_awesome_mosaic_outlined,
                     onTap: _showTopicPicker,
                   ),
@@ -396,33 +552,93 @@ class _PostFeedsPageState extends State<PostFeedsPage> {
   }
 
   void _showTopicPicker() {
+    List<String> displayTopics = List.from(_topics);
+    for (String t in _selectedTopics) {
+      if (!displayTopics.contains(t)) {
+        displayTopics.insert(0, t);
+      }
+    }
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(30))),
-      builder: (context) => Container(
-        padding: const EdgeInsets.symmetric(vertical: 30, horizontal: 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Select Taxonomy',
-              style: GoogleFonts.playfairDisplay(fontSize: 24, fontWeight: FontWeight.bold, color: textColorMain),
-            ),
-            const SizedBox(height: 20),
-            ..._topics.map((t) => ListTile(
-              title: Text(t, style: GoogleFonts.outfit(fontSize: 16, color: textColorMain)),
-              trailing: t == _selectedTopic ? Icon(Icons.check_circle_rounded, color: primaryGreen) : null,
-              onTap: () {
-                setState(() => _selectedTopic = t);
-                Navigator.pop(context);
-              },
-            )),
-            const SizedBox(height: 20),
-          ],
-        ),
-      ),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setModalState) {
+            return Container(
+              padding: const EdgeInsets.symmetric(vertical: 30, horizontal: 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Select Topics',
+                    style: GoogleFonts.playfairDisplay(fontSize: 24, fontWeight: FontWeight.bold, color: textColorMain),
+                  ),
+                  const SizedBox(height: 20),
+                  Wrap(
+                    spacing: 8.0,
+                    runSpacing: 8.0,
+                    children: displayTopics.map((t) {
+                      final isSelected = _selectedTopics.contains(t);
+                      return FilterChip(
+                        label: Text(t),
+                        selected: isSelected,
+                        showCheckmark: false,
+                        selectedColor: primaryGreen,
+                        backgroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(25),
+                          side: BorderSide(
+                            color: isSelected ? Colors.transparent : Colors.grey.shade300,
+                            width: 1,
+                          ),
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        labelStyle: GoogleFonts.outfit(
+                          color: isSelected ? Colors.white : textColorMain,
+                          fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                          fontSize: 14,
+                        ),
+                        onSelected: (bool selected) {
+                          setModalState(() {
+                            if (selected) {
+                              _selectedTopics.add(t);
+                              if (t != 'General' && _selectedTopics.contains('General')) {
+                                _selectedTopics.remove('General');
+                              }
+                            } else {
+                              _selectedTopics.remove(t);
+                              if (_selectedTopics.isEmpty) {
+                                _selectedTopics.add('General');
+                              }
+                            }
+                          });
+                          setState(() {});
+                        },
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 30),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: primaryGreen,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                        padding: const EdgeInsets.symmetric(vertical: 15),
+                      ),
+                      onPressed: () => Navigator.pop(context),
+                      child: Text('Done', style: GoogleFonts.outfit(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                    ),
+                  )
+                ],
+              ),
+            );
+          }
+        );
+      },
     );
   }
 }

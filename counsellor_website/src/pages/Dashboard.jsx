@@ -320,7 +320,7 @@ export default function Dashboard() {
             {loading ? (
               <div style={{ padding: '30px', textAlign: 'center', color: 'var(--text-muted)' }}>Loading sessions…</div>
             ) : upcomingSessions.length === 0 ? (
-              <div style={{ padding: '40px 20px', textAlign: 'center', border: '1px dashed var(--border-color)', borderRadius: '18px', backgroundColor: 'var(--bg-secondary)' }}>
+              <div style={{ padding: '40px 20px', textAlign: 'center', border: '1px dashed var(--border-color)', borderRadius: '18px', backgroundColor: '#F4F8F5' }}>
                 <Calendar size={32} style={{ color: 'var(--text-muted)', marginBottom: '8px', opacity: 0.6 }} />
                 <p style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-darker)' }}>No Upcoming Sessions</p>
                 <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>New booking requests will appear here.</p>
@@ -421,7 +421,7 @@ export default function Dashboard() {
           <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <h2 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-darker)', marginBottom: '4px' }}>Quick Actions</h2>
             
-            <div onClick={() => navigate('/availability')} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', backgroundColor: 'var(--bg-secondary)', borderRadius: '12px', cursor: 'pointer', transition: 'all 0.2s' }} onMouseOver={e=>e.currentTarget.style.backgroundColor='var(--border-color)'} onMouseOut={e=>e.currentTarget.style.backgroundColor='var(--bg-secondary)'}>
+            <div onClick={() => navigate('/availability')} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', backgroundColor: '#F4F8F5', borderRadius: '12px', cursor: 'pointer', transition: 'all 0.2s' }} onMouseOver={e=>e.currentTarget.style.backgroundColor='var(--border-color)'} onMouseOut={e=>e.currentTarget.style.backgroundColor='#F4F8F5'}>
               <div style={{ width: '36px', height: '36px', borderRadius: '10px', backgroundColor: 'var(--bg-card)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary-color)' }}>
                 <Clock size={18} />
               </div>
@@ -429,7 +429,7 @@ export default function Dashboard() {
               <ChevronRight size={16} style={{ marginLeft: 'auto', color: 'var(--text-muted)' }} />
             </div>
 
-            <div onClick={() => navigate('/patients')} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', backgroundColor: 'var(--bg-secondary)', borderRadius: '12px', cursor: 'pointer', transition: 'all 0.2s' }} onMouseOver={e=>e.currentTarget.style.backgroundColor='var(--border-color)'} onMouseOut={e=>e.currentTarget.style.backgroundColor='var(--bg-secondary)'}>
+            <div onClick={() => navigate('/patients')} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', backgroundColor: '#F4F8F5', borderRadius: '12px', cursor: 'pointer', transition: 'all 0.2s' }} onMouseOver={e=>e.currentTarget.style.backgroundColor='var(--border-color)'} onMouseOut={e=>e.currentTarget.style.backgroundColor='#F4F8F5'}>
               <div style={{ width: '36px', height: '36px', borderRadius: '10px', backgroundColor: 'var(--bg-card)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary-color)' }}>
                 <Users size={18} />
               </div>
@@ -437,7 +437,7 @@ export default function Dashboard() {
               <ChevronRight size={16} style={{ marginLeft: 'auto', color: 'var(--text-muted)' }} />
             </div>
 
-            <div onClick={() => navigate('/wallet')} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', backgroundColor: 'var(--bg-secondary)', borderRadius: '12px', cursor: 'pointer', transition: 'all 0.2s' }} onMouseOver={e=>e.currentTarget.style.backgroundColor='var(--border-color)'} onMouseOut={e=>e.currentTarget.style.backgroundColor='var(--bg-secondary)'}>
+            <div onClick={() => navigate('/wallet')} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', backgroundColor: '#F4F8F5', borderRadius: '12px', cursor: 'pointer', transition: 'all 0.2s' }} onMouseOver={e=>e.currentTarget.style.backgroundColor='var(--border-color)'} onMouseOut={e=>e.currentTarget.style.backgroundColor='#F4F8F5'}>
               <div style={{ width: '36px', height: '36px', borderRadius: '10px', backgroundColor: 'var(--bg-card)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary-color)' }}>
                 <DollarSign size={18} />
               </div>
@@ -458,7 +458,7 @@ export default function Dashboard() {
               <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Your stats and patient feedback</p>
             </div>
             
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', backgroundColor: 'var(--bg-secondary)', padding: '14px', borderRadius: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', backgroundColor: '#F4F8F5', padding: '14px', borderRadius: '16px' }}>
             <div style={{ color: 'var(--primary-color)', backgroundColor: 'var(--bg-card)', padding: '8px', borderRadius: '10px', display: 'flex', alignItems: 'center' }}>
               <Activity size={18} />
             </div>
@@ -469,7 +469,7 @@ export default function Dashboard() {
           </div>
 
           {/* Recent Reviews & Ratings */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', backgroundColor: 'var(--bg-secondary)', padding: '16px', borderRadius: '16px', marginTop: '2px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', backgroundColor: '#F4F8F5', padding: '16px', borderRadius: '16px', marginTop: '2px' }}>
             <div className="flex-between">
               <h3 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-darker)' }}>Overall Rating</h3>
               <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
