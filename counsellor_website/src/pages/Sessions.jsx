@@ -11,6 +11,7 @@ export default function Sessions() {
   const [loading, setLoading] = useState(sessionsCache ? false : true);
   const [updatingId, setUpdatingId] = useState(null);
   const [missedConfirmId, setMissedConfirmId] = useState(null);
+  const [missedReason, setMissedReason] = useState('');
   const [flashMessage, setFlashMessage] = useState(null);
 
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -250,6 +251,7 @@ export default function Sessions() {
       await updateDoc(apptRef, {
         status: 'COMPLETED',
         notes: clinicalNotes.trim(),
+        sessionSummary: clinicalNotes.trim(),
         completedAt: new Date()
       });
       // Refresh list
@@ -267,6 +269,7 @@ export default function Sessions() {
 
   const handleMissedSession = (apptId) => {
     setMissedConfirmId(apptId);
+    setMissedReason('');
   };
 
   const confirmMissedSession = async () => {
@@ -274,7 +277,11 @@ export default function Sessions() {
     setUpdatingId(missedConfirmId);
     try {
       const apptRef = doc(db, 'counsellor_bookings', missedConfirmId);
-      await updateDoc(apptRef, { status: 'MISSED', completedAt: new Date() });
+      await updateDoc(apptRef, { 
+        status: 'MISSED', 
+        reason: missedReason.trim(),
+        completedAt: new Date() 
+      });
       setMissedConfirmId(null);
       await fetchAppointments();
     } catch (err) {
@@ -291,12 +298,11 @@ export default function Sessions() {
 
   const filteredAppts = appointments.filter(a => {
     const statusUpper = a.status?.toUpperCase() || '';
-    const isPassed = a.resolvedDate && a.resolvedDate < now;
-    
+    // Match mobile logic: only move to history tab if explicitly marked completed, missed, or cancelled.
     if (activeTab === 'upcoming') {
-      return (statusUpper === 'CONFIRMED' || statusUpper === 'PENDING' || statusUpper === 'RESCHEDULED' || statusUpper === 'UPCOMING') && !isPassed;
+      return statusUpper !== 'COMPLETED' && statusUpper !== 'MISSED' && statusUpper !== 'CANCELLED';
     } else {
-      return statusUpper === 'COMPLETED' || statusUpper === 'MISSED' || isPassed;
+      return statusUpper === 'COMPLETED' || statusUpper === 'MISSED' || statusUpper === 'CANCELLED';
     }
   });
 
@@ -511,8 +517,16 @@ export default function Sessions() {
               
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 {appts.map((appt) => {
-                  const isOverdue = activeTab === 'upcoming' && appt.resolvedDate && appt.resolvedDate < new Date();
-                  const isMissed = appt.status?.toUpperCase() === 'MISSED';
+                  const startTime = appt.resolvedDate || new Date();
+                  const endTime = new Date(startTime.getTime() + 60 * 60 * 1000);
+                  const fifteenMinsLateTime = new Date(startTime.getTime() + 15 * 60 * 1000);
+                  
+                  const isSessionPassed = now > endTime;
+                  const isFifteenMinsLate = now > fifteenMinsLateTime;
+                  const statusUpper = appt.status?.toUpperCase() || '';
+                  const isMissed = statusUpper === 'MISSED';
+                  const isCompleted = statusUpper === 'COMPLETED';
+                  const isCancelled = statusUpper === 'CANCELLED';
 
                   return (
                     <div 
@@ -526,15 +540,13 @@ export default function Sessions() {
                         padding: '24px',
                         cursor: 'pointer',
                         transition: 'all 0.2s ease',
-                        borderLeft: isOverdue ? '4px solid #ef4444' : isMissed ? '4px solid #9ca3af' : '1px solid var(--border-color)'
+                        borderLeft: (isSessionPassed && activeTab === 'upcoming') ? '4px solid #f59e0b' : isMissed ? '4px solid #ef4444' : '1px solid var(--border-color)'
                       }}
                       onMouseEnter={(e) => {
-                        if (!isOverdue && !isMissed) e.currentTarget.style.borderColor = 'var(--primary-color)';
                         e.currentTarget.style.transform = 'translateY(-2px)';
                         e.currentTarget.style.boxShadow = '0 12px 24px rgba(0,0,0,0.05)';
                       }}
                       onMouseLeave={(e) => {
-                        if (!isOverdue && !isMissed) e.currentTarget.style.borderColor = 'var(--border-color)';
                         e.currentTarget.style.transform = 'none';
                         e.currentTarget.style.boxShadow = '0 8px 24px rgba(124, 156, 132, 0.03)';
                       }}
@@ -544,11 +556,11 @@ export default function Sessions() {
                           width: '56px', 
                           height: '56px', 
                           borderRadius: '50%', 
-                          backgroundColor: activeTab === 'upcoming' ? (isOverdue ? '#fef2f2' : '#FFF9E6') : (isMissed ? '#f3f4f6' : '#E6F7F0'), 
+                          backgroundColor: activeTab === 'upcoming' ? (isSessionPassed ? '#fef3c7' : '#E6F7F0') : (isMissed ? '#fee2e2' : '#f3f4f6'), 
                           display: 'flex', 
                           alignItems: 'center', 
                           justifyContent: 'center',
-                          color: activeTab === 'upcoming' ? (isOverdue ? '#ef4444' : '#D99E00') : (isMissed ? '#6b7280' : '#00A666'),
+                          color: activeTab === 'upcoming' ? (isSessionPassed ? '#d97706' : '#00A666') : (isMissed ? '#ef4444' : '#6b7280'),
                           fontWeight: 700,
                           fontSize: '18px',
                           border: '1px solid rgba(0,0,0,0.03)'
@@ -558,18 +570,18 @@ export default function Sessions() {
                         <div>
                           <h3 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-darker)', marginBottom: '4px' }}>
                             {appt.patientName}
-                            {isOverdue && (
+                            {(isSessionPassed && activeTab === 'upcoming') && (
                               <span style={{ 
                                 marginLeft: '10px', 
                                 fontSize: '10px', 
                                 padding: '3px 8px', 
-                                backgroundColor: '#fee2e2', 
-                                color: '#dc2626', 
+                                backgroundColor: '#fef3c7', 
+                                color: '#b45309', 
                                 borderRadius: '6px',
                                 verticalAlign: 'middle',
                                 fontWeight: 700
                               }}>
-                                OVERDUE
+                                PASSED
                               </span>
                             )}
                             {isMissed && (
@@ -577,8 +589,8 @@ export default function Sessions() {
                                 marginLeft: '10px', 
                                 fontSize: '10px', 
                                 padding: '3px 8px', 
-                                backgroundColor: '#f3f4f6', 
-                                color: '#4b5563', 
+                                backgroundColor: '#fee2e2', 
+                                color: '#ef4444', 
                                 borderRadius: '6px',
                                 verticalAlign: 'middle',
                                 fontWeight: 700
@@ -598,11 +610,18 @@ export default function Sessions() {
                       <div style={{ display: 'flex', gap: '8px' }} onClick={(e) => e.stopPropagation()}>
                         {activeTab === 'upcoming' ? (
                           <>
-                            {!isOverdue && (
+                            {!isSessionPassed && (
                               <button 
-                                onClick={() => {
-                                  setFlashMessage({ type: 'info', text: 'Starting Video Session... (Integration Pending)' });
-                                  setTimeout(() => setFlashMessage(null), 3000);
+                                onClick={async () => {
+                                  try {
+                                    window.open(`https://meet.jit.si/eunoia_${appt.id}`, '_blank');
+                                    const apptRef = doc(db, 'counsellor_bookings', appt.id);
+                                    await updateDoc(apptRef, { status: 'ongoing' });
+                                  } catch (error) {
+                                    console.error('Error starting video session:', error);
+                                    setFlashMessage({ type: 'error', text: 'Failed to start video session.' });
+                                    setTimeout(() => setFlashMessage(null), 3000);
+                                  }
                                 }}
                                 className="btn"
                                 style={{ padding: '10px 18px', fontSize: '13px', backgroundColor: '#eef2ff', color: '#4f46e5', fontWeight: 600 }}
@@ -611,7 +630,7 @@ export default function Sessions() {
                               </button>
                             )}
                             
-                            {isOverdue ? (
+                            {isFifteenMinsLate && !isSessionPassed && (
                               <button 
                                 onClick={() => handleMissedSession(appt.id)}
                                 disabled={updatingId === appt.id}
@@ -620,19 +639,27 @@ export default function Sessions() {
                               >
                                 {updatingId === appt.id ? 'Updating...' : 'Mark Missed'}
                               </button>
-                            ) : (
-                              <button 
-                                onClick={() => handleCompleteSession(appt.id)}
-                                disabled={updatingId === appt.id}
-                                className="btn btn-primary"
-                                style={{ padding: '10px 18px', fontSize: '13px' }}
-                              >
-                                {updatingId === appt.id ? 'Updating…' : (
-                                  <>
-                                    <CheckCircle2 size={16} /> Complete
-                                  </>
-                                )}
-                              </button>
+                            )}
+
+                            {isSessionPassed && (
+                              <div style={{ display: 'flex', gap: '8px' }}>
+                                <button 
+                                  onClick={() => handleMissedSession(appt.id)}
+                                  disabled={updatingId === appt.id}
+                                  className="btn"
+                                  style={{ padding: '10px 18px', fontSize: '13px', backgroundColor: '#fee2e2', color: '#dc2626', fontWeight: 600 }}
+                                >
+                                  {updatingId === appt.id ? 'Updating...' : 'Mark Missed'}
+                                </button>
+                                <button 
+                                  onClick={() => handleCompleteSession(appt.id)}
+                                  disabled={updatingId === appt.id}
+                                  className="btn btn-primary"
+                                  style={{ padding: '10px 18px', fontSize: '13px' }}
+                                >
+                                  {updatingId === appt.id ? 'Updating…' : 'Mark Completed'}
+                                </button>
+                              </div>
                             )}
                           </>
                         ) : (
@@ -726,13 +753,13 @@ export default function Sessions() {
                 <span style={{ fontWeight: 600, color: 'var(--text-darker)', fontSize: '14px', fontFamily: 'monospace' }}>{selectedSession.paymentIntentId || 'N/A'}</span>
               </div>
               
-              {(selectedSession.notes || selectedSession.reason || selectedSession.cancelReason) && (
+              {(selectedSession.notes || selectedSession.sessionSummary || selectedSession.reason || selectedSession.cancelReason) && (
                 <div style={{ padding: '16px', backgroundColor: 'var(--bg-secondary)', borderRadius: '12px', marginTop: '8px' }}>
                   <h4 style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '8px', textTransform: 'uppercase' }}>
                     {selectedSession.status?.toUpperCase() === 'COMPLETED' ? 'Clinical Notes' : 'Summary / Reason'}
                   </h4>
                   <p style={{ fontSize: '14px', color: 'var(--text-dark)', margin: 0, whiteSpace: 'pre-wrap' }}>
-                    {selectedSession.notes || selectedSession.reason || selectedSession.cancelReason}
+                    {selectedSession.sessionSummary || selectedSession.notes || selectedSession.reason || selectedSession.cancelReason}
                   </p>
                 </div>
               )}
@@ -822,6 +849,18 @@ export default function Sessions() {
               <p style={{ fontSize: '15px', color: 'var(--text-muted)', lineHeight: '1.6', margin: 0 }}>
                 This action cannot be undone. Are you sure you want to mark this session as Missed/No Show?
               </p>
+            </div>
+
+            <div className="form-group" style={{ marginBottom: '24px' }}>
+              <label className="form-label" style={{ fontSize: '14px', fontWeight: 600 }}>Reason for Missed Session</label>
+              <textarea 
+                className="form-control"
+                rows="3"
+                placeholder="E.g., Client did not join within 15 minutes..."
+                value={missedReason}
+                onChange={e => setMissedReason(e.target.value)}
+                style={{ resize: 'vertical', width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid var(--border-color)' }}
+              />
             </div>
             
             <div style={{ display: 'flex', gap: '16px' }}>

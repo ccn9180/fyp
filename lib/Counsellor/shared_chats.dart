@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
+import 'session_detail.dart';
 import '../User/report_generator_service.dart';
 
 // ─── Data Models ────────────────────────────────────────────────────────────
@@ -209,16 +210,22 @@ class _SharedChatsScreenState extends State<SharedChatsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _bg,
-      appBar: _selected == null ? AppBar(
+      appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         surfaceTintColor: Colors.transparent,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF333333), size: 20),
-          onPressed: () => Navigator.pop(context),
+          onPressed: () {
+            if (_selected != null) {
+              setState(() => _selected = null);
+            } else {
+              Navigator.pop(context);
+            }
+          },
         ),
         title: Text(
-          'CLIENT DIRECTORY',
+          _selected == null ? 'CLIENT DIRECTORY' : 'CLIENT PROFILE',
           style: GoogleFonts.outfit(
             fontSize: 14,
             fontWeight: FontWeight.bold,
@@ -227,7 +234,7 @@ class _SharedChatsScreenState extends State<SharedChatsScreen> {
           ),
         ),
         centerTitle: true,
-      ) : null,
+      ),
       body: SafeArea(
         child: _selected == null ? _buildListPage() : _buildDetailPage(),
       ),
@@ -406,7 +413,7 @@ class _SharedChatsScreenState extends State<SharedChatsScreen> {
       onTap: () => setState(() {
         _selected = client;
         _activeTab = client.hasCrisisAlert ? 'insights' : 'sessions';
-        _insightFilter = client.hasCrisisAlert ? 'crisis' : 'all';
+        _insightFilter = 'all'; // Always show all records first
         _sessionFilter = 'all';
       }),
       child: Container(
@@ -583,171 +590,266 @@ class _SharedChatsScreenState extends State<SharedChatsScreen> {
 
   Widget _buildDetailPage() {
     final client = _selected!;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Header
-        Padding(
-          padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              GestureDetector(
-                onTap: () => setState(() => _selected = null),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.arrow_back_ios_rounded,
-                        size: 16, color: Color(0xFF888888)),
-                    const SizedBox(width: 4),
-                    Text(
-                      'Back to Directory',
-                      style: GoogleFonts.outfit(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: const Color(0xFF888888)),
-                    ),
-                  ],
+    return CustomScrollView(
+      physics: const BouncingScrollPhysics(),
+      slivers: [
+        // Profile Card
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+            child: Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(
+                  color: client.hasCrisisAlert ? const Color(0xFFDC2626).withOpacity(0.5) : Colors.grey.withOpacity(0.2),
+                  width: client.hasCrisisAlert ? 1.5 : 1.0,
                 ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.02),
+                    blurRadius: 8,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
               ),
-              const SizedBox(height: 16),
-              // Client header card
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(24),
-                  border: client.hasCrisisAlert
-                      ? Border.all(color: const Color(0xFFFCA5A5), width: 1.5)
-                      : null,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.04),
-                      blurRadius: 16,
-                      offset: const Offset(0, 6),
+              child: Row(
+                children: [
+                  Container(
+                    width: 64,
+                    height: 64,
+                    decoration: BoxDecoration(
+                      color: client.hasCrisisAlert
+                          ? const Color(0xFFDC2626).withOpacity(0.1)
+                          : _green.withOpacity(0.1),
+                      shape: BoxShape.circle,
                     ),
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 56,
-                      height: 56,
-                      decoration: BoxDecoration(
-                        color: client.hasCrisisAlert
-                            ? const Color(0xFFFEE2E2)
-                            : _green.withOpacity(0.12),
-                        shape: BoxShape.circle,
+                    child: Center(
+                      child: Text(
+                        client.name.isNotEmpty ? client.name[0].toUpperCase() : 'C',
+                        style: GoogleFonts.outfit(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 28,
+                          color: client.hasCrisisAlert ? const Color(0xFFDC2626) : _green,
+                        ),
                       ),
-                      child: Center(
-                        child: Text(
-                          client.name.isNotEmpty
-                              ? client.name[0].toUpperCase()
-                              : 'C',
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          client.name,
                           style: GoogleFonts.outfit(
                             fontWeight: FontWeight.bold,
-                            fontSize: 24,
-                            color: client.hasCrisisAlert ? _red : _green,
+                            fontSize: 20,
+                            color: _textMain,
                           ),
                         ),
-                      ),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            client.name,
-                            style: GoogleFonts.outfit(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 18,
-                              color: _textMain,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Row(
-                            children: [
-                              Text(
-                                '${client.completedSessions} Completed · ${client.totalSessions} Total',
-                                style: GoogleFonts.outfit(
-                                    fontSize: 12, color: Colors.grey[500]),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (client.hasCrisisAlert)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 5),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFEE2E2),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
+                        const SizedBox(height: 4),
+                        Row(
                           children: [
-                            const Icon(Icons.warning_amber_rounded,
-                                color: _red, size: 13),
-                            const SizedBox(width: 4),
                             Text(
-                              'CRISIS',
+                              '${client.completedSessions} Completed · ${client.totalSessions} Total',
                               style: GoogleFonts.outfit(
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                color: _red,
+                                fontSize: 13,
+                                color: Colors.grey[500],
                               ),
                             ),
                           ],
                         ),
-                      ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              // Tabs
-              Row(
-                children: [
-                  _tabButton('sessions', 'Session History'),
-                  const SizedBox(width: 8),
-                  _tabButton('insights', 'Shared Records'),
+                        if (client.hasCrisisAlert) ...[
+                          const SizedBox(height: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFDC2626).withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.warning_amber_rounded, color: Color(0xFFDC2626), size: 14),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'CRISIS DETECTED',
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: const Color(0xFFDC2626),
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ]
+                      ],
+                    ),
+                  ),
                 ],
               ),
-              const SizedBox(height: 4),
-            ],
+            ),
           ),
         ),
-        const Divider(height: 1, color: Color(0xFFEEEEEB)),
-        Expanded(
-          child: _activeTab == 'sessions'
-              ? _buildSessionsTab(client)
-              : _buildInsightsTab(client),
+
+        // Sticky Tabs
+        SliverPersistentHeader(
+          pinned: true,
+          delegate: _StickyTabBarDelegate(
+            height: 70, // increased height
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Container(
+                      height: 52, // increased height
+                      padding: const EdgeInsets.all(5), // slightly larger padding
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(14), // increased radius to match height
+                        border: Border.all(color: Colors.grey.withOpacity(0.2)),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(child: _switchTab('sessions', 'Session History')),
+                          Expanded(child: _switchTab('insights', 'Shared Records')),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  GestureDetector(
+                    onTap: () => _showTabFilterSheet(context),
+                    child: Container(
+                      width: 52, // matched height
+                      height: 52, // matched height
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(14), // increased radius
+                        border: Border.all(color: Colors.grey.withOpacity(0.2)),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.02),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: const Icon(Icons.tune_rounded, color: Color(0xFF333333), size: 22),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ),
+
+        const SliverToBoxAdapter(child: SizedBox(height: 16)),
+
+        // Content
+        _activeTab == 'sessions'
+            ? _buildSessionsTab(client)
+            : _buildInsightsTab(client),
       ],
     );
   }
 
-  Widget _tabButton(String id, String label) {
+  void _showTabFilterSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(32),
+        decoration: const BoxDecoration(
+          color: Color(0xFFF2F1EC),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 24),
+                  decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2)),
+                ),
+              ),
+              Text('Filter Records', style: GoogleFonts.playfairDisplay(fontSize: 24, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 24),
+            if (_activeTab == 'sessions') ...[
+              _buildFilterOption(Icons.all_inclusive_rounded, 'All', () {
+                setState(() => _sessionFilter = 'all');
+                Navigator.pop(context);
+              }),
+              _buildFilterOption(Icons.schedule_rounded, 'Upcoming', () {
+                setState(() => _sessionFilter = 'upcoming');
+                Navigator.pop(context);
+              }),
+              _buildFilterOption(Icons.check_circle_outline_rounded, 'Completed', () {
+                setState(() => _sessionFilter = 'completed');
+                Navigator.pop(context);
+              }),
+              _buildFilterOption(Icons.cancel_outlined, 'Cancelled', () {
+                setState(() => _sessionFilter = 'cancelled');
+                Navigator.pop(context);
+              }, isLast: true),
+            ] else ...[
+              _buildFilterOption(Icons.all_inclusive_rounded, 'All Records', () {
+                setState(() => _insightFilter = 'all');
+                Navigator.pop(context);
+              }),
+              _buildFilterOption(Icons.book_outlined, 'Diary Entries', () {
+                setState(() => _insightFilter = 'diary');
+                Navigator.pop(context);
+              }),
+              _buildFilterOption(Icons.chat_bubble_outline_rounded, 'AI Chats', () {
+                setState(() => _insightFilter = 'chat');
+                Navigator.pop(context);
+              }),
+              _buildFilterOption(Icons.summarize_rounded, 'Activity Reports', () {
+                setState(() => _insightFilter = 'report');
+                Navigator.pop(context);
+              }),
+              _buildFilterOption(Icons.warning_amber_rounded, 'Crisis', () {
+                setState(() => _insightFilter = 'crisis');
+                Navigator.pop(context);
+              }, isLast: true, isCrisis: true),
+            ],
+            const SizedBox(height: 20),
+          ],
+        ),
+        ),
+      ),
+    );
+  }
+
+  Widget _switchTab(String id, String label) {
     final isActive = _activeTab == id;
     return GestureDetector(
       onTap: () => setState(() => _activeTab = id),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
         decoration: BoxDecoration(
           color: isActive ? _green : Colors.transparent,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isActive ? _green : const Color(0xFFDDDDD8),
-          ),
+          borderRadius: BorderRadius.circular(8),
+          boxShadow: isActive ? [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 4, offset: const Offset(0, 2))] : null,
         ),
-        child: Text(
-          label,
-          style: GoogleFonts.outfit(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: isActive ? Colors.white : _textDim,
+        child: Center(
+          child: Text(
+            label,
+            style: GoogleFonts.outfit(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: isActive ? Colors.white : const Color(0xFF888888),
+            ),
           ),
         ),
       ),
@@ -757,14 +859,6 @@ class _SharedChatsScreenState extends State<SharedChatsScreen> {
   // ─── SESSIONS TAB ─────────────────────────────────────────────────────────
 
   Widget _buildSessionsTab(_ClientData client) {
-    final filters = ['all', 'upcoming', 'completed', 'cancelled'];
-    final labels = {
-      'all': 'All',
-      'upcoming': 'Upcoming',
-      'completed': 'Completed',
-      'cancelled': 'Cancelled'
-    };
-
     final filtered = client.sessions.where((s) {
       if (_sessionFilter == 'all') return true;
       final st = (s['status'] ?? '').toString().toUpperCase();
@@ -778,64 +872,45 @@ class _SharedChatsScreenState extends State<SharedChatsScreen> {
       return false;
     }).toList();
 
-    return Column(
-      children: [
-        // Session filter chips
-        Padding(
-          padding: const EdgeInsets.fromLTRB(24, 12, 24, 4),
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: filters.map((f) {
-                final isActive = _sessionFilter == f;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: GestureDetector(
-                    onTap: () => setState(() => _sessionFilter = f),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 7),
-                      decoration: BoxDecoration(
-                        color: isActive ? _green : Colors.white,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color:
-                              isActive ? _green : const Color(0xFFE5E7EB),
-                        ),
-                      ),
-                      child: Text(
-                        labels[f]!,
-                        style: GoogleFonts.outfit(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: isActive ? Colors.white : _textDim,
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
+    if (filtered.isEmpty) {
+      return SliverToBoxAdapter(
+        child: Container(
+          padding: const EdgeInsets.only(top: 40),
+          child: Center(
+            child: Text('No sessions match this filter.',
+                style: GoogleFonts.outfit(fontSize: 14, color: Colors.grey[500]))
           ),
         ),
-        Expanded(
-          child: filtered.isEmpty
-              ? Center(
-                  child: Text('No sessions match this filter.',
-                      style: GoogleFonts.outfit(
-                          fontSize: 14, color: Colors.grey[500])))
-              : ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
-                  itemCount: filtered.length,
-                  itemBuilder: (context, i) => _buildSessionCard(filtered[i]),
-                ),
+      );
+    }
+
+    return SliverPadding(
+      padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+      sliver: SliverList(
+        delegate: SliverChildBuilderDelegate(
+          (context, i) => _buildSessionCard(filtered[i]),
+          childCount: filtered.length,
         ),
-      ],
+      ),
     );
   }
 
   Widget _buildSessionCard(Map<String, dynamic> sess) {
-    final st = (sess['status'] ?? '').toString().toUpperCase();
+    String st = (sess['status'] ?? '').toString().toUpperCase();
+    
+    // Check past dates
+    if (sess['_date'] != null) {
+      final startTime = sess['_date'] as DateTime;
+      if (startTime.isBefore(DateTime.now()) && st != 'COMPLETED' && st != 'CANCELLED' && st != 'MISSED') {
+        st = 'MISSED';
+      }
+    } else if (sess['startTime'] != null) {
+      final startTime = (sess['startTime'] as Timestamp).toDate();
+      if (startTime.isBefore(DateTime.now()) && st != 'COMPLETED' && st != 'CANCELLED' && st != 'MISSED') {
+        st = 'MISSED';
+      }
+    }
+
     Color badgeBg = const Color(0xFFF3F4F6);
     Color badgeFg = const Color(0xFF4B5563);
     if (st == 'COMPLETED') {
@@ -860,20 +935,35 @@ class _SharedChatsScreenState extends State<SharedChatsScreen> {
             ? DateFormat('hh:mm a').format(sess['_date'] as DateTime)
             : 'TBD');
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
+    return GestureDetector(
+      onTap: () {
+        final bookingId = sess['id']?.toString() ?? '';
+        if (bookingId.isNotEmpty) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => SessionDetailScreen(
+                bookingData: sess,
+                bookingId: bookingId,
+              ),
+            ),
+          );
+        }
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.03),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
       child: Row(
         children: [
           Container(
@@ -914,27 +1004,20 @@ class _SharedChatsScreenState extends State<SharedChatsScreen> {
           ),
         ],
       ),
+      ),
     );
   }
 
   // ─── INSIGHTS TAB ─────────────────────────────────────────────────────────
 
   Widget _buildInsightsTab(_ClientData client) {
-    final insightFilters = ['all', 'chat', 'diary', 'report', 'crisis'];
-    final insightLabels = {
-      'all': 'All Records',
-      'chat': 'AI Chat',
-      'diary': 'Diaries',
-      'report': 'Reports',
-      'crisis': '🚨 Crisis',
-    };
-
     final filtered = client.sharedInsights.where((ins) {
       if (_insightFilter == 'all') return true;
       final isReport = ins['type'] == 'report';
       final isDiary = ins['type'] == 'diary';
       final isChat = !isReport && !isDiary;
-      final isCrisis = ins['isCrisis'] == true || ins['crisisDetected'] == true;
+      final isCrisis = ins['isCrisis'] == true || ins['isCrisis']?.toString() == 'true' || 
+                       ins['crisisDetected'] == true || ins['crisisDetected']?.toString() == 'true';
       if (_insightFilter == 'report') return isReport;
       if (_insightFilter == 'diary') return isDiary;
       if (_insightFilter == 'chat') return isChat;
@@ -942,72 +1025,78 @@ class _SharedChatsScreenState extends State<SharedChatsScreen> {
       return false;
     }).toList();
 
-    return Column(
-      children: [
-        // Insight filter chips
-        Padding(
-          padding: const EdgeInsets.fromLTRB(24, 12, 24, 4),
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: insightFilters.map((f) {
-                final isActive = _insightFilter == f;
-                final isCrisisChip = f == 'crisis';
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: GestureDetector(
-                    onTap: () => setState(() => _insightFilter = f),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 7),
-                      decoration: BoxDecoration(
-                        color: isActive
-                            ? (isCrisisChip ? _red : _green)
-                            : (isCrisisChip
-                                ? const Color(0xFFFFF1F1)
-                                : Colors.white),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: isActive
-                              ? (isCrisisChip ? _red : _green)
-                              : (isCrisisChip
-                                  ? const Color(0xFFFCA5A5)
-                                  : const Color(0xFFE5E7EB)),
-                        ),
-                      ),
-                      child: Text(
-                        insightLabels[f]!,
-                        style: GoogleFonts.outfit(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: isActive
-                              ? Colors.white
-                              : (isCrisisChip ? _red : _textDim),
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
+    if (client.sharedInsights.isEmpty) {
+      return SliverToBoxAdapter(
+        child: Container(
+          padding: const EdgeInsets.only(top: 40),
+          child: _buildNoRecords(),
+        ),
+      );
+    }
+
+    if (filtered.isEmpty) {
+      return SliverToBoxAdapter(
+        child: Container(
+          padding: const EdgeInsets.only(top: 40),
+          child: Center(
+            child: Text('No records match this filter.',
+                style: GoogleFonts.outfit(fontSize: 14, color: Colors.grey[500]))
           ),
         ),
-        Expanded(
-          child: client.sharedInsights.isEmpty
-              ? _buildNoRecords()
-              : filtered.isEmpty
-                  ? Center(
-                      child: Text('No records match this filter.',
-                          style: GoogleFonts.outfit(
-                              fontSize: 14, color: Colors.grey[500])))
-                  : ListView.builder(
-                      padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
-                      itemCount: filtered.length,
-                      itemBuilder: (ctx, i) =>
-                          _buildInsightCard(ctx, filtered[i]),
-                    ),
-        ),
-      ],
+      );
+    }
+
+    // Sort filtered by sharedAt descending
+    filtered.sort((a, b) {
+      final aDate = a['_sharedAt'] as DateTime? ?? (a['sharedAt'] as Timestamp?)?.toDate() ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final bDate = b['_sharedAt'] as DateTime? ?? (b['sharedAt'] as Timestamp?)?.toDate() ?? DateTime.fromMillisecondsSinceEpoch(0);
+      return bDate.compareTo(aDate);
+    });
+
+    List<Widget> sliverItems = [];
+    String lastDateHeader = '';
+
+    for (int i = 0; i < filtered.length; i++) {
+      final ins = filtered[i];
+      final sharedAt = ins['_sharedAt'] as DateTime? ?? (ins['sharedAt'] as Timestamp?)?.toDate();
+      
+      String headerText = 'Recently Shared';
+      if (sharedAt != null) {
+        final now = DateTime.now();
+        final today = DateTime(now.year, now.month, now.day);
+        final yesterday = today.subtract(const Duration(days: 1));
+        final sharedDay = DateTime(sharedAt.year, sharedAt.month, sharedAt.day);
+        
+        if (sharedDay == today) {
+          headerText = 'Shared Today';
+        } else if (sharedDay == yesterday) {
+          headerText = 'Shared Yesterday';
+        } else {
+          headerText = 'Shared on ${DateFormat('dd MMM yyyy').format(sharedAt)}';
+        }
+      }
+
+      if (headerText != lastDateHeader) {
+        sliverItems.add(
+          Padding(
+            padding: EdgeInsets.only(top: i == 0 ? 0 : 16, bottom: 12, left: 8),
+            child: Text(
+              headerText,
+              style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.grey.shade600, letterSpacing: 0.5),
+            ),
+          )
+        );
+        lastDateHeader = headerText;
+      }
+
+      sliverItems.add(_buildInsightCard(context, ins));
+    }
+
+    return SliverPadding(
+      padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+      sliver: SliverList(
+        delegate: SliverChildListDelegate(sliverItems),
+      ),
     );
   }
 
@@ -1039,11 +1128,14 @@ class _SharedChatsScreenState extends State<SharedChatsScreen> {
     final isReport = ins['type'] == 'report';
     final isDiary = ins['type'] == 'diary';
     final isChat = !isReport && !isDiary;
-    final isCrisis = ins['isCrisis'] == true || ins['crisisDetected'] == true;
+    final isCrisis = ins['isCrisis'] == true || ins['isCrisis']?.toString() == 'true' || 
+                     ins['crisisDetected'] == true || ins['crisisDetected']?.toString() == 'true';
 
-    final sharedAt = ins['_sharedAt'] as DateTime?;
-    final dateStr = sharedAt != null
-        ? DateFormat('d MMM yyyy, hh:mm a').format(sharedAt)
+    final sharedAt = ins['_sharedAt'] as DateTime? ?? (ins['sharedAt'] as Timestamp?)?.toDate();
+    final originalDate = (ins['timestamp'] as Timestamp?)?.toDate() ?? (ins['createdAt'] as Timestamp?)?.toDate();
+    
+    final dateStr = originalDate != null 
+        ? DateFormat('dd MMM yyyy').format(originalDate)
         : 'Recent';
 
     Color accentColor = _green;
@@ -1059,6 +1151,10 @@ class _SharedChatsScreenState extends State<SharedChatsScreen> {
       typeLabel = 'Diary Entry';
     }
 
+    String title = isReport ? (ins['reportType'] ?? 'Activity Summary')
+                 : isDiary ? (ins['content'] ?? ins['diaryContent'] ?? ins['text'] ?? 'No content.')
+                 : (ins['aiSummary'] ?? 'No summary.');
+
     return GestureDetector(
       onTap: () {
         if (isReport) {
@@ -1068,196 +1164,87 @@ class _SharedChatsScreenState extends State<SharedChatsScreen> {
         }
       },
       child: Container(
-        margin: const EdgeInsets.only(bottom: 14),
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(22),
-          border: isCrisis
-              ? Border.all(color: const Color(0xFFFCA5A5), width: 1.5)
-              : null,
+          borderRadius: BorderRadius.circular(24),
+          border: isCrisis ? Border.all(color: Colors.red.shade300, width: 2) : Border.all(color: Colors.grey.shade100),
           boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.04),
-              blurRadius: 14,
-              offset: const Offset(0, 5),
-            ),
+            BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4)),
           ],
         ),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Crisis banner
-            if (isCrisis)
-              Container(
-                width: double.infinity,
-                padding:
-                    const EdgeInsets.symmetric(vertical: 7, horizontal: 16),
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [Color(0xFFDC2626), Color(0xFFEF4444)],
-                  ),
-                  borderRadius:
-                      BorderRadius.vertical(top: Radius.circular(22)),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.warning_amber_rounded,
-                        color: Colors.white, size: 13),
-                    const SizedBox(width: 6),
-                    Text(
-                      'CRISIS ALERT DETECTED',
-                      style: GoogleFonts.outfit(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                        letterSpacing: 0.8,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            Padding(
-              padding: const EdgeInsets.all(18),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+            if (isCrisis) ...[
+              Row(
                 children: [
-                  // Type badge + date
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: accentColor.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(accentIcon, size: 11, color: accentColor),
-                            const SizedBox(width: 4),
-                            Text(
-                              typeLabel.toUpperCase(),
-                              style: GoogleFonts.outfit(
-                                fontSize: 9,
-                                fontWeight: FontWeight.bold,
-                                color: accentColor,
-                                letterSpacing: 0.6,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const Spacer(),
-                      Text(
-                        dateStr,
-                        style: GoogleFonts.outfit(
-                            fontSize: 11, color: Colors.grey[400]),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  // Summary
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: accentColor.withOpacity(0.05),
-                      borderRadius: BorderRadius.circular(14),
-                      border:
-                          Border.all(color: accentColor.withOpacity(0.12)),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(Icons.auto_awesome_rounded,
-                                size: 13, color: accentColor),
-                            const SizedBox(width: 6),
-                            Text(
-                              isReport
-                                  ? 'PATIENT REPORT'
-                                  : isDiary
-                                      ? 'DIARY ENTRY'
-                                      : 'AI CLINICAL SUMMARY',
-                              style: GoogleFonts.outfit(
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 0.8,
-                                color: accentColor,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          isReport
-                              ? (ins['reportType'] ?? 'Activity Summary')
-                              : isDiary
-                                  ? (ins['diaryContent'] ??
-                                      ins['text'] ??
-                                      'No content.')
-                                  : (ins['aiSummary'] ?? 'No summary.'),
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.outfit(
-                            fontSize: 13,
-                            color: _textMain,
-                            height: 1.5,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  // Emotion tags
-                  if ((ins['emotionTags'] as List?)?.isNotEmpty == true) ...[
-                    const SizedBox(height: 10),
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 6,
-                      children: (ins['emotionTags'] as List)
-                          .map<Widget>(
-                            (tag) => Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 10, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFF0F4F2),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Text(
-                                '#$tag',
-                                style: GoogleFonts.outfit(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: _green,
-                                ),
-                              ),
-                            ),
-                          )
-                          .toList(),
-                    ),
-                  ],
-                  // Tap hint
-                  const SizedBox(height: 10),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      Text(
-                        isReport ? 'Download Report' : 'View Full Record',
-                        style: GoogleFonts.outfit(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: accentColor,
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      Icon(Icons.arrow_forward_ios_rounded,
-                          size: 11, color: accentColor),
-                    ],
-                  ),
+                  const Icon(Icons.warning_amber_rounded, color: Colors.red, size: 16),
+                  const SizedBox(width: 8),
+                  Text('CRISIS ALERT', style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.red, letterSpacing: 1.0)),
                 ],
               ),
+              const SizedBox(height: 12),
+            ],
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: accentColor.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(accentIcon, size: 20, color: accentColor),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        typeLabel,
+                        style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.bold, color: _textMain),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        dateStr,
+                        style: GoogleFonts.outfit(fontSize: 12, color: Colors.grey.shade500),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(Icons.chevron_right_rounded, color: Colors.grey.shade300),
+              ],
             ),
+            const SizedBox(height: 16),
+            Text(
+              title,
+              style: GoogleFonts.outfit(fontSize: 14, color: Colors.grey.shade700, height: 1.5),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            if (((ins['emotionTags'] as List?) ?? (ins['emotions'] as List?))?.isNotEmpty == true) ...[
+              const SizedBox(height: 16),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: ((ins['emotionTags'] as List?) ?? (ins['emotions'] as List))
+                    .take(3)
+                    .map<Widget>((tag) => Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: _green.withOpacity(0.08),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            '#$tag',
+                            style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.w600, color: _green),
+                          ),
+                        ))
+                    .toList(),
+              ),
+            ],
           ],
         ),
       ),
@@ -1388,17 +1375,34 @@ class _SharedChatsScreenState extends State<SharedChatsScreen> {
                     _buildDetailSection(
                       isDiary ? 'Diary Content' : 'Clinical Summary',
                       isDiary
-                          ? (data['diaryContent'] ??
+                          ? (data['content'] ??
+                              data['diaryContent'] ??
                               data['text'] ??
                               'No content.')
                           : (data['aiSummary'] ?? 'No summary.'),
                       isDiary ? const Color(0xFFD97706) : _green,
                     ),
-                    if (!isDiary && (data['emotionTags'] as List?)?.isNotEmpty == true) ...[
+                    if (isDiary && data['aiSummary'] != null) ...[
+                      const SizedBox(height: 16),
+                      _buildDetailSection(
+                        'AI Analysis',
+                        data['aiSummary'],
+                        _green,
+                      ),
+                    ],
+                    if (isDiary && ((data['tags'] as List?) ?? (data['keywords'] as List?))?.isNotEmpty == true) ...[
+                      const SizedBox(height: 16),
+                      _buildDetailSection(
+                        'Tags',
+                        ((data['tags'] as List?) ?? (data['keywords'] as List)).join(", "),
+                        Colors.purple,
+                      ),
+                    ],
+                    if (((data['emotionTags'] as List?) ?? (data['emotions'] as List?))?.isNotEmpty == true) ...[
                       const SizedBox(height: 16),
                       _buildDetailSection(
                         'Emotion Profile',
-                        'Key tones: ${(data['emotionTags'] as List).join(", ")}',
+                        'Key tones: ${((data['emotionTags'] as List?) ?? (data['emotions'] as List)).join(", ")}',
                         Colors.blue,
                       ),
                     ],
@@ -1496,5 +1500,33 @@ class _SharedChatsScreenState extends State<SharedChatsScreen> {
         ],
       ),
     );
+  }
+}
+
+class _StickyTabBarDelegate extends SliverPersistentHeaderDelegate {
+  final Widget child;
+  final double height;
+
+  _StickyTabBarDelegate({required this.child, this.height = 60});
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+    return Container(
+      height: height,
+      alignment: Alignment.center,
+      color: const Color(0xFFF2F1EC),
+      child: child,
+    );
+  }
+
+  @override
+  double get maxExtent => height;
+
+  @override
+  double get minExtent => height;
+
+  @override
+  bool shouldRebuild(covariant SliverPersistentHeaderDelegate oldDelegate) {
+    return true;
   }
 }

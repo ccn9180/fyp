@@ -587,12 +587,6 @@ class _CounsellorScheduleScreenState extends State<CounsellorScheduleScreen> {
     }
     
     String displayStatus = session['status']?.toString().toUpperCase() ?? 'PENDING';
-    if (isPast && displayStatus != 'COMPLETED') {
-        displayStatus = 'MISSED';
-    }
-    if (displayStatus == 'MISSED') {
-        isPast = true;
-    }
 
     return IntrinsicHeight(
       child: Row(

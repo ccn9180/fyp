@@ -880,8 +880,8 @@ class _HomeScreenState extends State<HomeScreen> {
           final data = doc.data() as Map<String, dynamic>;
           final rawStartTime = data['startTime'];
           final startTime = (rawStartTime is Timestamp) ? rawStartTime.toDate() : null;
-          final status = data['status'] ?? '';
-          return startTime != null && startTime.isAfter(now) && status != 'cancelled';
+          final status = (data['status'] ?? '').toString().toLowerCase();
+          return startTime != null && status != 'cancelled' && status != 'completed' && status != 'missed' && status != 'rejected';
         }).toList();
 
         if (upcomingDocs.isEmpty) {
@@ -964,7 +964,14 @@ class _HomeScreenState extends State<HomeScreen> {
         : (rawStartTime is DateTime ? rawStartTime : DateTime.now());
 
     final int diffInMinutes = startTime.difference(DateTime.now()).inMinutes;
-    final String tagText = diffInMinutes < 60 && diffInMinutes >= -60 ? 'LIVE SOON' : 'UPCOMING';
+    String tagText = 'UPCOMING';
+    if (diffInMinutes <= 0 && diffInMinutes >= -60) {
+      tagText = 'ON-GOING';
+    } else if (diffInMinutes < -60) {
+      tagText = 'PENDING REVIEW';
+    } else if (diffInMinutes <= 60) {
+      tagText = 'LIVE SOON';
+    }
     final String displayDate = DateFormat('MMM dd, hh:mm a').format(startTime);
 
     return GestureDetector(

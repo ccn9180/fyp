@@ -31,6 +31,14 @@ except Exception as e:
     print("Run emotion_train.py first to generate emotion_model_data.pth")
     emotion_clf = None
 
+# ── Load topic extractor ─────────────────────────────────────
+try:
+    from topic_extractor import TopicExtractor
+    topic_ext = TopicExtractor()
+except Exception as e:
+    print(f"WARNING: Failed to load topic extractor: {e}")
+    topic_ext = None
+
 app = Flask(__name__)
 CORS(app)
 
@@ -59,7 +67,19 @@ def chat():
             "response": response,
             "intent":   state.get("intent", ""),
             "topic":    state.get("topic", ""),
-            "strategy": strategy
+            "strategy": strategy,
+            "distress_score":     state.get("distress_score", 0),
+            "achievement_flag":   state.get("achievement_flag", False),
+            "conversation_mode":  state.get("conversation_mode", "validation"),
+            # Coarse topic/emotion/intent/strategy/confidence taxonomy --
+            # see AdvancedNLUPipeline.classify_meta() in chatbot.py.
+            "topic_category":     state.get("topic_category", "general"),
+            "emotion":            state.get("emotion", "neutral"),
+            "primary_emotion":    state.get("primary_emotion"),
+            "secondary_emotion":  state.get("secondary_emotion"),
+            "meta_intent":        state.get("meta_intent", ""),
+            "meta_strategy":      state.get("meta_strategy", ""),
+            "confidence":         state.get("confidence", 0.0),
         })
     except Exception as e:
         logger.error(f"Error handling turn: {e}\n{traceback.format_exc()}")
@@ -88,6 +108,7 @@ def predict_emotion():
             "is_crisis": False,
             "confidence": 0.0,
             "emotion_percentages": [],
+            "hashtags": [],
         }), 500
 
     data = request.json
@@ -100,9 +121,20 @@ def predict_emotion():
 
     try:
         result = emotion_clf.predict(text)
+        
+        # Add semantic hashtags and highlighted phrase
+        if topic_ext:
+            semantic_data = topic_ext.generate_semantic_tags(text, result.get('emotion', 'neutral'))
+            result["hashtags"] = semantic_data["hashtags"]
+            result["highlightedPhrase"] = semantic_data["highlightedPhrase"]
+        else:
+            result["hashtags"] = []
+            result["highlightedPhrase"] = text
+            
         logger.info(f"Emotion predicted: {result.get('emotion')} for text: {text[:30]}...")
         return jsonify(result)
     except Exception as e:
+        logger.error(f"Error in predict_emotion: {e}\n{traceback.format_exc()}")
         return jsonify({
             "error":      str(e),
             "emotion":    "neutral",
@@ -111,6 +143,7 @@ def predict_emotion():
             "is_crisis":  False,
             "confidence": 0.0,
             "emotion_percentages": [],
+            "hashtags": [],
         }), 500
 
 
@@ -125,8 +158,11 @@ def summarize_chat():
     full_text = " ".join([m.get("text", "") for m in messages if m.get("text")])
     
     try:
-        from summarizer import ExtractiveSummarizer
-        summarizer = ExtractiveSummarizer()
+        if topic_ext and topic_ext.summarizer:
+            summarizer = topic_ext.summarizer
+        else:
+            from summarizer import ExtractiveSummarizer
+            summarizer = ExtractiveSummarizer()
         num_sentences = max(3, min(6, len(messages) // 3))
         summary = summarizer.summarize(full_text, top_n=num_sentences)
         if not summary:
@@ -136,6 +172,42 @@ def summarize_chat():
         logger.error(f"Summarizer error: {e}")
         return jsonify({"summary": "A mindfulness chat session."}), 500
 
+
+import socket
+import os
+import re
+
+def auto_update_flutter_ip():
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        local_ip = s.getsockname()[0]
+        s.close()
+    except Exception:
+        local_ip = "127.0.0.1"
+
+    target_url = f"http://{local_ip}:5000"
+    config_path = os.path.join(os.path.dirname(__file__), '..', 'lib', 'services', 'backend_config.dart')
+    
+    if os.path.exists(config_path):
+        try:
+            with open(config_path, 'r') as f:
+                content = f.read()
+                
+            if target_url not in content:
+                pattern = r"(static final List<String> _baseUrlsToTry = \[)"
+                replacement = f"\\1\n    '{target_url}', // [AUTO-INJECTED] Active IP"
+                new_content = re.sub(pattern, replacement, content, count=1)
+                
+                with open(config_path, 'w') as f:
+                    f.write(new_content)
+                print(f"[INFO] Auto-injected {target_url} into Flutter config!")
+            else:
+                print(f"[INFO] Flutter config already has the active IP ({target_url})")
+        except Exception as e:
+            print(f"[ERROR] Failed to auto-update Flutter config: {e}")
+
+auto_update_flutter_ip()
 
 if __name__ == '__main__':
     print("[START] Starting Eunoia Backend API on port 5000...")

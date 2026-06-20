@@ -107,9 +107,10 @@ class _BookingSummaryScreenState extends State<BookingSummaryScreen> {
         return;
       }
 
-      // Fetch user's full name
+      // Fetch user's full name and profile image
       final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
       final String patientName = userDoc.data()?['fullName'] ?? 'Patient';
+      final String patientImageUrl = userDoc.data()?['profileImageUrl'] ?? '';
 
       // Parse and combine date and time
       final format = DateFormat.jm();
@@ -179,6 +180,7 @@ class _BookingSummaryScreenState extends State<BookingSummaryScreen> {
       await FirebaseFirestore.instance.collection('counsellor_bookings').add({
         'patientId': user.uid,
         'patientName': patientName,
+        'patientImageUrl': patientImageUrl,
         'counsellorId': widget.counselor['id'],
         'counsellorName': widget.counselor['name'],
         'counsellorSpecialty': widget.counselor['specialty'],

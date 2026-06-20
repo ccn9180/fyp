@@ -62,25 +62,24 @@ class _CounsellorPerformanceScreenState extends State<CounsellorPerformanceScree
                       .where('counsellorId', isEqualTo: FirebaseAuth.instance.currentUser?.uid)
                       .snapshots(),
                   builder: (context, snapshotBookings) {
-                    return StreamBuilder<QuerySnapshot>(
-                      stream: FirebaseFirestore.instance
-                          .collection('counsellor_reviews')
-                          .where('counsellorId', isEqualTo: FirebaseAuth.instance.currentUser?.uid)
-                          .snapshots(),
-                      builder: (context, snapshotReviews) {
-                        if (snapshotBookings.connectionState == ConnectionState.waiting || snapshotReviews.connectionState == ConnectionState.waiting) {
-                          return const Center(child: CircularProgressIndicator());
-                        }
+                    if (snapshotBookings.connectionState == ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
 
-                        List<Map<String, dynamic>> allBookings = [];
-                        if (snapshotBookings.hasData) {
-                          allBookings = snapshotBookings.data!.docs.map((doc) => doc.data() as Map<String, dynamic>).toList();
-                        }
-                        
-                        List<Map<String, dynamic>> allReviews = [];
-                        if (snapshotReviews.hasData) {
-                          allReviews = snapshotReviews.data!.docs.map((doc) => doc.data() as Map<String, dynamic>).toList();
-                        }
+                    List<Map<String, dynamic>> allBookings = [];
+                    if (snapshotBookings.hasData) {
+                      allBookings = snapshotBookings.data!.docs.map((doc) => doc.data() as Map<String, dynamic>).toList();
+                    }
+                    
+                    List<Map<String, dynamic>> allReviews = allBookings
+                        .where((b) => b['rating'] != null && (b['rating'] is int ? b['rating'] : int.tryParse(b['rating'].toString()) ?? 0) > 0)
+                        .map((b) {
+                      return {
+                        'rating': b['rating'],
+                        'comment': b['feedback'] is Map ? (b['feedback']['comment'] ?? '') : '',
+                        'timestamp': b['feedbackSubmittedAt'] ?? b['startTime'] ?? b['date'],
+                      };
+                    }).toList();
 
                     // Filter by date range
                     List<Map<String, dynamic>> rangeBookings = allBookings.where((b) {
@@ -123,9 +122,7 @@ class _CounsellorPerformanceScreenState extends State<CounsellorPerformanceScree
                       ],
                     );
                   },
-                );
-              },
-            ),
+                ),
               ),
       ),
     );
@@ -824,12 +821,25 @@ class _ClientVoiceSectionState extends State<_ClientVoiceSection> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Row(children: List.generate(5, (i) => Icon(Icons.star_rounded, color: i < (f['rating'] ?? 5).toInt() ? const Color(0xFFD97706) : Colors.grey[100], size: 10))),
+                    CircleAvatar(
+                      radius: 16,
+                      backgroundColor: const Color(0xFFEEF3F0),
+                      backgroundImage: (f['patientImageUrl'] ?? '').toString().isNotEmpty ? NetworkImage(f['patientImageUrl']) : null,
+                      child: (f['patientImageUrl'] ?? '').toString().isEmpty ? const Icon(Icons.person, color: Color(0xFF98B3A1), size: 16) : null,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        f['patientName'] ?? 'Anonymous',
+                        style: GoogleFonts.playfairDisplay(fontSize: 16, fontWeight: FontWeight.bold, color: const Color(0xFF333333)),
+                      ),
+                    ),
                     Text(DateFormat('MMM dd').format(date), style: GoogleFonts.outfit(fontSize: 10, color: Colors.grey)),
                   ],
                 ),
+                const SizedBox(height: 12),
+                Row(children: List.generate(5, (i) => Icon(Icons.star_rounded, color: i < (f['rating'] ?? 5).toInt() ? const Color(0xFFD97706) : Colors.grey[100], size: 14))),
                 const SizedBox(height: 8),
                 Text(f['comment'], style: GoogleFonts.outfit(fontSize: 13, height: 1.4, color: const Color(0xFF2d3748).withOpacity(0.8))),
               ],

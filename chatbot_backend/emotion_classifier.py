@@ -35,9 +35,9 @@ CORE_MAPPING = {
     'anger': 'anger', 'hate': 'anger', 'disgust': 'anger',
     'annoyance': 'anger', 'disapproval': 'anger',
 
-    # Hopeful: forward-looking, supportive, aspirational
-    'optimism': 'hopeful', 'hopeful': 'hopeful',
-    'approval': 'hopeful', 'caring': 'hopeful', 'desire': 'hopeful',
+    # Hopeful: forward-looking, supportive, aspirational (Mapped to Joy)
+    'optimism': 'joy', 'hopeful': 'joy',
+    'approval': 'joy', 'caring': 'joy', 'desire': 'joy',
 
     # Overwhelmed: self-conscious, distressing internal emotions
     'overwhelmed': 'overwhelmed', 'confusion': 'overwhelmed',
@@ -156,6 +156,21 @@ class EmotionClassifier:
         self.model.eval()
         self.sia = SentimentIntensityAnalyzer()
         self.lemmatizer = WordNetLemmatizer()
+        # Force WordNet's lazy corpus load to finish now, while we're still
+        # single-threaded at startup. Triggering it lazily on the first real
+        # Flask request instead races with that request's own thread and
+        # intermittently raises "WordNetCorpusReader object has no attribute
+        # '_LazyCorpusLoader__args'" -- a known NLTK thread-safety gap.
+        self.lemmatizer.lemmatize("warmup")
+
+        # Load summarizer once
+        try:
+            from summarizer import ExtractiveSummarizer
+            self.summarizer = ExtractiveSummarizer()
+        except Exception as e:
+            print(f"[WARNING] Could not load summarizer: {e}")
+            self.summarizer = None
+            
         print(f'[OK] Emotion Classifier ready | Classes: {len(self.tags)} sub-emotions')
 
     def _preprocess(self, text: str):
@@ -183,14 +198,17 @@ class EmotionClassifier:
         if not sentences:
             sentences = [text]
             
+        valid_sentences = []
         encoded_sentences = []
         for s in sentences:
             tokens = self._tokenize(s)
             if not tokens: continue
             encoded_sentences.append(self._encode(tokens))
+            valid_sentences.append(s)
             
         if not encoded_sentences:
             encoded_sentences = [self._encode(self._tokenize(text))]
+            valid_sentences = [text]
             
         x = torch.tensor(encoded_sentences, dtype=torch.long).to(self.device)
 
@@ -205,16 +223,42 @@ class EmotionClassifier:
             sadness_indices = [i for i, t in enumerate(self.tags) if CORE_MAPPING.get(t.lower(), 'neutral') == 'sadness']
             anger_indices = [i for i, t in enumerate(self.tags) if CORE_MAPPING.get(t.lower(), 'neutral') == 'anger']
             
-            for i, s in enumerate(sentences):
+            for i, s in enumerate(valid_sentences):
                 s_lower = s.lower()
-                tension_words = ['worried', 'wrong', 'imagining', 'panicking', 'fear', 'anxious', 'stress', 'overwhelmed', 'pressure', 'deadlines', 'remaining tasks', 'wonder how', 'how i\'m going to fit', 'work left', 'back of my mind', 'task', 'never enough time', 'endless cycle', 'future', 'falling behind', 'comparing', 'graduation', 'mind']
+                tension_words = ['worried', 'wrong', 'imagining', 'panicking', 'panic', 'fear', 'anxious', 'stress', 'overwhelmed', 'pressure', 'deadlines', 'assignment', 'assignments', 'struggle', 'struggling', 'hard', 'remaining tasks', 'wonder how', 'how i\'m going to fit', 'work left', 'back of my mind', 'on my mind', 'in my mind', 'state of mind', 'never enough time', 'endless cycle', 'future', 'falling behind', 'comparing', 'graduation', 'expectations', 'barely slept', 'barely sleep', 'can\'t sleep', 'cannot sleep', 'unable to sleep', 'keeps replaying', 'brain keeps replaying', 'racing thoughts', 'overthinking', 'can\'t turn my brain off', 'everything slow', 'slow down', 'piling up', 'pile up', 'good enough', 'not enough', 'figured out', 'have it all', 'keep up', 'stay positive', 'try to be positive', 'trying to be positive']
                 has_tension = any(w in s_lower for w in tension_words)
                 
-                sadness_words = ['upset', 'sad', 'lonely', 'miss', 'heartbroken', 'cry', 'crying', 'depressed', 'moving away', 'won\'t be the same', 'disconnected', 'going through the motions', 'same effect anymore', 'numb', 'empty', 'burnout', 'exhausted']
+                sadness_words = [
+                    # Classic sadness
+                    'upset', 'sad', 'lonely', 'miss', 'heartbroken', 'cry', 'crying',
+                    'depressed', 'moving away', "won't be the same", 'disconnected',
+                    'going through the motions', 'same effect anymore', 'numb', 'empty',
+                    'burnout', 'exhausted',
+                    # Self-worth sadness
+                    'not good enough', 'am i good', "whether i'm good",
+                    # Interpersonal hurt / disappointment (missing before)
+                    'hurt me', 'hurt by', 'really hurt', 'it hurt', 'hurts',
+                    'disappointed', 'disappointment', 'let me down', 'let down',
+                    'question everything', 'questioning everything',
+                    'argument', 'conflict', 'fight with', 'falling out',
+                    'i do care', 'honestly i do', 'i care',
+                    'go back to normal', 'things were normal', 'hope things',
+                    'don\'t know if', 'don\'t know how',
+                    'i hate that', 'hate that i',
+                    'wish i could feel', 'wish i was', 'wish i were', 'wish i could be',
+                ]
                 has_sadness = any(w in s_lower for w in sadness_words)
                 
                 # Get VADER compound score for the sentence
                 vader_score = self.sia.polarity_scores(s)["compound"]
+                
+                # Check for resolving/positive context that overrides tension
+                resolving_words = ['done', 'relieved', 'proud', 'hope', 'hanging in there', 'finally']
+                has_resolution = any(w in s_lower for w in resolving_words)
+                
+                # If the sentence is overwhelmingly positive OR has resolving words, ignore tension keywords
+                if vader_score >= 0.6 or has_resolution:
+                    has_tension = False
                 
                 if vader_score > 0.4 and not (has_tension or has_sadness):
                     # Strongly positive AND no tension/sadness keywords: boost joy and calm
@@ -224,9 +268,11 @@ class EmotionClassifier:
                         probs[i, idx] += vader_score * 0.6
                         
                 if vader_score < -0.2:
-                    # Negative sentence: boost negative emotions generally
-                    for idx in anxiety_indices + sadness_indices + anger_indices:
+                    # Negative sentence: boost anxiety and sadness generally, but anger less so
+                    for idx in anxiety_indices + sadness_indices:
                         probs[i, idx] += abs(vader_score) * 0.8
+                    for idx in anger_indices:
+                        probs[i, idx] += abs(vader_score) * 0.3
                         
                 if has_tension:
                     # Explicit tension keywords: boost anxiety strongly
@@ -247,7 +293,9 @@ class EmotionClassifier:
             # Give exponentially more weight to sentences at the end of the text
             num_sentences = probs.size(0)
             if num_sentences > 1:
-                weights = torch.tensor([1.5 ** i for i in range(num_sentences)], dtype=torch.float32, device=self.device).unsqueeze(1)
+                # Use 1.2 (not 1.5) — prevents the final sentence from dominating
+                # when earlier sentences carry the core emotional weight
+                weights = torch.tensor([1.2 ** i for i in range(num_sentences)], dtype=torch.float32, device=self.device).unsqueeze(1)
                 weighted_probs = probs * weights
                 avg_probs = (weighted_probs.sum(dim=0) / weights.sum()).unsqueeze(0)
             else:
@@ -265,24 +313,27 @@ class EmotionClassifier:
             'title': 'Reflection Captured'
         })
         
-        # Format Top 3 predictions
-        emotion_percentages = []
+        # Aggregate probabilities by core emotion from top predictions
+        core_probs = {}
         for i in range(top_probs.size(1)):
             prob = top_probs[0][i].item()
             tag = self.tags[top_indices[0][i].item()]
             mapped_core = CORE_MAPPING.get(tag.lower(), 'neutral')
             
-            # Avoid duplicate core emotions in the top 3
-            if not any(e['emotion'] == mapped_core for e in emotion_percentages):
-                emotion_percentages.append({
-                    'emotion': mapped_core,
-                    'sub_emotion': tag,
-                    'confidence': round(prob * 100, 1)  # percentage
-                })
+            if mapped_core not in core_probs:
+                core_probs[mapped_core] = {'prob': 0.0, 'sub_emotion': tag}
+            core_probs[mapped_core]['prob'] += prob
             
-            # Stop if we have 3 unique core emotions
-            if len(emotion_percentages) == 3:
-                break
+        # Sort by aggregated probability
+        sorted_cores = sorted(core_probs.items(), key=lambda x: x[1]['prob'], reverse=True)
+        
+        emotion_percentages = []
+        for core, data in sorted_cores[:3]:
+            emotion_percentages.append({
+                'emotion': core,
+                'sub_emotion': data['sub_emotion'],
+                'confidence': round(data['prob'] * 100, 1)
+            })
         
         # Ensure we always have at least 1, even if all mapped to same core
         if not emotion_percentages:
@@ -291,15 +342,23 @@ class EmotionClassifier:
                  'sub_emotion': sub_emotion,
                  'confidence': round(primary_prob * 100, 1)
              })
+             
+        # Update the top-level emotion fields to use the properly aggregated highest emotion
+        core_emotion = emotion_percentages[0]['emotion']
+        sub_emotion = emotion_percentages[0]['sub_emotion']
+        primary_prob = emotion_percentages[0]['confidence'] / 100.0
 
         # Hybrid Summarization & Keywords
         keywords = []
         smart_title = meta['title']
         try:
-            from summarizer import ExtractiveSummarizer
-            summarizer = ExtractiveSummarizer()
-            ext_summary = summarizer.summarize(text, top_n=4)
-            keywords = summarizer.extract_keywords(text, top_n=5)
+            if self.summarizer:
+                ext_summary = self.summarizer.summarize(text, top_n=4)
+                keywords = self.summarizer.extract_keywords(text, top_n=5)
+            else:
+                ext_summary = ""
+                keywords = []
+                
             
             secondary_core = emotion_percentages[1]['emotion'] if len(emotion_percentages) > 1 else None
             

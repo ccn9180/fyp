@@ -127,7 +127,7 @@ class _SessionHistoryScreenState extends State<SessionHistoryScreen> {
               stream: FirebaseFirestore.instance
                   .collection('counsellor_bookings')
                   .where('counsellorId', isEqualTo: FirebaseAuth.instance.currentUser?.uid)
-                  .where('status', isEqualTo: 'completed')
+                  .where('status', whereIn: ['completed', 'missed', 'cancelled', 'COMPLETED', 'MISSED', 'CANCELLED'])
                   .snapshots(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
@@ -149,8 +149,8 @@ class _SessionHistoryScreenState extends State<SessionHistoryScreen> {
                     'dateTime': startTime,
                     'timeRange': data['timeRange'] ?? DateFormat('hh:mm a').format(startTime),
                     'type': data['type'] ?? 'Session',
-                    'status': data['status'] ?? 'Completed',
-                    'notes': data['notes'],
+                    'status': data['status']?.toString().toLowerCase() ?? 'completed',
+                    'notes': data['notes'] ?? data['sessionSummary'] ?? data['missedReason'] ?? data['reason'] ?? data['cancelReason'],
                     'feedback': data['feedback'],
                   };
                 }).where((item) {
@@ -506,12 +506,16 @@ class _SessionHistoryScreenState extends State<SessionHistoryScreen> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                       decoration: BoxDecoration(
-                        color: Colors.grey[100],
+                        color: item['status'] == 'completed' ? const Color(0xFFDCFCE7) : const Color(0xFFFEE2E2),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
                         item['status'].toString().toUpperCase(),
-                        style: GoogleFonts.outfit(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey),
+                        style: GoogleFonts.outfit(
+                          fontSize: 10, 
+                          fontWeight: FontWeight.bold, 
+                          color: item['status'] == 'completed' ? const Color(0xFF166534) : Colors.redAccent
+                        ),
                       ),
                     ),
                   ],
@@ -562,13 +566,13 @@ class _SessionHistoryScreenState extends State<SessionHistoryScreen> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => Container(
-        height: MediaQuery.of(context).size.height * 0.85,
         decoration: const BoxDecoration(
           color: Color(0xFFF2F1EC),
           borderRadius: BorderRadius.vertical(top: Radius.circular(36)),
         ),
         child: SingleChildScrollView(
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
               const SizedBox(height: 12),
               Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2))),
@@ -602,10 +606,14 @@ class _SessionHistoryScreenState extends State<SessionHistoryScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildSectionTitle('SESSION SUMMARY'),
+                    _buildSectionTitle(
+                      item['status'] == 'completed' ? 'SESSION SUMMARY' : 
+                      item['status'] == 'missed' ? 'REASON FOR MISSED SESSION' : 
+                      'REASON FOR CANCELLATION'
+                    ),
                     const SizedBox(height: 16),
                     Text(
-                      item['notes'] ?? 'No notes recorded for this session.',
+                      item['notes'] ?? (item['status'] == 'completed' ? 'No notes recorded for this session.' : 'No reason provided.'),
                       style: GoogleFonts.outfit(fontSize: 14, color: textColorMain, height: 1.6),
                     ),
                     const SizedBox(height: 24),
@@ -618,10 +626,9 @@ class _SessionHistoryScreenState extends State<SessionHistoryScreen> {
                 ),
               ),
 
-              const SizedBox(height: 20),
-
               // Feedback Section
-              if (item['feedback'] != null)
+              if (item['feedback'] != null) ...[
+                const SizedBox(height: 20),
                 Container(
                   width: double.infinity,
                   margin: const EdgeInsets.symmetric(horizontal: 24),
@@ -671,17 +678,9 @@ class _SessionHistoryScreenState extends State<SessionHistoryScreen> {
                       ),
                     ],
                   ),
-                )
-              else 
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 20),
-                  child: Text(
-                    'No feedback shared for this session yet.',
-                    style: GoogleFonts.outfit(fontSize: 12, color: textColorSub, fontStyle: FontStyle.italic),
-                  ),
                 ),
-
-              const SizedBox(height: 48),
+              ],
+              const SizedBox(height: 24),
             ],
           ),
         ),

@@ -1,11 +1,20 @@
 import 'dart:convert';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'add_diary.dart';
 import 'package:fyp/services/friends_service.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:path_provider/path_provider.dart';
+import 'dart:io';
 
 class DiaryDetailScreen extends StatefulWidget {
   final String docId;
@@ -27,6 +36,8 @@ class DiaryDetailScreen extends StatefulWidget {
 
 class _DiaryDetailScreenState extends State<DiaryDetailScreen> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  final GlobalKey _exportKey = GlobalKey(); // for image capture
+  bool _isExporting = false;
   Map<String, bool> _sharingStates = {};
   List<FriendProfile> _friendsList = [];
   bool _isLoadingFriends = true;
@@ -316,10 +327,18 @@ class _DiaryDetailScreenState extends State<DiaryDetailScreen> {
         ),
         centerTitle: true,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.ios_share_rounded, color: Color(0xFF7C9C84), size: 22),
-            onPressed: () => _showExportSheet(context),
-          ),
+          _isExporting
+              ? const Padding(
+                  padding: EdgeInsets.only(right: 16),
+                  child: SizedBox(
+                    width: 20, height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF7C9C84)),
+                  ),
+                )
+              : IconButton(
+                  icon: const Icon(Icons.ios_share_rounded, color: Color(0xFF7C9C84), size: 22),
+                  onPressed: () => _showExportSheet(context, data),
+                ),
           if (!widget.isInnerCircle)
             IconButton(
               icon: const Icon(Icons.delete_outline_rounded, color: Color(0xFFE57373), size: 24),
@@ -572,6 +591,7 @@ class _DiaryDetailScreenState extends State<DiaryDetailScreen> {
 
             // Shared With Section (Only for owner)
             if (activeSharedFriends.isNotEmpty && !widget.isInnerCircle) ...[
+              const SizedBox(height: 32),
               Text(
                 'SHARED WITH',
                 style: GoogleFonts.outfit(
@@ -979,7 +999,7 @@ class _DiaryDetailScreenState extends State<DiaryDetailScreen> {
                   width: double.infinity,
                   height: 56,
                   child: ElevatedButton(
-                    onPressed: () async {
+                    onPressed: _sharingStates.values.any((v) => v) ? () async {
                       final user = FirebaseAuth.instance.currentUser;
                       if (user != null) {
                         await FirebaseFirestore.instance
@@ -1002,9 +1022,11 @@ class _DiaryDetailScreenState extends State<DiaryDetailScreen> {
                         );
                       }
                       setState(() {});
-                    },
+                    } : null,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF7C9C84),
+                      disabledBackgroundColor: Colors.grey[300],
+                      disabledForegroundColor: Colors.grey[500],
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                       elevation: 0,
                     ),
@@ -1265,11 +1287,11 @@ class _DiaryDetailScreenState extends State<DiaryDetailScreen> {
   }
 
 
-  void _showExportSheet(BuildContext context) {
+  void _showExportSheet(BuildContext context, Map<String, dynamic> data) {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (context) => Container(
+      builder: (ctx) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
         decoration: const BoxDecoration(
           color: Colors.white,
@@ -1279,43 +1301,50 @@ class _DiaryDetailScreenState extends State<DiaryDetailScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.grey[200],
-                borderRadius: BorderRadius.circular(2),
-              ),
+              width: 40, height: 4,
+              decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(2)),
             ),
             const SizedBox(height: 32),
             Text(
               'EXPORT REFLECTION',
               style: GoogleFonts.outfit(
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 2.0,
-                color: const Color(0xFFB0B0B0),
+                fontSize: 12, fontWeight: FontWeight.bold,
+                letterSpacing: 2.0, color: const Color(0xFFB0B0B0),
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 8),
+            Text(
+              'Save or share this diary entry',
+              style: GoogleFonts.outfit(fontSize: 13, color: Colors.grey[500]),
+            ),
+            const SizedBox(height: 28),
             Row(
               children: [
                 Expanded(
                   child: _buildExportOption(
-                    context,
+                    ctx,
                     Icons.picture_as_pdf_rounded,
                     'Export PDF',
-                    'Create a high-quality document',
+                    'Styled document with full entry',
                     const Color(0xFF7C9C84),
+                    () async {
+                      Navigator.pop(ctx);
+                      await _exportAsPdf(data);
+                    },
                   ),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
                   child: _buildExportOption(
-                    context,
+                    ctx,
                     Icons.image_rounded,
                     'Save Photo',
-                    'Save as a beautiful image',
+                    'Share as a beautiful image',
                     const Color(0xFF94A9B0),
+                    () async {
+                      Navigator.pop(ctx);
+                      await _exportAsImage(data);
+                    },
                   ),
                 ),
               ],
@@ -1327,49 +1356,347 @@ class _DiaryDetailScreenState extends State<DiaryDetailScreen> {
     );
   }
 
-  Widget _buildExportOption(BuildContext context, IconData icon, String title, String subtitle, Color color) {
+  Widget _buildExportOption(BuildContext context, IconData icon, String title,
+      String subtitle, Color color, VoidCallback onTap) {
     return InkWell(
-      onTap: () {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Preparing $title...'),
-            backgroundColor: color,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      },
+      onTap: onTap,
       borderRadius: BorderRadius.circular(24),
       child: Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
           color: color.withOpacity(0.08),
           borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: color.withOpacity(0.1)),
+          border: Border.all(color: color.withOpacity(0.15)),
         ),
         child: Column(
           children: [
             Icon(icon, color: color, size: 32),
             const SizedBox(height: 12),
-            Text(
-              title,
-              style: GoogleFonts.outfit(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: color,
+            Text(title, style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.bold, color: color)),
+            const SizedBox(height: 4),
+            Text(subtitle, textAlign: TextAlign.center,
+                style: GoogleFonts.outfit(fontSize: 10, color: color.withOpacity(0.6))),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── PDF Export ────────────────────────────────────────────────
+  Future<void> _exportAsPdf(Map<String, dynamic> data) async {
+    if (_isExporting) return;
+    setState(() => _isExporting = true);
+
+    try {
+      final String title    = data['title'] ?? 'My Reflection';
+      final String body     = data['content'] ?? '';
+      final String emotion  = data['mood'] ?? '';
+      final String summary  = data['summary'] ?? '';
+      final List<dynamic> keywords = data['keywords'] ?? [];
+      final Timestamp? ts  = data['timestamp'] as Timestamp?;
+      final String dateStr = ts != null
+          ? DateFormat('MMMM d, yyyy  •  h:mm a').format(ts.toDate())
+          : '';
+
+      final doc = pw.Document();
+
+      doc.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.symmetric(horizontal: 48, vertical: 56),
+          build: (pw.Context ctx) => [
+            // ── Header ──
+            pw.Container(
+              padding: const pw.EdgeInsets.only(bottom: 20),
+              decoration: const pw.BoxDecoration(
+                border: pw.Border(bottom: pw.BorderSide(color: PdfColor.fromInt(0xFF7C9C84), width: 1.5)),
+              ),
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text(
+                    'Eunoia · Personal Reflection',
+                    style: pw.TextStyle(fontSize: 9, color: PdfColor.fromInt(0xFF7C9C84), letterSpacing: 1.5),
+                  ),
+                  pw.SizedBox(height: 10),
+                  pw.Text(
+                    title,
+                    style: pw.TextStyle(fontSize: 26, fontWeight: pw.FontWeight.bold, color: PdfColor.fromInt(0xFF222222)),
+                  ),
+                  pw.SizedBox(height: 6),
+                  pw.Text(
+                    dateStr,
+                    style: pw.TextStyle(fontSize: 10, color: PdfColor.fromInt(0xFF888888)),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 4),
-            Text(
-              subtitle,
-              textAlign: TextAlign.center,
-              style: GoogleFonts.outfit(
-                fontSize: 10,
-                color: color.withOpacity(0.6),
+
+            pw.SizedBox(height: 24),
+
+            // ── Emotion chip ──
+            if (emotion.isNotEmpty) ...[
+              pw.Container(
+                padding: const pw.EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                decoration: pw.BoxDecoration(
+                  color: PdfColor.fromInt(0xFFEAF0EC),
+                  borderRadius: const pw.BorderRadius.all(pw.Radius.circular(20)),
+                ),
+                child: pw.Text(
+                  '${_emotionEmoji(emotion)}  ${emotion[0].toUpperCase()}${emotion.substring(1)}',
+                  style: pw.TextStyle(fontSize: 11, color: PdfColor.fromInt(0xFF4A7A5A), fontWeight: pw.FontWeight.bold),
+                ),
               ),
+              pw.SizedBox(height: 20),
+            ],
+
+            // ── Body ──
+            pw.Text(
+              body,
+              style: pw.TextStyle(fontSize: 13, color: PdfColor.fromInt(0xFF333333), lineSpacing: 6),
+            ),
+
+            pw.SizedBox(height: 28),
+
+            // ── AI Summary ──
+            if (summary.isNotEmpty) ...[
+              pw.Container(
+                padding: const pw.EdgeInsets.all(16),
+                decoration: pw.BoxDecoration(
+                  color: PdfColor.fromInt(0xFFF5F7F5),
+                  borderRadius: const pw.BorderRadius.all(pw.Radius.circular(12)),
+                  border: pw.Border.all(color: PdfColor.fromInt(0xFFD4E0D6)),
+                ),
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text('AI Insight',
+                        style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold,
+                            color: PdfColor.fromInt(0xFF7C9C84), letterSpacing: 1.2)),
+                    pw.SizedBox(height: 8),
+                    pw.Text(summary,
+                        style: pw.TextStyle(fontSize: 12, color: PdfColor.fromInt(0xFF555555), lineSpacing: 4)),
+                  ],
+                ),
+              ),
+              pw.SizedBox(height: 20),
+            ],
+
+            // ── Keywords ──
+            if (keywords.isNotEmpty) ...[
+              pw.Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                children: keywords.map((k) => pw.Container(
+                  padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: pw.BoxDecoration(
+                    border: pw.Border.all(color: PdfColor.fromInt(0xFF7C9C84)),
+                    borderRadius: const pw.BorderRadius.all(pw.Radius.circular(14)),
+                  ),
+                  child: pw.Text('#$k',
+                      style: pw.TextStyle(fontSize: 10, color: PdfColor.fromInt(0xFF7C9C84))),
+                )).toList(),
+              ),
+              pw.SizedBox(height: 20),
+            ],
+
+            // ── Footer ──
+            pw.Divider(color: PdfColor.fromInt(0xFFEEEEEE)),
+            pw.SizedBox(height: 8),
+            pw.Text(
+              'Exported from Eunoia · Your personal wellness journal',
+              style: pw.TextStyle(fontSize: 8, color: PdfColor.fromInt(0xFFAAAAAA)),
             ),
           ],
         ),
+      );
+
+      final Uint8List bytes = await doc.save();
+      await Printing.sharePdf(bytes: bytes, filename: '${title.replaceAll(' ', '_')}_diary.pdf');
+    } catch (e) {
+      debugPrint('PDF export error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Export failed: $e'), backgroundColor: Colors.redAccent),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isExporting = false);
+    }
+  }
+
+  String _emotionEmoji(String emotion) {
+    switch (emotion.toLowerCase()) {
+      case 'joy':       return '😊';
+      case 'calm':      return '😌';
+      case 'sadness':   return '😢';
+      case 'anxiety':   return '😰';
+      case 'anger':     return '😠';
+      case 'hopeful':   return '🌟';
+      case 'overwhelmed': return '😵';
+      default:          return '📖';
+    }
+  }
+
+  // ── Image Export ──────────────────────────────────────────────
+  Future<void> _exportAsImage(Map<String, dynamic> data) async {
+    if (_isExporting) return;
+    setState(() => _isExporting = true);
+
+    try {
+      final String title   = data['title'] ?? 'My Reflection';
+      final String body    = data['content'] ?? '';
+      final String emotion = data['mood'] ?? '';
+      final String summary = data['summary'] ?? '';
+      final Timestamp? ts  = data['timestamp'] as Timestamp?;
+      final String dateStr = ts != null
+          ? DateFormat('MMMM d, yyyy').format(ts.toDate())
+          : '';
+
+      // Build an offscreen widget, then capture it
+      final imageWidget = RepaintBoundary(
+        key: _exportKey,
+        child: _buildExportCard(title, body, emotion, summary, dateStr),
+      );
+
+      // Insert into a temporary overlay to render it
+      late OverlayEntry entry;
+      entry = OverlayEntry(
+        builder: (_) => Positioned(
+          left: -9999, top: -9999,
+          child: Material(color: Colors.transparent, child: imageWidget),
+        ),
+      );
+      Overlay.of(context).insert(entry);
+
+      // Wait for rendering
+      await Future.delayed(const Duration(milliseconds: 300));
+
+      final RenderRepaintBoundary boundary =
+          _exportKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
+      final ui.Image img = await boundary.toImage(pixelRatio: 3.0);
+      final ByteData? byteData = await img.toByteData(format: ui.ImageByteFormat.png);
+      entry.remove();
+
+      if (byteData == null) throw Exception('Failed to render image');
+
+      final Uint8List pngBytes = byteData.buffer.asUint8List();
+
+      // Save to temp file and share
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/${title.replaceAll(' ', '_')}_diary.png');
+      await file.writeAsBytes(pngBytes);
+
+      await Share.shareXFiles(
+        [XFile(file.path, mimeType: 'image/png')],
+        text: 'My diary reflection: $title',
+      );
+    } catch (e) {
+      debugPrint('Image export error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Export failed: $e'), backgroundColor: Colors.redAccent),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isExporting = false);
+    }
+  }
+
+  Widget _buildExportCard(String title, String body, String emotion,
+      String summary, String dateStr) {
+    final Color primary = const Color(0xFF7C9C84);
+    final Color bg      = const Color(0xFFF2F1EC);
+
+    return Container(
+      width: 400,
+      color: bg,
+      padding: const EdgeInsets.all(32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Brand header
+          Row(
+            children: [
+              Container(
+                width: 32, height: 32,
+                decoration: BoxDecoration(
+                  color: primary,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.eco_rounded, color: Colors.white, size: 18),
+              ),
+              const SizedBox(width: 10),
+              Text('Eunoia', style: GoogleFonts.playfairDisplay(
+                fontSize: 16, fontWeight: FontWeight.bold, color: primary)),
+              const Spacer(),
+              Text(dateStr, style: GoogleFonts.outfit(
+                fontSize: 10, color: Colors.grey[500])),
+            ],
+          ),
+          const SizedBox(height: 24),
+          // Emotion
+          if (emotion.isNotEmpty)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+              decoration: BoxDecoration(
+                color: primary.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                '${_emotionEmoji(emotion)}  ${emotion[0].toUpperCase()}${emotion.substring(1)}',
+                style: GoogleFonts.outfit(
+                  fontSize: 11, fontWeight: FontWeight.bold, color: primary),
+              ),
+            ),
+          const SizedBox(height: 16),
+          // Title
+          Text(title, style: GoogleFonts.playfairDisplay(
+            fontSize: 22, fontWeight: FontWeight.bold, color: const Color(0xFF222222))),
+          const SizedBox(height: 16),
+          // Divider
+          Container(height: 1, color: primary.withOpacity(0.2)),
+          const SizedBox(height: 16),
+          // Body (max 300 chars to fit card)
+          Text(
+            body.length > 320 ? '${body.substring(0, 317)}...' : body,
+            style: GoogleFonts.outfit(
+              fontSize: 13, color: const Color(0xFF444444), height: 1.6),
+          ),
+          if (summary.isNotEmpty) ...[
+            const SizedBox(height: 20),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: primary.withOpacity(0.2)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('AI Insight', style: GoogleFonts.outfit(
+                    fontSize: 9, fontWeight: FontWeight.bold,
+                    color: primary, letterSpacing: 1.2)),
+                  const SizedBox(height: 6),
+                  Text(
+                    summary.length > 180 ? '${summary.substring(0, 177)}...' : summary,
+                    style: GoogleFonts.outfit(fontSize: 11, color: Colors.grey[600], height: 1.5),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 24),
+          // Footer
+          Center(
+            child: Text(
+              '✨ Exported from Eunoia Wellness Journal',
+              style: GoogleFonts.outfit(fontSize: 9, color: Colors.grey[400]),
+            ),
+          ),
+        ],
       ),
     );
   }

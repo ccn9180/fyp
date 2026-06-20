@@ -5,6 +5,8 @@ class BackendConfig {
   static String? _cachedBaseUrl;
 
   static final List<String> _baseUrlsToTry = [
+    'http://192.168.68.103:5000', // Host PC's new active Wi-Fi IP
+    'http://192.168.68.100:5000', // Host PC's current local Wi-Fi IP
     'http://192.168.0.108:5000',  // Host PC's new local Wi-Fi IP
     'http://192.168.101.97:5000', // Host PC's current local Wi-Fi IP
     'http://172.20.10.3:5000',    // Host PC's old local IP

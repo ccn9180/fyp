@@ -24,7 +24,7 @@ const CustomSelect = ({ value, options, onChange }) => {
         style={{ 
           width: '100%', padding: '10px 14px', borderRadius: '10px',
           border: isOpen ? '1px solid var(--primary-color)' : '1px solid var(--border-color)',
-          backgroundColor: isOpen ? 'var(--bg-card)' : 'var(--bg-secondary)',
+          backgroundColor: isOpen ? 'var(--bg-card)' : '#F4F8F5',
           fontFamily: 'var(--font-main)', fontSize: '13.5px', color: 'var(--text-darker)',
           cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
           boxShadow: isOpen ? '0 0 0 3px rgba(124, 156, 132, 0.08)' : 'none',
@@ -508,7 +508,7 @@ export default function Availability() {
             {loading ? (
               <div style={{ padding: '20px 0', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>Loading availability…</div>
             ) : slotsForSelectedDate.length === 0 ? (
-              <div style={{ padding: '30px 20px', textAlign: 'center', border: '1px dashed var(--border-color)', borderRadius: '16px', backgroundColor: 'var(--bg-secondary)' }}>
+              <div style={{ padding: '30px 20px', textAlign: 'center', border: '1px dashed var(--border-color)', borderRadius: '16px', backgroundColor: '#F4F8F5' }}>
                 <Clock size={28} style={{ color: 'var(--text-muted)', marginBottom: '8px', opacity: 0.5 }} />
                 <p style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-darker)' }}>No slots set for this date</p>
               </div>

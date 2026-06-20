@@ -1,8 +1,62 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:fyp/services/fcm_service.dart';
 
 class GamificationService {
+  static IconData getIconData(String? iconName) {
+    switch (iconName?.toLowerCase()) {
+      case 'directions_walk':
+      case 'directions_walk_rounded':
+        return Icons.directions_walk_rounded;
+      case 'calendar_month':
+      case 'calendar_month_rounded':
+        return Icons.calendar_month_rounded;
+      case 'hearing':
+      case 'hearing_rounded':
+        return Icons.hearing_rounded;
+      case 'wb_sunny':
+      case 'wb_sunny_rounded':
+        return Icons.wb_sunny_rounded;
+      case 'auto_awesome':
+      case 'auto_awesome_rounded':
+        return Icons.auto_awesome_rounded;
+      case 'self_improvement':
+      case 'self_improvement_rounded':
+      case '🧘':
+      case 'meditation':
+        return Icons.self_improvement_rounded;
+      case 'people_alt':
+      case 'people_alt_rounded':
+        return Icons.people_alt_rounded;
+      case 'local_fire_department':
+      case 'local_fire_department_rounded':
+      case '🔥':
+      case 'streak':
+        return Icons.local_fire_department_rounded;
+      case 'psychology':
+      case 'psychology_rounded':
+        return Icons.psychology_rounded;
+      case 'article':
+      case 'article_rounded':
+      case '📖':
+        return Icons.article_rounded;
+      case 'book':
+      case 'book_rounded':
+      case '📓':
+      case 'diary':
+        return Icons.menu_book_rounded;
+      case '💬':
+      case 'chat':
+        return Icons.chat_bubble_rounded;
+      case '🌸':
+      case 'explore':
+        return Icons.explore_rounded;
+      default:
+        return Icons.stars_rounded;
+    }
+  }
   static final FirebaseFirestore _db = FirebaseFirestore.instance;
   static final FirebaseAuth _auth = FirebaseAuth.instance;
 
@@ -287,7 +341,7 @@ class GamificationService {
   // ─────────────────────────────────────────────────────────────
   // CHECK + UNLOCK BADGES
   // ─────────────────────────────────────────────────────────────
-  static Future<List<String>> checkAndUnlockBadges(String uid) async {
+  static Future<List<Map<String, dynamic>>> checkAndUnlockBadges(String uid) async {
     final userRef  = _db.collection('users').doc(uid);
     final userSnap = await userRef.get();
     if (!userSnap.exists) return [];
@@ -307,7 +361,7 @@ class GamificationService {
     lifetimeXP += currentXP;
 
     final badgesSnap = await _db.collection('badges').get();
-    final newlyUnlocked = <String>[];
+    final List<Map<String, dynamic>> newlyUnlocked = [];
 
     for (final doc in badgesSnap.docs) {
       final badge = doc.data();
@@ -336,18 +390,38 @@ class GamificationService {
           final taskId = badge['condition_task_id'] as String? ?? '';
           unlocked = await _hasCompletedTask(uid, taskId);
           break;
+        case 'diary_count':
+          unlocked = await _countDiaryEntries(uid) >= condValue;
+          break;
+        case 'chat_count':
+          unlocked = await _countChatSessions(uid) >= condValue;
+          break;
+        case 'meditation_count':
+          unlocked = await _countMeditationSessions(uid) >= condValue;
+          break;
+        case 'article_count':
+          unlocked = await _countArticlesRead(uid) >= condValue;
+          break;
+        case 'features_used':
+          unlocked = await _hasUsedAllFeatures(uid);
+          break;
       }
 
       if (unlocked) {
         earned.add(badgeId);
-        newlyUnlocked.add(badgeId);
+        final unlockedBadge = Map<String, dynamic>.from(badge);
+        unlockedBadge['id'] = badgeId;
+        newlyUnlocked.add(unlockedBadge);
+        
+        // Trigger local notification
+        FCMService.showBadgeNotification(badge['name']!, badge['tier']!);
       }
     }
 
     if (newlyUnlocked.isNotEmpty) {
       final updates = <String, dynamic>{'badges': earned};
       for (final b in newlyUnlocked) {
-        updates['badge_unlock_times.$b'] = FieldValue.serverTimestamp();
+        updates['badge_unlock_times.${b['id']}'] = FieldValue.serverTimestamp();
       }
       await userRef.update(updates);
     }
@@ -382,6 +456,82 @@ class GamificationService {
         .limit(1)
         .get();
     return snap.docs.isNotEmpty;
+  }
+
+  static Future<int> _countDiaryEntries(String uid) async {
+    final snap = await _db
+        .collection('users')
+        .doc(uid)
+        .collection('diary_entries')
+        .count()
+        .get();
+    return snap.count ?? 0;
+  }
+
+  /// Counts saved chat sessions for the user
+  static Future<int> _countChatSessions(String uid) async {
+    final snap = await _db
+        .collection('chat_sessions')
+        .where('userId', isEqualTo: uid)
+        .count()
+        .get();
+    return snap.count ?? 0;
+  }
+
+  /// Counts meditation sessions completed (user_activity docs with type='meditation')
+  static Future<int> _countMeditationSessions(String uid) async {
+    final snap = await _db
+        .collection('user_activity')
+        .where('userId', isEqualTo: uid)
+        .where('type', isEqualTo: 'meditation')
+        .count()
+        .get();
+    return snap.count ?? 0;
+  }
+
+  /// Counts articles read with >80% progress (user_activity docs with type='article')
+  static Future<int> _countArticlesRead(String uid) async {
+    final snap = await _db
+        .collection('user_activity')
+        .where('userId', isEqualTo: uid)
+        .where('type', isEqualTo: 'article')
+        .get();
+    return snap.docs.where((d) => (d.data()['progress'] ?? 0) > 80).length;
+  }
+
+  /// Explorer badge: user has tried every core feature at least once
+  static Future<bool> _hasUsedAllFeatures(String uid) async {
+    // 1. Has at least 1 diary entry
+    final diaryCount = await _countDiaryEntries(uid);
+    if (diaryCount == 0) return false;
+
+    // 2. Has at least 1 chat session
+    final chatCount = await _countChatSessions(uid);
+    if (chatCount == 0) return false;
+
+    // 3. Has at least 1 meditation session
+    final meditationCount = await _countMeditationSessions(uid);
+    if (meditationCount == 0) return false;
+
+    // 4. Has at least 1 article read (any progress)
+    final activitySnap = await _db
+        .collection('user_activity')
+        .where('userId', isEqualTo: uid)
+        .where('type', isEqualTo: 'article')
+        .limit(1)
+        .get();
+    if (activitySnap.docs.isEmpty) return false;
+
+    // 5. Has at least 1 mood check-in
+    final moodSnap = await _db
+        .collection('users')
+        .doc(uid)
+        .collection('mood_checkins')
+        .limit(1)
+        .get();
+    if (moodSnap.docs.isEmpty) return false;
+
+    return true;
   }
 
   // ─────────────────────────────────────────────────────────────

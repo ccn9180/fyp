@@ -79,81 +79,111 @@ class _XPHistoryScreenState extends State<XPHistoryScreen> {
                   ? DateFormat('d MMM yyyy').format(timestamp.toDate())
                   : 'Recent';
 
+              bool showHeader = false;
+              if (index == 0) {
+                showHeader = true;
+              } else {
+                final prevLog = logs[index - 1].data() as Map<String, dynamic>;
+                final Timestamp? prevTimestamp = prevLog['earned_at'] as Timestamp?;
+                final String prevDateStr = prevTimestamp != null
+                    ? DateFormat('d MMM yyyy').format(prevTimestamp.toDate())
+                    : 'Recent';
+                if (dateStr != prevDateStr) {
+                  showHeader = true;
+                }
+              }
+
               // Distinct formatting for reward redemption vs XP earnings
               final bool isRedemption = source == 'reward_redeemed' || coins < 0;
 
-              return Container(
-                margin: const EdgeInsets.only(bottom: 12),
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.grey.withOpacity(0.05)),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: isRedemption 
-                            ? Colors.orange.withOpacity(0.08)
-                            : Colors.blue.withOpacity(0.08),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        isRedemption ? Icons.shopping_bag_rounded : Icons.bolt_rounded,
-                        color: isRedemption ? Colors.orange : Colors.blue,
-                        size: 20,
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (showHeader) ...[
+                    if (index > 0) const SizedBox(height: 16),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 4, bottom: 12),
+                      child: Text(
+                        dateStr.toUpperCase(),
+                        style: GoogleFonts.outfit(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1.5,
+                          color: Colors.grey[500],
+                        ),
                       ),
                     ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            isRedemption ? 'Redeemed Reward' : source, 
-                            style: GoogleFonts.outfit(
-                              fontWeight: FontWeight.bold, 
-                              fontSize: 14, 
-                              color: const Color(0xFF333333),
-                            ),
-                          ),
-                          Text(
-                            isRedemption ? 'Spent Coins' : 'XP & Coins Earned', 
-                            style: GoogleFonts.outfit(fontSize: 11, color: Colors.grey),
-                          ),
-                        ],
-                      ),
+                  ],
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: Colors.grey.withOpacity(0.05)),
                     ),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
+                    child: Row(
                       children: [
-                        Text(
-                          isRedemption ? '$coins C' : '+$xp XP',
-                          style: GoogleFonts.outfit(
-                            fontWeight: FontWeight.bold, 
-                            fontSize: 14, 
-                            color: isRedemption ? Colors.orange : primaryGreen,
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: isRedemption 
+                                ? Colors.orange.withOpacity(0.08)
+                                : Colors.blue.withOpacity(0.08),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            isRedemption ? Icons.shopping_bag_rounded : Icons.bolt_rounded,
+                            color: isRedemption ? Colors.orange : Colors.blue,
+                            size: 20,
                           ),
                         ),
-                        if (!isRedemption && coins > 0)
-                          Text(
-                            '+$coins C',
-                            style: GoogleFonts.outfit(
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              color: const Color(0xFFB59300),
-                            ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                isRedemption ? 'Redeemed Reward' : source, 
+                                style: GoogleFonts.outfit(
+                                  fontWeight: FontWeight.bold, 
+                                  fontSize: 14, 
+                                  color: const Color(0xFF333333),
+                                ),
+                              ),
+                              Text(
+                                isRedemption ? 'Spent Coins' : 'XP & Coins Earned', 
+                                style: GoogleFonts.outfit(fontSize: 11, color: Colors.grey),
+                              ),
+                            ],
                           ),
-                        Text(
-                          dateStr, 
-                          style: GoogleFonts.outfit(fontSize: 10, color: Colors.grey[400]),
+                        ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              isRedemption ? '$coins C' : '+$xp XP',
+                              style: GoogleFonts.outfit(
+                                fontWeight: FontWeight.bold, 
+                                fontSize: 14, 
+                                color: isRedemption ? Colors.orange : primaryGreen,
+                              ),
+                            ),
+                            if (!isRedemption && coins > 0)
+                              Text(
+                                '+$coins C',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: const Color(0xFFB59300),
+                                ),
+                              ),
+                          ],
                         ),
                       ],
                     ),
-                  ],
-                ),
+                  ),
+                ],
               );
             },
           );

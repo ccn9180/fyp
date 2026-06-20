@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -118,9 +119,17 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
                 ),
                 child: Column(
                   children: [
-                    CircleAvatar(
-                      radius: 56,
-                      backgroundImage: NetworkImage(widget.sessionData['counsellorImageUrl'] ?? 'https://ui-avatars.com/api/?name=Counsellor&background=random'),
+                    Builder(
+                      builder: (context) {
+                        final rawImageUrl = widget.sessionData['counsellorImageUrl']?.toString() ?? '';
+                        final imageUrl = rawImageUrl.isNotEmpty ? rawImageUrl : 'https://ui-avatars.com/api/?name=Counsellor&background=random';
+                        return CircleAvatar(
+                          radius: 56,
+                          backgroundImage: imageUrl.startsWith('data:image')
+                              ? MemoryImage(base64Decode(imageUrl.split(',').last)) as ImageProvider
+                              : NetworkImage(imageUrl),
+                        );
+                      }
                     ),
                     const SizedBox(height: 20),
                     Text(

@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
+import 'package:fyp/services/gamification_service.dart';
 
 class BadgesScreen extends StatefulWidget {
   const BadgesScreen({super.key});
@@ -16,37 +17,14 @@ class _BadgesScreenState extends State<BadgesScreen> {
   final Color backgroundColor = const Color(0xFFF2F1EC);
   final String? uid = FirebaseAuth.instance.currentUser?.uid;
 
-  IconData _getIconData(String? iconName) {
-    switch (iconName?.toLowerCase()) {
-      case 'directions_walk':
-      case 'directions_walk_rounded':
-        return Icons.directions_walk_rounded;
-      case 'calendar_month':
-      case 'calendar_month_rounded':
-        return Icons.calendar_month_rounded;
-      case 'hearing':
-      case 'hearing_rounded':
-        return Icons.hearing_rounded;
-      case 'wb_sunny':
-      case 'wb_sunny_rounded':
-        return Icons.wb_sunny_rounded;
-      case 'auto_awesome':
-      case 'auto_awesome_rounded':
-        return Icons.auto_awesome_rounded;
-      case 'self_improvement':
-      case 'self_improvement_rounded':
-        return Icons.self_improvement_rounded;
-      case 'people_alt':
-      case 'people_alt_rounded':
-        return Icons.people_alt_rounded;
-      case 'local_fire_department':
-      case 'local_fire_department_rounded':
-        return Icons.local_fire_department_rounded;
-      case 'psychology':
-      case 'psychology_rounded':
-        return Icons.psychology_rounded;
-      default:
-        return Icons.stars_rounded;
+  @override
+  void initState() {
+    super.initState();
+    // Retroactively check & unlock any badges the user already qualifies for
+    // (e.g. diary_count badges earned before this feature existed)
+    final currentUid = FirebaseAuth.instance.currentUser?.uid;
+    if (currentUid != null) {
+      GamificationService.checkAndUnlockBadges(currentUid);
     }
   }
 
@@ -153,7 +131,7 @@ class _BadgesScreenState extends State<BadgesScreen> {
         badgeGradient = const LinearGradient(colors: [Color(0xFF90A4AE), Color(0xFF607D8B)], begin: Alignment.topLeft, end: Alignment.bottomRight);
     }
 
-    final iconData = _getIconData(badge['icon']);
+    final iconData = GamificationService.getIconData(badge['icon']);
 
     return GestureDetector(
       onTap: () => _showBadgeDetails(badge, isUnlocked, tierColor, badgeGradient, unlockTimestamp),
@@ -283,7 +261,7 @@ class _BadgesScreenState extends State<BadgesScreen> {
               ),
               child: Center(
                 child: Icon(
-                  _getIconData(badge['icon']),
+                  GamificationService.getIconData(badge['icon']),
                   color: isUnlocked ? Colors.white : Colors.grey[400],
                   size: 56,
                 ),

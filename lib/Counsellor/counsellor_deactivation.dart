@@ -19,7 +19,7 @@ class _CounsellorDeactivationScreenState extends State<CounsellorDeactivationScr
   final List<String> _commonReasons = [
     'Career Change',
     'Personal / Health Reasons',
-    'Retirement',
+    'Taking a Break',
     'Moving to Private Practice',
     'Temporary Break',
     'Other',
@@ -42,7 +42,92 @@ class _CounsellorDeactivationScreenState extends State<CounsellorDeactivationScr
 
   bool get _isFormValid => _selectedReason != null && _detailsController.text.trim().isNotEmpty;
 
-  void _confirmSubmission() {
+  Future<void> _confirmSubmission() async {
+    setState(() => _isSubmitting = true);
+    final user = FirebaseAuth.instance.currentUser;
+    
+    if (user != null) {
+      try {
+        final activeBookingsSnap = await FirebaseFirestore.instance
+            .collection('counsellor_bookings')
+            .where('counsellorId', isEqualTo: user.uid)
+            .where('status', whereIn: ['approved', 'pending', 'rescheduled', 'upcoming', 'APPROVED', 'PENDING', 'RESCHEDULED', 'UPCOMING'])
+            .get();
+            
+        bool hasActiveBookings = false;
+        for (var doc in activeBookingsSnap.docs) {
+          final data = doc.data();
+          if (data['startTime'] != null) {
+            final startTime = (data['startTime'] as Timestamp).toDate();
+            if (startTime.isAfter(DateTime.now())) {
+              hasActiveBookings = true;
+              break;
+            }
+          } else {
+            hasActiveBookings = true;
+            break;
+          }
+        }
+
+        if (hasActiveBookings) {
+          if (mounted) {
+            showDialog(
+              context: context,
+              builder: (context) => AlertDialog(
+                backgroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(32)),
+                contentPadding: const EdgeInsets.all(32),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFFFF5F5),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.block_rounded, color: Color(0xFFD32F2F), size: 48),
+                    ),
+                    const SizedBox(height: 24),
+                    Text('Action Blocked', textAlign: TextAlign.center, style: GoogleFonts.playfairDisplay(fontSize: 24, fontWeight: FontWeight.bold, color: const Color(0xFF333333))),
+                    const SizedBox(height: 16),
+                    Text(
+                      'You currently have upcoming or pending bookings with clients. Please complete or cancel all active bookings before retiring your profile.',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.outfit(color: Colors.grey[600], height: 1.5),
+                    ),
+                    const SizedBox(height: 32),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.pop(context),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF333333),
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                        ),
+                        child: Text('OK', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
+          setState(() => _isSubmitting = false);
+          return;
+        }
+      } catch (e) {
+        // Continue to confirm if check fails
+      }
+    }
+    
+    setState(() => _isSubmitting = false);
+
+    if (!mounted) return;
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -64,7 +149,7 @@ class _CounsellorDeactivationScreenState extends State<CounsellorDeactivationScr
             Text('Confirm Submission', textAlign: TextAlign.center, style: GoogleFonts.playfairDisplay(fontSize: 24, fontWeight: FontWeight.bold, color: const Color(0xFF333333))),
             const SizedBox(height: 16),
             Text(
-              'Are you sure you want to submit your retirement request? This action cannot be undone.',
+              'Are you sure you want to deactivate your profile? Your data is kept safe, and you can simply log back in to reactivate it.',
               textAlign: TextAlign.center,
               style: GoogleFonts.outfit(color: Colors.grey[600], height: 1.5),
             ),
@@ -212,7 +297,7 @@ class _CounsellorDeactivationScreenState extends State<CounsellorDeactivationScr
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          'RETIRE PROFILE',
+          'DEACTIVATE PROFILE',
           style: GoogleFonts.outfit(
             fontSize: 14,
             fontWeight: FontWeight.bold,
@@ -257,7 +342,7 @@ class _CounsellorDeactivationScreenState extends State<CounsellorDeactivationScr
                Text('Take a Step Back', style: GoogleFonts.playfairDisplay(fontSize: 22, fontWeight: FontWeight.bold, color: textColorMain)),
                const SizedBox(height: 12),
                Text(
-                 'Retiring your counsellor profile is a permanent action. We deeply appreciate your service. This request will be respectfully reviewed by the Eunoia Sage board.',
+                 'Deactivating your counsellor profile is a temporary action. Your profile will be hidden from the directory, but your data is kept safe. You can log back in and reactivate your profile whenever you are ready to resume.',
                  textAlign: TextAlign.center,
                  style: GoogleFonts.outfit(fontSize: 14, color: Colors.grey[600], height: 1.5),
                ),
@@ -341,7 +426,7 @@ class _CounsellorDeactivationScreenState extends State<CounsellorDeactivationScr
             ),
             child: _isSubmitting
                 ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                : Text('Submit Retirement Request', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 16)),
+                : Text('Submit Deactivation Request', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 16)),
           ),
         ),
         const SizedBox(height: 40),

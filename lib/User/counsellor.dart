@@ -246,8 +246,8 @@ class _CounsellorScreenState extends State<CounsellorScreen> {
                                 final data = doc.data() as Map<String, dynamic>;
                                 final rawStartTime = data['startTime'];
                                 final startTime = (rawStartTime is Timestamp) ? rawStartTime.toDate() : null;
-                                final status = data['status'] ?? '';
-                                return startTime != null && startTime.isAfter(now) && status != 'cancelled';
+                                final statusLower = (data['status'] ?? '').toString().toLowerCase();
+                                return startTime != null && statusLower != 'cancelled' && statusLower != 'completed' && statusLower != 'missed' && statusLower != 'rejected';
                               }).toList();
   
                               if (upcomingDocs.isNotEmpty) {
@@ -412,14 +412,10 @@ class _CounsellorScreenState extends State<CounsellorScreen> {
                                       final startTime = (data['startTime'] as Timestamp?)?.toDate();
                                       final statusRaw = (data['status'] ?? '').toString().toLowerCase();
                                       
-                                      if (statusRaw != 'cancelled' && (statusRaw == 'completed' || statusRaw == 'missed' || (startTime != null && startTime.isBefore(DateTime.now())))) {
+                                      if (statusRaw != 'cancelled' && (statusRaw == 'completed' || statusRaw == 'missed' || statusRaw == 'rejected')) {
                                         
                                         String derivedStatus = statusRaw;
-                                        if (statusRaw != 'completed' && statusRaw != 'missed') {
-                                           // If it just passed the time but wasn't updated in DB
-                                           derivedStatus = 'missed';
-                                        }
-  
+
                                         pastSessions.add({
                                           ...data,
                                           'id': doc.id, 
@@ -676,14 +672,32 @@ class _CounsellorScreenState extends State<CounsellorScreen> {
                       color: Colors.white.withOpacity(0.95),
                       borderRadius: BorderRadius.circular(20),
                     ),
-                    child: Text(
-                      startTime.difference(DateTime.now()).inMinutes < 60 ? 'LIVE SOON' : 'UPCOMING',
-                      style: GoogleFonts.outfit(
-                        color: startTime.difference(DateTime.now()).inMinutes < 60 ? const Color(0xFFD97706) : primaryGreen,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 10,
-                        letterSpacing: 0.5,
-                      ),
+                    child: Builder(
+                      builder: (context) {
+                        final diffMins = startTime.difference(DateTime.now()).inMinutes;
+                        String label = 'UPCOMING';
+                        Color labelColor = primaryGreen;
+                        if (diffMins <= 0 && diffMins >= -60) {
+                          label = 'ON-GOING';
+                          labelColor = const Color(0xFFD97706);
+                        } else if (diffMins < -60) {
+                          label = 'PENDING REVIEW';
+                          labelColor = Colors.redAccent;
+                        } else if (diffMins <= 60) {
+                          label = 'LIVE SOON';
+                          labelColor = const Color(0xFFD97706);
+                        }
+                        
+                        return Text(
+                          label,
+                          style: GoogleFonts.outfit(
+                            color: labelColor,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 10,
+                            letterSpacing: 0.5,
+                          ),
+                        );
+                      }
                     ),
                   ),
                 ),
@@ -1245,19 +1259,7 @@ class _CounsellorScreenState extends State<CounsellorScreen> {
               ),
             ],
           ),
-          if ((session['summary'] ?? '').toString().isNotEmpty) ...[
-            const SizedBox(height: 16),
-            Text(
-              session['summary'],
-              style: GoogleFonts.outfit(
-                fontSize: 14,
-                color: textColorMain.withOpacity(0.8),
-                height: 1.5,
-              ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
+
           const SizedBox(height: 16),
           if (isMissed)
             SizedBox(

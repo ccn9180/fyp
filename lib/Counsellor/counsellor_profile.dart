@@ -214,8 +214,8 @@ class _CounsellorProfileScreenState extends State<CounsellorProfileScreen> {
                 _buildSectionContainer([
                   _buildListTile(
                     Icons.no_accounts_outlined, 
-                    'Retire / Deactivate Profile', 
-                    'Send formal retirement request for review', 
+                    'Deactivate Profile', 
+                    'Temporarily hide your profile (can be reactivated later)', 
                     () => Navigator.push(context, MaterialPageRoute(builder: (context) => const CounsellorDeactivationScreen())),
                     isWarning: true,
                   ),
