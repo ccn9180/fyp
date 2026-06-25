@@ -24,7 +24,7 @@ class ChatHistoryScreen extends StatefulWidget {
 class _ChatHistoryScreenState extends State<ChatHistoryScreen> {
   String _selectedFilter = 'All';
   DateTime? _selectedDate;
-  final List<String> _filters = ['All', 'Anxiety', 'Gratitude', 'Sleep', 'Focus'];
+  final List<String> _filters = ['All', 'Shared', 'Anxiety', 'Gratitude', 'Sleep', 'Focus'];
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
 
@@ -716,7 +716,12 @@ class _ChatHistoryScreenState extends State<ChatHistoryScreen> {
                   // Filter by _selectedFilter (category)
                   bool matchesFilter = _selectedFilter == 'All';
                   if (!matchesFilter) {
-                    matchesFilter = tag.contains(_selectedFilter.toLowerCase()) || subTag.contains(_selectedFilter.toLowerCase());
+                    if (_selectedFilter == 'Shared') {
+                      final Map<String, dynamic> sharingAccess = session['sharingAccess'] ?? {};
+                      matchesFilter = sharingAccess.values.any((v) => v == true);
+                    } else {
+                      matchesFilter = tag.contains(_selectedFilter.toLowerCase()) || subTag.contains(_selectedFilter.toLowerCase());
+                    }
                   }
 
                   // Filter by search query

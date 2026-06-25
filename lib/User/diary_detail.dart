@@ -39,6 +39,7 @@ class _DiaryDetailScreenState extends State<DiaryDetailScreen> {
   final GlobalKey _exportKey = GlobalKey(); // for image capture
   bool _isExporting = false;
   Map<String, bool> _sharingStates = {};
+  Map<String, bool> _initialSharingStates = {};
   List<FriendProfile> _friendsList = [];
   bool _isLoadingFriends = true;
   bool _friendsLoaded = false;
@@ -58,11 +59,12 @@ class _DiaryDetailScreenState extends State<DiaryDetailScreen> {
           final String name = contact['name'] ?? contact['label'] ?? 'Unknown';
           final String relation = contact['relationship'] ?? 'OTHER';
           final String shareKey = contact['uid'] ?? contact['email'] ?? contact['name'] ?? '';
+          final String? profileImageUrl = contact['profileImageUrl'];
           if (shareKey.isNotEmpty) {
             contacts.add(FriendProfile(
               uid: shareKey,
               fullName: '$name|$relation',
-              profileImageUrl: null,
+              profileImageUrl: profileImageUrl,
             ));
             updatedSharingStates[shareKey] = access[shareKey] == true;
           }
@@ -73,6 +75,7 @@ class _DiaryDetailScreenState extends State<DiaryDetailScreen> {
         setState(() {
           _friendsList = contacts;
           _sharingStates = updatedSharingStates;
+          _initialSharingStates = Map.from(updatedSharingStates);
           _isLoadingFriends = false;
         });
       }
@@ -1011,6 +1014,40 @@ class _DiaryDetailScreenState extends State<DiaryDetailScreen> {
                           'sharingAccess': _sharingStates,
                           'lastEdited': FieldValue.serverTimestamp(),
                         });
+                        
+                        // Notify recipients
+                        final uidsToNotify = _sharingStates.entries
+                            .where((e) => e.value == true && _initialSharingStates[e.key] != true)
+                            .map((e) => e.key)
+                            .toList();
+                        
+                        if (uidsToNotify.isNotEmpty) {
+                          final senderDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+                          final senderName = senderDoc.data()?['fullName'] ?? 'A friend';
+                          
+                          for (var uid in uidsToNotify) {
+                            try {
+                              await FirebaseFirestore.instance
+                                  .collection('users')
+                                  .doc(uid)
+                                  .update({'hasNewSharedItems': true});
+                                  
+                              await FirebaseFirestore.instance.collection('notifications').add({
+                                'to': uid,
+                                'from': user.uid,
+                                'title': 'New Shared Diary',
+                                'message': '$senderName shared a diary entry with you.',
+                                'type': 'shared_item',
+                                'isRead': false,
+                                'sendPush': false,
+                                'timestamp': FieldValue.serverTimestamp(),
+                              });
+                            } catch (e) {
+                              debugPrint("Error updating hasNewSharedItems for $uid: $e");
+                            }
+                          }
+                          _initialSharingStates = Map.from(_sharingStates);
+                        }
                       }
                       if (context.mounted) {
                         Navigator.pop(context);
@@ -1168,24 +1205,138 @@ class _DiaryDetailScreenState extends State<DiaryDetailScreen> {
                                  ),
                                ),
                                TextButton(
-                                 onPressed: () {
-                                   setSheetState(() {
-                                     _sharingStates[friend.uid] = false;
-                                   });
-                                   setState(() {}); // Update main UI too
-                                   
-                                   final user = FirebaseAuth.instance.currentUser;
-                                   if (user != null) {
-                                     FirebaseFirestore.instance
-                                         .collection('users')
-                                         .doc(user.uid)
-                                         .collection('diary_entries')
-                                         .doc(widget.docId)
-                                         .update({'sharingAccess': _sharingStates});
-                                   }
-                                   ScaffoldMessenger.of(context).showSnackBar(
-                                     SnackBar(content: Text('Access revoked for ${friend.fullName.split('|')[0]}'), backgroundColor: Colors.redAccent),
-                                   );
+                                 onPressed: () async {
+                                  final bool? confirm = await showDialog<bool>(
+                                    context: context,
+                                    builder: (BuildContext context) {
+                                      return Dialog(
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                                        elevation: 0,
+                                        backgroundColor: Colors.transparent,
+                                        child: Container(
+                                          padding: const EdgeInsets.all(24),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFFF2F1EC),
+                                            borderRadius: BorderRadius.circular(28),
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: Colors.black.withOpacity(0.12),
+                                                blurRadius: 20,
+                                                offset: const Offset(0, 10),
+                                              ),
+                                            ],
+                                          ),
+                                          child: Column(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Container(
+                                                padding: const EdgeInsets.all(16),
+                                                decoration: const BoxDecoration(
+                                                  color: Color(0xFFFFEBEE),
+                                                  shape: BoxShape.circle,
+                                                ),
+                                                child: const Icon(
+                                                  Icons.person_off_rounded,
+                                                  color: Color(0xFFE57373),
+                                                  size: 32,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 24),
+                                              Text(
+                                                'Revoke Access',
+                                                style: GoogleFonts.playfairDisplay(
+                                                  fontSize: 22,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: const Color(0xFF333333),
+                                                ),
+                                              ),
+                                              const SizedBox(height: 12),
+                                              Text(
+                                                'Are you sure you want to revoke access for ${friend.fullName.split('|')[0]}?',
+                                                textAlign: TextAlign.center,
+                                                style: GoogleFonts.outfit(
+                                                  fontSize: 14,
+                                                  color: const Color(0xFF666666),
+                                                  height: 1.5,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 32),
+                                              Row(
+                                                children: [
+                                                  Expanded(
+                                                    child: TextButton(
+                                                      onPressed: () => Navigator.pop(context, false),
+                                                      style: TextButton.styleFrom(
+                                                        padding: const EdgeInsets.symmetric(vertical: 16),
+                                                        shape: RoundedRectangleBorder(
+                                                          borderRadius: BorderRadius.circular(16),
+                                                        ),
+                                                      ),
+                                                      child: Text(
+                                                        'Cancel',
+                                                        style: GoogleFonts.outfit(
+                                                          fontSize: 15,
+                                                          fontWeight: FontWeight.w600,
+                                                          color: const Color(0xFF888888),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 12),
+                                                  Expanded(
+                                                    child: ElevatedButton(
+                                                      onPressed: () => Navigator.pop(context, true),
+                                                      style: ElevatedButton.styleFrom(
+                                                        backgroundColor: const Color(0xFFE57373),
+                                                        foregroundColor: Colors.white,
+                                                        elevation: 0,
+                                                        padding: const EdgeInsets.symmetric(vertical: 16),
+                                                        shape: RoundedRectangleBorder(
+                                                          borderRadius: BorderRadius.circular(16),
+                                                        ),
+                                                      ),
+                                                      child: Text(
+                                                        'Revoke',
+                                                        style: GoogleFonts.outfit(
+                                                          fontSize: 15,
+                                                          fontWeight: FontWeight.w700,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  );
+
+                                  if (confirm == true) {
+                                    final nav = Navigator.of(context);
+                                    final messenger = ScaffoldMessenger.of(context);
+
+                                    setSheetState(() {
+                                      _sharingStates[friend.uid] = false;
+                                    });
+                                    setState(() {}); // Update main UI too
+                                    
+                                    final user = FirebaseAuth.instance.currentUser;
+                                    if (user != null) {
+                                      await FirebaseFirestore.instance
+                                          .collection('users')
+                                          .doc(user.uid)
+                                          .collection('diary_entries')
+                                          .doc(widget.docId)
+                                          .update({'sharingAccess': _sharingStates});
+                                    }
+                                    
+                                    nav.pop(); // Close the manage access sheet directly
+                                    messenger.showSnackBar(
+                                      SnackBar(content: Text('Access revoked for ${friend.fullName.split('|')[0]}'), backgroundColor: const Color(0xFF7C9C84)),
+                                    );
+                                  }
                                  },
                                 style: TextButton.styleFrom(
                                   backgroundColor: const Color(0xFFFFEBEE),

@@ -2127,10 +2127,8 @@ class _SelfHelpScreenState extends State<SelfHelpScreen> with SingleTickerProvid
               ),
               const SizedBox(width: 12),
               Column(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.share, color: Color(0xFFD6D6D6), size: 20),
-                  const SizedBox(height: 16),
                   GestureDetector(
                     onTap: onFavoriteToggle,
                     child: Icon(

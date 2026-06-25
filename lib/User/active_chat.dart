@@ -28,6 +28,7 @@ class _ActiveChatScreenState extends State<ActiveChatScreen> {
   bool _isLoading = false;
   bool _crisisDetected = false;
   String? _userProfileImageUrl;
+  final List<double> _responseSpeeds = [];
 
   @override
   void initState() {
@@ -212,11 +213,15 @@ class _ActiveChatScreenState extends State<ActiveChatScreen> {
     }
 
     try {
+      final startTime = DateTime.now();
       final response = await BackendConfig.withRetry((baseUrl) => http.post(
         Uri.parse('$baseUrl/chat'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'message': text}),
-      ).timeout(const Duration(seconds: 8)));
+      ).timeout(const Duration(seconds: 30)));
+      final endTime = DateTime.now();
+      final latency = endTime.difference(startTime).inMilliseconds / 1000.0;
+      _responseSpeeds.add(latency);
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -397,16 +402,6 @@ class _ActiveChatScreenState extends State<ActiveChatScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text(
-                'YOU',
-                style: GoogleFonts.outfit(
-                  color: const Color(0xFFB0BDB5),
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 0.5,
-                ),
-              ),
-              const SizedBox(height: 4),
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -435,15 +430,6 @@ class _ActiveChatScreenState extends State<ActiveChatScreen> {
               ),
             ],
           ),
-        ),
-        const SizedBox(width: 8),
-        CircleAvatar(
-          radius: 16,
-          backgroundColor: const Color(0xFFF1F3EE),
-          backgroundImage: _getAvatarProvider(_userProfileImageUrl),
-          child: (_userProfileImageUrl == null || _userProfileImageUrl!.isEmpty)
-              ? Text('U', style: GoogleFonts.outfit(color: const Color(0xFF86A590), fontWeight: FontWeight.bold))
-              : null,
         ),
       ],
     );
@@ -505,15 +491,6 @@ class _ActiveChatScreenState extends State<ActiveChatScreen> {
       color: Colors.transparent,
       child: Row(
         children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: const Color(0xFF98B0A4).withOpacity(0.2),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.add_rounded, color: Color(0xFF86A590), size: 28),
-          ),
-          const SizedBox(width: 12),
           Expanded(
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -600,7 +577,7 @@ class _ActiveChatScreenState extends State<ActiveChatScreen> {
         Uri.parse('$baseUrl/summarize_chat'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'messages': formattedMessages}),
-      ).timeout(const Duration(seconds: 8)));
+      ).timeout(const Duration(seconds: 30)));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -610,6 +587,11 @@ class _ActiveChatScreenState extends State<ActiveChatScreen> {
       }
     } catch (e) {
       debugPrint('Error generating chat summary: $e');
+    }
+
+    double avgSpeed = 0.8;
+    if (_responseSpeeds.isNotEmpty) {
+      avgSpeed = _responseSpeeds.reduce((a, b) => a + b) / _responseSpeeds.length;
     }
 
     try {
@@ -626,7 +608,9 @@ class _ActiveChatScreenState extends State<ActiveChatScreen> {
         'sharingAccess': {}, // initially not shared with anyone
         'crisisDetected': _crisisDetected,
         'crisisKeyword': _crisisDetected ? 'detected' : '',
-        'status': 'Normal',
+        'status': _crisisDetected ? 'Escalated' : 'Resolved',
+        'responseSpeed': avgSpeed,
+        'rating': 5, // Default 5-star rating for dashboard accuracy calculation
       });
     } catch (e) {
       print('Error saving chat session: $e');

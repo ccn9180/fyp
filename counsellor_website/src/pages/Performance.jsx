@@ -14,6 +14,7 @@ export default function Performance() {
   const [rangeLabel, setRangeLabel] = useState('All Time');
   const [loading, setLoading] = useState(!cachedPerformanceData);
   const [exporting, setExporting] = useState(false);
+  const [activeBarIndex, setActiveBarIndex] = useState(null);
   const [counsellorName, setCounsellorName] = useState(cachedPerformanceData?.counsellorName || 'Counsellor');
 
   // Date Picker State
@@ -440,16 +441,36 @@ export default function Performance() {
                   const maxVal = Math.max(...stats.chartData.map(d => d.val), 5);
                   return (
                   <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', flex: 1 }}>
-                    <div style={{ position: 'relative', width: '36px', height: '160px', display: 'flex', alignItems: 'flex-end', backgroundColor: 'var(--bg-main)', borderRadius: '8px' }}>
+                    <div 
+                      style={{ position: 'relative', width: '36px', height: '160px', display: 'flex', alignItems: 'flex-end', backgroundColor: 'var(--bg-main)', borderRadius: '8px', cursor: 'pointer' }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.transform = 'scale(1.05)';
+                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(124, 156, 132, 0.2)';
+                        setActiveBarIndex(i);
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.transform = 'scale(1)';
+                        e.currentTarget.style.boxShadow = 'none';
+                        setActiveBarIndex(null);
+                      }}
+                      onClick={() => {
+                        setActiveBarIndex(activeBarIndex === i ? null : i);
+                      }}
+                    >
+                      {activeBarIndex === i && (
+                        <div style={{ position: 'absolute', top: '-40px', left: '50%', transform: 'translateX(-50%)', backgroundColor: '#334155', color: '#fff', padding: '6px 12px', borderRadius: '8px', fontSize: '12px', fontWeight: 700, zIndex: 10, whiteSpace: 'nowrap', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', animation: 'fadeIn 0.2s ease' }}>
+                          {m.val} Session{m.val !== 1 ? 's' : ''}
+                          <div style={{ position: 'absolute', bottom: '-4px', left: '50%', transform: 'translateX(-50%) rotate(45deg)', width: '8px', height: '8px', backgroundColor: '#334155' }} />
+                        </div>
+                      )}
                       <div 
                         style={{ 
                           width: '100%', 
                           height: `${(m.val / maxVal) * 100}%`, 
                           background: 'linear-gradient(to top, var(--primary-color), #a3bba9)', 
                           borderRadius: '8px',
-                          transition: 'all 0.8s cubic-bezier(0.4, 0, 0.2, 1)',
+                          transition: 'all 0.8s cubic-bezier(0.4, 0, 0.2, 1), transform 0.2s',
                         }}
-                        title={`${m.val} sessions`}
                       />
                     </div>
                     <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600 }}>{m.label}</span>
@@ -502,7 +523,7 @@ export default function Performance() {
             {stats.feedbackList && stats.feedbackList.length > 0 ? (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '16px' }}>
                 {stats.feedbackList.slice(0, 6).map((review, i) => (
-                  <div key={i} style={{ padding: '16px', backgroundColor: 'var(--bg-secondary)', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+                  <div key={i} style={{ padding: '20px', backgroundColor: '#FFFFFF', borderRadius: '16px', border: '1px solid var(--border-color)', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
                       <div style={{ display: 'flex', gap: '2px' }}>
                         {[...Array(5)].map((_, idx) => (
@@ -513,11 +534,11 @@ export default function Performance() {
                         {review.timestamp ? new Date(review.timestamp).toLocaleDateString(undefined, {month:'short', day:'numeric'}) : ''}
                       </span>
                     </div>
-                    <p style={{ fontSize: '13px', color: 'var(--text-darker)', fontStyle: 'italic', marginBottom: '12px', lineHeight: '1.5' }}>
+                    <p style={{ fontSize: '13.5px', color: 'var(--text-darker)', fontStyle: 'italic', marginBottom: '16px', lineHeight: '1.5' }}>
                       "{review.comment || 'Great session, highly recommended!'}"
                     </p>
-                    <p style={{ fontSize: '12px', color: 'var(--text-muted)', textAlign: 'right', margin: 0, fontWeight: 500 }}>
-                      - {review.patientName || 'Anonymous'}
+                    <p style={{ fontSize: '12px', color: 'var(--text-muted)', textAlign: 'right', margin: 0, fontWeight: 600, letterSpacing: '0.3px', textTransform: 'uppercase' }}>
+                      - Anonymous Client
                     </p>
                   </div>
                 ))}

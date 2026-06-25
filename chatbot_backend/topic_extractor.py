@@ -14,12 +14,22 @@ REPETITION_CUES = [
     "again", "another time", "once more", "still", "keep having to",
     "keeps happening", "every time", "over and over", "yet again",
     "once again", "keep getting", "keep being asked", "keep ", "keeps ",
-    "always", "every time",
+    "always", "every time", "every week", "repeatedly", "again and again",
 ]
 
 # Leading conversational fillers -- stripped before noun-phrase/event parsing so
 # they never get mistaken for the actual answer (e.g. "ermm, my core tech").
 FILLER_PATTERN = re.compile(r'^(?:(?:erm+|umm?|uhh?|hmm+|well|actually|maybe)[\s,.]*)+', re.IGNORECASE)
+
+# Trailing hedges ("my fyp i think", "my backend i guess") -- spaCy's parser
+# attaches a short noun phrase as a dependent of the trailing verb instead of
+# forming its own noun chunk (worse for domain jargon like "fyp", which it
+# doesn't recognize as a noun), so the real answer never gets extracted as an
+# entity at all. Stripping the hedge first gives the parser a clean NP.
+TRAILING_HEDGE_PATTERN = re.compile(
+    r'[\s,]+\b(i think|i guess|i suppose|i believe|i feel like|i reckon|probably|maybe)\.?\s*$',
+    re.IGNORECASE,
+)
 
 # Conversational filler/particles/pronouns that must never be picked as a
 # noun-chunk topic_entity (see the noun_chunks loop in extract() below) --
@@ -145,6 +155,13 @@ class TopicExtractor:
             # Confidence threshold
             if max_prob > 0.4:
                 result["topic_category"] = pred
+                result["topic_confidence"] = float(max_prob)
+                
+            # Manual heuristic override
+            text_lower = text.lower()
+            if any(w in text_lower for w in ["relationship", "breakup", "boyfriend", "girlfriend", "partner", "wife", "husband", "my ex"]):
+                result["topic_category"] = "relationship_loss"
+                result["topic_confidence"] = 1.0
                 
         # 2. Extract specific Noun Phrase using spaCy
         if self.nlp:
@@ -218,9 +235,8 @@ class TopicExtractor:
 
     def _strip_fillers(self, text: str) -> str:
         match = FILLER_PATTERN.match(text)
-        if not match:
-            return text
-        stripped = text[match.end():].strip()
+        stripped = text[match.end():].strip() if match else text
+        stripped = TRAILING_HEDGE_PATTERN.sub('', stripped).strip()
         return stripped if stripped else text
 
     def _flip_pronoun(self, phrase: str) -> str:
@@ -230,6 +246,13 @@ class TopicExtractor:
         if phrase_lower.startswith("i am "):
             return "you are " + phrase[5:]
         return phrase
+
+    # Bare possession verbs read fine on their own ("I have three
+    # assignments") but every NLG template wraps event_phrase as "having to
+    # {event}" -- "having to have three assignments" stutters on the
+    # repeated verb. Swap in a neutral action verb so the wrapped form
+    # ("having to deal with three assignments") stays grammatical.
+    EVENT_VERB_LEMMA_OVERRIDES = {"have": "deal with", "has": "deal with"}
 
     def _extract_event_phrase(self, doc):
         """Lightweight verb+object extraction, e.g. 'revise your proposal'.
@@ -246,6 +269,7 @@ class TopicExtractor:
             None,
         )
         action_verb = xcomp if xcomp is not None else root
+        verb_lemma = self.EVENT_VERB_LEMMA_OVERRIDES.get(action_verb.lemma_, action_verb.lemma_)
 
         complement = next(
             (c for c in action_verb.children if c.dep_ in ("dobj", "attr", "oprd")),
@@ -259,7 +283,7 @@ class TopicExtractor:
                     span = doc[pobj.left_edge.i: pobj.right_edge.i + 1]
                     if _is_filler_entity(span.text.lower()):
                         return None
-                    return f"{action_verb.lemma_} {prep.text} {self._flip_pronoun(span.text)}"
+                    return f"{verb_lemma} {prep.text} {self._flip_pronoun(span.text)}"
             return None
 
         span = doc[complement.left_edge.i: complement.right_edge.i + 1]
@@ -275,7 +299,7 @@ class TopicExtractor:
             or _is_filler_entity(span.text.lower())
         ):
             return None
-        return f"{action_verb.lemma_} {self._flip_pronoun(span.text)}"
+        return f"{verb_lemma} {self._flip_pronoun(span.text)}"
 
     def extract_hashtags(self, text: str, top_n: int = 5) -> list:
         """Extract dynamic hashtags from text using spaCy."""

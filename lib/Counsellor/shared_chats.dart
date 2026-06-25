@@ -614,44 +614,45 @@ class _SharedChatsScreenState extends State<SharedChatsScreen> {
                   ),
                 ],
               ),
-              child: Row(
+              child: Column(
                 children: [
-                  Container(
-                    width: 64,
-                    height: 64,
-                    decoration: BoxDecoration(
-                      color: client.hasCrisisAlert
-                          ? const Color(0xFFDC2626).withOpacity(0.1)
-                          : _green.withOpacity(0.1),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Center(
-                      child: Text(
-                        client.name.isNotEmpty ? client.name[0].toUpperCase() : 'C',
-                        style: GoogleFonts.outfit(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 28,
-                          color: client.hasCrisisAlert ? const Color(0xFFDC2626) : _green,
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: 64,
+                        height: 64,
+                        decoration: BoxDecoration(
+                          color: client.hasCrisisAlert
+                              ? const Color(0xFFDC2626).withOpacity(0.1)
+                              : _green.withOpacity(0.1),
+                          shape: BoxShape.circle,
                         ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          client.name,
-                          style: GoogleFonts.outfit(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 20,
-                            color: _textMain,
+                        child: Center(
+                          child: Text(
+                            client.name.isNotEmpty ? client.name[0].toUpperCase() : 'C',
+                            style: GoogleFonts.outfit(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 28,
+                              color: client.hasCrisisAlert ? const Color(0xFFDC2626) : _green,
+                            ),
                           ),
                         ),
-                        const SizedBox(height: 4),
-                        Row(
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            Text(
+                              client.name,
+                              style: GoogleFonts.outfit(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 20,
+                                color: _textMain,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
                             Text(
                               '${client.completedSessions} Completed · ${client.totalSessions} Total',
                               style: GoogleFonts.outfit(
@@ -659,35 +660,58 @@ class _SharedChatsScreenState extends State<SharedChatsScreen> {
                                 color: Colors.grey[500],
                               ),
                             ),
+                            if (client.hasCrisisAlert) ...[
+                              const SizedBox(height: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFDC2626).withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.warning_amber_rounded, color: Color(0xFFDC2626), size: 14),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'CRISIS DETECTED',
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                        color: const Color(0xFFDC2626),
+                                        letterSpacing: 0.5,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ]
                           ],
                         ),
-                        if (client.hasCrisisAlert) ...[
-                          const SizedBox(height: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFDC2626).withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(Icons.warning_amber_rounded, color: Color(0xFFDC2626), size: 14),
-                                const SizedBox(width: 4),
-                                Text(
-                                  'CRISIS DETECTED',
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                    color: const Color(0xFFDC2626),
-                                    letterSpacing: 0.5,
-                                  ),
-                                ),
-                              ],
-                            ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  GestureDetector(
+                    onTap: () => _showResourceSelector(context, client),
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      decoration: BoxDecoration(
+                        color: _green.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.share_rounded, size: 16, color: _green),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Recommend Resource',
+                            style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.bold, color: _green),
                           ),
-                        ]
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ],
@@ -1500,6 +1524,466 @@ class _SharedChatsScreenState extends State<SharedChatsScreen> {
         ],
       ),
     );
+  }
+
+  void _showResourceSelector(BuildContext context, _ClientData client) async {
+    final Color primaryGreen = const Color(0xFF7C9C84);
+    
+    // Show a loading indicator dialog
+    showDialog(
+      context: context, 
+      barrierDismissible: false, 
+      builder: (c) => const Center(child: CircularProgressIndicator())
+    );
+
+    final Set<String> initialRecommendedIds = {};
+    final Map<String, String> recommendationDocIds = {};
+    
+    List<QueryDocumentSnapshot> articles = [];
+    List<QueryDocumentSnapshot> meditations = [];
+
+    try {
+      final recommendationsFuture = FirebaseFirestore.instance
+          .collection('recommendations')
+          .where('patientId', isEqualTo: client.id)
+          .get();
+      final articlesFuture = FirebaseFirestore.instance.collection('articles').limit(20).get();
+      final meditationsFuture = FirebaseFirestore.instance.collection('meditation_guides').limit(20).get();
+
+      final results = await Future.wait([recommendationsFuture, articlesFuture, meditationsFuture]);
+
+      final snapshot = results[0];
+      final articlesSnap = results[1];
+      final meditationsSnap = results[2];
+
+      for (var doc in snapshot.docs) {
+        final data = doc.data() as Map<String, dynamic>;
+        final resId = data['resourceId'] as String;
+        initialRecommendedIds.add(resId);
+        recommendationDocIds[resId] = doc.id;
+      }
+      
+      articles = articlesSnap.docs;
+      meditations = meditationsSnap.docs;
+
+      // Trigger image precaching asynchronously without awaiting
+      for (var doc in [...articles, ...meditations]) {
+        final data = doc.data() as Map<String, dynamic>;
+        final imageUrl = data['imageUrl'] as String?;
+        if (imageUrl != null && imageUrl.isNotEmpty && context.mounted) {
+          precacheImage(NetworkImage(imageUrl), context).catchError((_) {});
+        }
+      }
+    } catch (e) {
+      debugPrint("Error fetching recommendations or resources: $e");
+    }
+
+    // Dismiss loading indicator
+    if (context.mounted) {
+      Navigator.pop(context);
+    }
+
+    final Set<String> selectedIds = Set.from(initialRecommendedIds);
+    final List<Map<String, dynamic>> selectedResources = [];
+
+    if (!context.mounted) return;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        bool isEditing = false;
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final int addedCount = selectedIds.difference(initialRecommendedIds).length;
+            final int removedCount = initialRecommendedIds.difference(selectedIds).length;
+            final bool hasChanges = addedCount > 0 || removedCount > 0;
+
+            return Container(
+              height: MediaQuery.of(context).size.height * 0.88,
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(36)),
+              ),
+              child: DefaultTabController(
+                length: 2,
+                child: Column(
+                  children: [
+                    const SizedBox(height: 12),
+                    Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2))),
+                    
+                    // ── Header ──────────────────────────────────────────────
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Text(
+                                'Recommend Resources',
+                                style: GoogleFonts.playfairDisplay(fontSize: 28, fontWeight: FontWeight.bold),
+                              ),
+                              GestureDetector(
+                                onTap: () {
+                                  setModalState(() {
+                                    if (isEditing) {
+                                      selectedIds.clear();
+                                      selectedIds.addAll(initialRecommendedIds);
+                                      selectedResources.clear();
+                                    }
+                                    isEditing = !isEditing;
+                                  });
+                                },
+                                child: Container(
+                                  margin: const EdgeInsets.only(top: 4),
+                                  width: 34,
+                                  height: 34,
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(color: Colors.grey[300]!, width: 1.5),
+                                  ),
+                                  child: Icon(
+                                    isEditing ? Icons.close_rounded : Icons.edit_rounded,
+                                    color: Colors.grey[700],
+                                    size: 18,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            isEditing 
+                              ? 'Tap a resource to recommend or un-recommend it for ${client.name}.'
+                              : 'Currently recommended resources for ${client.name}.',
+                            style: GoogleFonts.outfit(fontSize: 12, color: Colors.grey[600], height: 1.4),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+
+                    // ── Tabs ─────────────────────────────────────────────────
+                    Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 24),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[100],
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: TabBar(
+                        indicatorColor: primaryGreen,
+                        indicatorSize: TabBarIndicatorSize.tab,
+                        indicator: BoxDecoration(
+                          color: primaryGreen,
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        labelColor: Colors.white,
+                        unselectedLabelColor: Colors.grey,
+                        dividerColor: Colors.transparent,
+                        labelStyle: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 13),
+                        unselectedLabelStyle: GoogleFonts.outfit(fontSize: 13),
+                        tabs: const [
+                          Tab(text: 'Articles'),
+                          Tab(text: 'Meditations'),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    
+                    Expanded(
+                      child: TabBarView(
+                        children: [
+                          _buildResourceList(context, articles, 'article', selectedIds, selectedResources, setModalState, initialRecommendedIds, isEditing),
+                          _buildResourceList(context, meditations, 'meditation', selectedIds, selectedResources, setModalState, initialRecommendedIds, isEditing),
+                        ],
+                      ),
+                    ),
+                    
+                    // ── Footer Save Button ──────────────────────────────────
+                    if (isEditing)
+                      Container(
+                        padding: const EdgeInsets.fromLTRB(24, 12, 24, 28),
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                      ),
+                      child: SizedBox(
+                        width: double.infinity,
+                        height: 56,
+                        child: ElevatedButton(
+                          onPressed: !hasChanges ? null : () async {
+                            showDialog(context: context, barrierDismissible: false, builder: (c) => const Center(child: CircularProgressIndicator()));
+                            
+                            try {
+                              final batch = FirebaseFirestore.instance.batch();
+                              int addedCount = 0;
+                              for (var res in selectedResources) {
+                                if (!initialRecommendedIds.contains(res['id'])) {
+                                  final ref = FirebaseFirestore.instance.collection('recommendations').doc();
+                                  batch.set(ref, {
+                                    'patientId': client.id,
+                                    'counsellorId': FirebaseAuth.instance.currentUser?.uid,
+                                    'resourceId': res['id'],
+                                    'resourceTitle': res['title'],
+                                    'resourceType': res['type'],
+                                    'recommendedAt': FieldValue.serverTimestamp(),
+                                  });
+                                  addedCount++;
+                                }
+                              }
+
+                              int removedCount = 0;
+                              for (var resId in initialRecommendedIds) {
+                                if (!selectedIds.contains(resId)) {
+                                  final docId = recommendationDocIds[resId];
+                                  if (docId != null) {
+                                    final ref = FirebaseFirestore.instance.collection('recommendations').doc(docId);
+                                    batch.delete(ref);
+                                    removedCount++;
+                                  }
+                                }
+                              }
+
+                              if (addedCount > 0) {
+                                final notifRef = FirebaseFirestore.instance.collection('notifications').doc();
+                                batch.set(notifRef, {
+                                  'from': FirebaseAuth.instance.currentUser?.uid,
+                                  'to': client.id,
+                                  'type': 'recommendation',
+                                  'status': 'sent',
+                                  'isRead': false,
+                                  'senderName': 'Your Counsellor',
+                                  'timestamp': FieldValue.serverTimestamp(),
+                                  'message': 'Your counsellor has recommended new support resources for you.',
+                                });
+                              }
+
+                              await batch.commit();
+                              
+                              if (context.mounted) {
+                                Navigator.pop(context); // Pop loading
+                                Navigator.pop(context); // Pop modal
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Updated support recommendations successfully'),
+                                    backgroundColor: primaryGreen,
+                                  ),
+                                );
+                              }
+                            } catch (e) {
+                              if (context.mounted) {
+                                Navigator.pop(context);
+                                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to update recommendations')));
+                              }
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: hasChanges ? primaryGreen : Colors.grey[300],
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                hasChanges ? Icons.save_rounded : Icons.check_rounded,
+                                color: hasChanges ? Colors.white : Colors.grey[600],
+                                size: 20,
+                              ),
+                              const SizedBox(width: 10),
+                              Text(
+                                hasChanges ? 'Save Changes' : 'No Changes to Save',
+                                style: GoogleFonts.outfit(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 15,
+                                  color: hasChanges ? Colors.white : Colors.grey[600],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+  Widget _buildResourceList(
+    BuildContext context, 
+    List<QueryDocumentSnapshot> docs, 
+    String typeLabel, 
+    Set<String> selectedIds, 
+    List<Map<String, dynamic>> selectedResources,
+    StateSetter setModalState,
+    Set<String> initialRecommendedIds,
+    bool isEditing,
+  ) {
+    final Color primaryGreen = const Color(0xFF7C9C84);
+
+    List<QueryDocumentSnapshot> displayDocs = isEditing 
+        ? docs 
+        : docs.where((doc) => selectedIds.contains(doc.id)).toList();
+
+    if (displayDocs.isEmpty) {
+      return Center(
+        child: Text(
+          isEditing ? 'No resources found.' : 'No resources recommended yet.', 
+          style: GoogleFonts.outfit(color: Colors.grey)
+        )
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+      itemCount: displayDocs.length,
+      itemBuilder: (context, index) {
+            final data = displayDocs[index].data() as Map<String, dynamic>;
+            final id = displayDocs[index].id;
+            final isSelected = selectedIds.contains(id);
+            final isInitiallyRecommended = initialRecommendedIds.contains(id);
+            final title = data['title'] ?? 'Untitled';
+            final imageUrl = data['imageUrl'] ?? '';
+
+            Color cardBorderColor = isSelected ? primaryGreen.withOpacity(0.4) : Colors.grey[200]!;
+            Color cardBgColor = isSelected ? primaryGreen.withOpacity(0.05) : Colors.white;
+
+            return GestureDetector(
+              onTap: isEditing ? () {
+                setModalState(() {
+                  if (isSelected) {
+                    selectedIds.remove(id);
+                    selectedResources.removeWhere((res) => res['id'] == id);
+                  } else {
+                    selectedIds.add(id);
+                    if (!isInitiallyRecommended) {
+                      selectedResources.add({'id': id, 'title': title, 'type': typeLabel});
+                    }
+                  }
+                });
+              } : null,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: cardBgColor,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: cardBorderColor,
+                    width: 1.5,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.02),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    // Thumbnail
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: imageUrl.isNotEmpty
+                          ? Image.network(
+                              imageUrl,
+                              cacheWidth: 150,
+                              width: 60,
+                              height: 60,
+                              fit: BoxFit.cover,
+                              loadingBuilder: (context, child, loadingProgress) {
+                                if (loadingProgress == null) return child;
+                                return Container(
+                                  width: 60,
+                                  height: 60,
+                                  decoration: BoxDecoration(
+                                    color: primaryGreen.withOpacity(0.05),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: const Center(
+                                    child: SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Color(0xFF7C9C84),
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
+                              errorBuilder: (c, e, s) => Container(
+                                width: 60, height: 60,
+                                color: Colors.grey[100],
+                                child: Icon(
+                                  typeLabel == 'article' ? Icons.article_rounded : Icons.headphones_rounded,
+                                  color: Colors.grey[400], size: 28,
+                                ),
+                              ),
+                            )
+                          : Container(
+                              width: 60, height: 60,
+                              decoration: BoxDecoration(
+                                color: primaryGreen.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Icon(
+                                typeLabel == 'article' ? Icons.article_rounded : Icons.headphones_rounded,
+                                color: primaryGreen, size: 28,
+                              ),
+                            ),
+                    ),
+                    const SizedBox(width: 14),
+                    // Text info
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title,
+                            style: GoogleFonts.outfit(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 15,
+                              color: const Color(0xFF333333),
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    // Action button
+                    _buildActionButton(isSelected, primaryGreen, isEditing),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+  }
+
+  Widget _buildActionButton(bool isSelected, Color primaryGreen, bool isEditing) {
+    if (!isEditing) {
+      if (isSelected) return Icon(Icons.check_circle_rounded, color: primaryGreen, size: 28);
+      return const SizedBox(width: 28);
+    }
+    
+    if (isSelected) {
+      return Icon(Icons.check_circle_rounded, color: primaryGreen, size: 28);
+    } else {
+      return Icon(Icons.add_circle_outline_rounded, color: Colors.grey[300], size: 28);
+    }
   }
 }
 

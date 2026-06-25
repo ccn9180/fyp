@@ -37,7 +37,7 @@ class _SharedReflectionDetailScreenState extends State<SharedReflectionDetailScr
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('Access revoked for $name'),
-        backgroundColor: Colors.redAccent,
+        backgroundColor: const Color(0xFF7C9C84),
         duration: const Duration(seconds: 2),
       ),
     );

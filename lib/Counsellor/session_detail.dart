@@ -991,21 +991,44 @@ class SessionDetailScreen extends StatelessWidget {
 
     final Set<String> initialRecommendedIds = {};
     final Map<String, String> recommendationDocIds = {};
+    
+    List<QueryDocumentSnapshot> articles = [];
+    List<QueryDocumentSnapshot> meditations = [];
 
     try {
-      final snapshot = await FirebaseFirestore.instance
+      final recommendationsFuture = FirebaseFirestore.instance
           .collection('recommendations')
           .where('patientId', isEqualTo: bookingData['patientId'])
           .get();
+      final articlesFuture = FirebaseFirestore.instance.collection('articles').limit(20).get();
+      final meditationsFuture = FirebaseFirestore.instance.collection('meditation_guides').limit(20).get();
+
+      final results = await Future.wait([recommendationsFuture, articlesFuture, meditationsFuture]);
+
+      final snapshot = results[0];
+      final articlesSnap = results[1];
+      final meditationsSnap = results[2];
 
       for (var doc in snapshot.docs) {
-        final data = doc.data();
+        final data = doc.data() as Map<String, dynamic>;
         final resId = data['resourceId'] as String;
         initialRecommendedIds.add(resId);
         recommendationDocIds[resId] = doc.id;
       }
+      
+      articles = articlesSnap.docs;
+      meditations = meditationsSnap.docs;
+
+      // Trigger image precaching asynchronously without awaiting
+      for (var doc in [...articles, ...meditations]) {
+        final data = doc.data() as Map<String, dynamic>;
+        final imageUrl = data['imageUrl'] as String?;
+        if (imageUrl != null && imageUrl.isNotEmpty && context.mounted) {
+          precacheImage(NetworkImage(imageUrl), context).catchError((_) {});
+        }
+      }
     } catch (e) {
-      debugPrint("Error fetching recommendations: $e");
+      debugPrint("Error fetching recommendations or resources: $e");
     }
 
     // Dismiss loading indicator
@@ -1023,6 +1046,7 @@ class SessionDetailScreen extends StatelessWidget {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) {
+        bool isEditing = false;
         return StatefulBuilder(
           builder: (context, setModalState) {
             final int addedCount = selectedIds.difference(initialRecommendedIds).length;
@@ -1032,7 +1056,7 @@ class SessionDetailScreen extends StatelessWidget {
             return Container(
               height: MediaQuery.of(context).size.height * 0.88,
               decoration: const BoxDecoration(
-                color: Color(0xFFF2F1EC),
+                color: Colors.white,
                 borderRadius: BorderRadius.vertical(top: Radius.circular(36)),
               ),
               child: DefaultTabController(
@@ -1044,108 +1068,64 @@ class SessionDetailScreen extends StatelessWidget {
                     
                     // ── Header ──────────────────────────────────────────────
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+                      padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'Recommend Resources',
-                                      style: GoogleFonts.playfairDisplay(fontSize: 22, fontWeight: FontWeight.bold),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      'Tap a resource to recommend or un-recommend it for ${bookingData['patientName'] ?? 'this client'}.',
-                                      style: GoogleFonts.outfit(fontSize: 12, color: Colors.grey[600], height: 1.4),
-                                    ),
-                                  ],
+                              Text(
+                                'Recommend Resources',
+                                style: GoogleFonts.playfairDisplay(fontSize: 28, fontWeight: FontWeight.bold),
+                              ),
+                              GestureDetector(
+                                onTap: () {
+                                  setModalState(() {
+                                    if (isEditing) {
+                                      selectedIds.clear();
+                                      selectedIds.addAll(initialRecommendedIds);
+                                      selectedResources.clear();
+                                    }
+                                    isEditing = !isEditing;
+                                  });
+                                },
+                                child: Container(
+                                  margin: const EdgeInsets.only(top: 4),
+                                  width: 34,
+                                  height: 34,
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(color: Colors.grey[300]!, width: 1.5),
+                                  ),
+                                  child: Icon(
+                                    isEditing ? Icons.close_rounded : Icons.edit_rounded,
+                                    color: Colors.grey[700],
+                                    size: 18,
+                                  ),
                                 ),
                               ),
                             ],
                           ),
-                          const SizedBox(height: 16),
-                          // Changes summary pill
-                          if (hasChanges)
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(14),
-                                border: Border.all(color: primaryGreen.withOpacity(0.3)),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(Icons.pending_actions_rounded, size: 16, color: Color(0xFF7C9C84)),
-                                  const SizedBox(width: 8),
-                                  if (addedCount > 0)
-                                    Text(
-                                      '+$addedCount to recommend',
-                                      style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFF7C9C84)),
-                                    ),
-                                  if (addedCount > 0 && removedCount > 0)
-                                    Text('  •  ', style: GoogleFonts.outfit(color: Colors.grey)),
-                                  if (removedCount > 0)
-                                    Text(
-                                      '-$removedCount to remove',
-                                      style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.redAccent),
-                                    ),
-                                ],
-                              ),
-                            )
-                          else if (selectedIds.isNotEmpty)
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                              decoration: BoxDecoration(
-                                color: primaryGreen.withOpacity(0.08),
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(Icons.check_circle_rounded, size: 16, color: primaryGreen),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    '${selectedIds.length} resource${selectedIds.length > 1 ? 's' : ''} currently recommended',
-                                    style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.w600, color: primaryGreen),
-                                  ),
-                                ],
-                              ),
-                            )
-                          else
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                              decoration: BoxDecoration(
-                                color: Colors.grey.withOpacity(0.08),
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(Icons.info_outline_rounded, size: 16, color: Colors.grey[500]),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    'No resources recommended yet',
-                                    style: GoogleFonts.outfit(fontSize: 12, color: Colors.grey[500]),
-                                  ),
-                                ],
-                              ),
-                            ),
+                          const SizedBox(height: 8),
+                          Text(
+                            isEditing 
+                              ? 'Tap a resource to recommend or un-recommend it for ${(bookingData['patientName'] ?? 'this client')}.'
+                              : 'Currently recommended resources for ${(bookingData['patientName'] ?? 'this client')}.',
+                            style: GoogleFonts.outfit(fontSize: 12, color: Colors.grey[600], height: 1.4),
+                          ),
                         ],
                       ),
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 24),
 
                     // ── Tabs ─────────────────────────────────────────────────
                     Container(
                       margin: const EdgeInsets.symmetric(horizontal: 24),
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: Colors.grey[100],
                         borderRadius: BorderRadius.circular(16),
                       ),
                       child: TabBar(
@@ -1171,17 +1151,18 @@ class SessionDetailScreen extends StatelessWidget {
                     Expanded(
                       child: TabBarView(
                         children: [
-                          _buildResourceList(context, 'articles', 'article', selectedIds, selectedResources, setModalState, initialRecommendedIds),
-                          _buildResourceList(context, 'meditation_guides', 'meditation', selectedIds, selectedResources, setModalState, initialRecommendedIds),
+                          _buildResourceList(context, articles, 'article', selectedIds, selectedResources, setModalState, initialRecommendedIds, isEditing),
+                          _buildResourceList(context, meditations, 'meditation', selectedIds, selectedResources, setModalState, initialRecommendedIds, isEditing),
                         ],
                       ),
                     ),
                     
                     // ── Footer Save Button ──────────────────────────────────
-                    Container(
-                      padding: const EdgeInsets.fromLTRB(24, 12, 24, 28),
+                    if (isEditing)
+                      Container(
+                        padding: const EdgeInsets.fromLTRB(24, 12, 24, 28),
                       decoration: const BoxDecoration(
-                        color: Color(0xFFF2F1EC),
+                        color: Colors.white,
                       ),
                       child: SizedBox(
                         width: double.infinity,
@@ -1230,7 +1211,7 @@ class SessionDetailScreen extends StatelessWidget {
                                   'isRead': false,
                                   'senderName': bookingData['counsellorName'] ?? 'Counsellor',
                                   'timestamp': FieldValue.serverTimestamp(),
-                                  'message': '${bookingData['counsellorName'] ?? "Your counsellor"} has recommended new support resources for you.',
+                                  'message': 'Your counsellor has recommended new support resources for you.',
                                 });
                               }
 
@@ -1291,54 +1272,45 @@ class SessionDetailScreen extends StatelessWidget {
   }
   Widget _buildResourceList(
     BuildContext context, 
-    String collection, 
+    List<QueryDocumentSnapshot> docs, 
     String typeLabel, 
     Set<String> selectedIds, 
     List<Map<String, dynamic>> selectedResources,
     StateSetter setModalState,
     Set<String> initialRecommendedIds,
+    bool isEditing,
   ) {
     final Color primaryGreen = const Color(0xFF7C9C84);
 
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance.collection(collection).limit(20).snapshots(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
- 
-        final docs = snapshot.data!.docs;
-        if (docs.isEmpty) return Center(child: Text('No resources found.', style: GoogleFonts.outfit(color: Colors.grey)));
- 
-        return ListView.builder(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-          itemCount: docs.length,
-          itemBuilder: (context, index) {
-            final data = docs[index].data() as Map<String, dynamic>;
-            final id = docs[index].id;
+    List<QueryDocumentSnapshot> displayDocs = isEditing 
+        ? docs 
+        : docs.where((doc) => selectedIds.contains(doc.id)).toList();
+
+    if (displayDocs.isEmpty) {
+      return Center(
+        child: Text(
+          isEditing ? 'No resources found.' : 'No resources recommended yet.', 
+          style: GoogleFonts.outfit(color: Colors.grey)
+        )
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+      itemCount: displayDocs.length,
+      itemBuilder: (context, index) {
+            final data = displayDocs[index].data() as Map<String, dynamic>;
+            final id = displayDocs[index].id;
             final isSelected = selectedIds.contains(id);
             final isInitiallyRecommended = initialRecommendedIds.contains(id);
             final title = data['title'] ?? 'Untitled';
             final imageUrl = data['imageUrl'] ?? '';
 
-            // Determine visual state
-            final bool willBeAdded = isSelected && !isInitiallyRecommended;
-            final bool willBeRemoved = !isSelected && isInitiallyRecommended;
-            final bool unchanged = isSelected && isInitiallyRecommended;
-
-            Color cardBorderColor = Colors.transparent;
-            Color cardBgColor = Colors.white;
-            if (willBeAdded) {
-              cardBorderColor = primaryGreen;
-              cardBgColor = const Color(0xFFEDF4EF);
-            } else if (willBeRemoved) {
-              cardBorderColor = Colors.redAccent.withOpacity(0.5);
-              cardBgColor = const Color(0xFFFFF5F5);
-            } else if (unchanged) {
-              cardBorderColor = const Color(0xFFC5A880).withOpacity(0.5);
-              cardBgColor = const Color(0xFFFBF8F4);
-            }
+            Color cardBorderColor = isSelected ? primaryGreen.withOpacity(0.4) : Colors.grey[200]!;
+            Color cardBgColor = isSelected ? primaryGreen.withOpacity(0.05) : Colors.white;
 
             return GestureDetector(
-              onTap: () {
+              onTap: isEditing ? () {
                 setModalState(() {
                   if (isSelected) {
                     selectedIds.remove(id);
@@ -1350,23 +1322,23 @@ class SessionDetailScreen extends StatelessWidget {
                     }
                   }
                 });
-              },
+              } : null,
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
-                margin: const EdgeInsets.only(bottom: 10),
-                padding: const EdgeInsets.all(12),
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   color: cardBgColor,
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(
                     color: cardBorderColor,
-                    width: 1.8,
+                    width: 1.5,
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.03),
-                      blurRadius: 8,
-                      offset: const Offset(0, 3),
+                      color: Colors.black.withOpacity(0.02),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
                     ),
                   ],
                 ),
@@ -1378,9 +1350,31 @@ class SessionDetailScreen extends StatelessWidget {
                       child: imageUrl.isNotEmpty
                           ? Image.network(
                               imageUrl,
+                              cacheWidth: 150,
                               width: 60,
                               height: 60,
                               fit: BoxFit.cover,
+                              loadingBuilder: (context, child, loadingProgress) {
+                                if (loadingProgress == null) return child;
+                                return Container(
+                                  width: 60,
+                                  height: 60,
+                                  decoration: BoxDecoration(
+                                    color: primaryGreen.withOpacity(0.05),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: const Center(
+                                    child: SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Color(0xFF7C9C84),
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
                               errorBuilder: (c, e, s) => Container(
                                 width: 60, height: 60,
                                 color: Colors.grey[100],
@@ -1408,31 +1402,11 @@ class SessionDetailScreen extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Type pill
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: typeLabel == 'article'
-                                  ? const Color(0xFF86A588).withOpacity(0.15)
-                                  : const Color(0xFF7C9C84).withOpacity(0.12),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              typeLabel == 'article' ? 'ARTICLE' : 'MEDITATION',
-                              style: GoogleFonts.outfit(
-                                fontSize: 8,
-                                fontWeight: FontWeight.bold,
-                                color: primaryGreen,
-                                letterSpacing: 0.8,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 5),
                           Text(
                             title,
                             style: GoogleFonts.outfit(
                               fontWeight: FontWeight.w600,
-                              fontSize: 14,
+                              fontSize: 15,
                               color: const Color(0xFF333333),
                             ),
                             maxLines: 2,
@@ -1443,102 +1417,26 @@ class SessionDetailScreen extends StatelessWidget {
                     ),
                     const SizedBox(width: 12),
                     // Action button
-                    _buildActionButton(isSelected, isInitiallyRecommended, willBeRemoved, primaryGreen),
+                    _buildActionButton(isSelected, primaryGreen, isEditing),
                   ],
                 ),
               ),
             );
           },
         );
-      },
-    );
   }
 
-  Widget _buildActionButton(bool isSelected, bool isInitiallyRecommended, bool willBeRemoved, Color primaryGreen) {
-    if (willBeRemoved) {
-      // Was recommended, now unselected → will be removed
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        decoration: BoxDecoration(
-          color: Colors.red.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.redAccent.withOpacity(0.4), width: 1),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.remove_circle_rounded, color: Colors.redAccent, size: 20),
-            const SizedBox(height: 2),
-            Text(
-              'REMOVE',
-              style: GoogleFonts.outfit(fontSize: 8, fontWeight: FontWeight.bold, color: Colors.redAccent),
-            ),
-          ],
-        ),
-      );
-    } else if (isSelected && isInitiallyRecommended) {
-      // Currently recommended and still selected → tap to un-recommend
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        decoration: BoxDecoration(
-          color: const Color(0xFFC5A880).withOpacity(0.12),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFFC5A880).withOpacity(0.5), width: 1),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.star_rounded, color: Color(0xFFC5A880), size: 20),
-            const SizedBox(height: 2),
-            Text(
-              'SENT',
-              style: GoogleFonts.outfit(fontSize: 8, fontWeight: FontWeight.bold, color: Color(0xFFC5A880)),
-            ),
-          ],
-        ),
-      );
-    } else if (isSelected && !isInitiallyRecommended) {
-      // New selection → will be added
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        decoration: BoxDecoration(
-          color: primaryGreen.withOpacity(0.12),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: primaryGreen.withOpacity(0.5), width: 1),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.check_circle_rounded, color: primaryGreen, size: 20),
-            const SizedBox(height: 2),
-            Text(
-              'ADDED',
-              style: GoogleFonts.outfit(fontSize: 8, fontWeight: FontWeight.bold, color: primaryGreen),
-            ),
-          ],
-        ),
-      );
+  Widget _buildActionButton(bool isSelected, Color primaryGreen, bool isEditing) {
+    if (!isEditing) {
+      if (isSelected) return Icon(Icons.check_circle_rounded, color: primaryGreen, size: 28);
+      return const SizedBox(width: 28);
+    }
+    
+    if (isSelected) {
+      return Icon(Icons.check_circle_rounded, color: primaryGreen, size: 28);
     } else {
-      // Not selected, never recommended → tap to recommend
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        decoration: BoxDecoration(
-          color: Colors.grey.withOpacity(0.08),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.grey.withOpacity(0.2), width: 1),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.add_circle_outline_rounded, color: Colors.grey[500], size: 20),
-            const SizedBox(height: 2),
-            Text(
-              'ADD',
-              style: GoogleFonts.outfit(fontSize: 8, fontWeight: FontWeight.bold, color: Colors.grey[500]),
-            ),
-          ],
-        ),
-      );
+      return Icon(Icons.add_circle_outline_rounded, color: Colors.grey[300], size: 28);
     }
   }
+
 }

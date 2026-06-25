@@ -4,7 +4,7 @@ import json
 import random
 import warnings
 from dataclasses import dataclass, field
-from typing import Optional, Tuple, Dict, List
+from typing import Optional, Tuple, Dict, List, Any
 
 import torch
 import nltk
@@ -74,6 +74,16 @@ class UserContextTracker:
     validated_this_turn: bool = False  # prevent double-validation
     emotion_history: List[str] = field(default_factory=list)   # rolling last 5 intents
     strategy_history: List[str] = field(default_factory=list)  # rolling last 5 strategies
+    
+    # ── Layer 2 & Layer 6 (Architectural Redesign v3) ──
+    topic_history: List[str] = field(default_factory=list)
+    last_questions: List[str] = field(default_factory=list) # Track last 3 questions
+    active_intent_memory: Dict[str, Any] = field(default_factory=lambda: {
+        "current_intent": None,
+        "confidence": 0.0,
+        "turn_count": 0,
+        "consecutive_recovery_signals": 0
+    })
     last_coping_step: Optional[str] = None  # avoid repeating same step type
     current_entity: Optional[str] = None   # extracted specific topic entity (e.g. "final year project")
     history: List[Turn] = field(default_factory=list) # richer session history
@@ -861,6 +871,18 @@ class AdvancedNLUPipeline:
         sentiment_text = self._strip_masking_laughter(clean) if self._has_masking_laughter(clean) else clean
         if self.sia.polarity_scores(sentiment_text)["compound"] <= -0.2:
             return pressure_intent
+        
+        # If it's an academic statement (e.g. "I have assignments"),
+        # do not downgrade it to neutral_checkin, because academic_workload
+        # has its own neutral exploration strategy (academic_explore_strategy).
+        academic_intents = [
+            "academic_workload", "academic_pressure", "coding_pressure",
+            "exam_pressure", "deadline_pressure", "presentation_pressure",
+            "group_work_pressure"
+        ]
+        if pressure_intent in academic_intents:
+            return "academic_workload"
+            
         return "neutral_checkin"
 
     # ════════════════════════════════════════════════════════════════
@@ -1096,13 +1118,53 @@ class AdvancedNLUPipeline:
             "good evening", "yo", "hi there", "hello there", "greetings",
             "hey there", "morning", "evening", "hii", "heloo", "helo", "helloo",
         ]
+        if clean in greeting_phrases:
+            return "greeting"
+
+        # ── withdrawal / longing / mixed feelings ────────────
+        withdrawal_kws = [
+            "stay in bed all day", "don't want to leave my room", "dont want to leave my room",
+            "haven't left my bed", "havent left my bed", "can't face anyone", "cant face anyone",
+            "just hiding away", "shutting everyone out", "ignoring my friends",
+            "stopped talking to everyone", "just sleeping all day", "don't want to see anyone",
+            "dont want to see anyone", "just stay in bed", "stay in bed", "staying in bed",
+            "don't want to do anything", "dont want to do anything",
+        ]
+        if any(kw in clean for kw in withdrawal_kws):
+            return "withdrawal"
+
+        checking_ex_kws = [
+            "checking her instagram", "checking his instagram", "checking their instagram",
+            "looking at her instagram", "looking at his instagram",
+            "checking her social media", "checking his social media",
+            "stalking her", "stalking him", "stalking their",
+            "checking her profile", "checking his profile"
+        ]
+        if any(kw in clean for kw in checking_ex_kws):
+            return "checking_ex_behavior"
+            
+        longing_kws = [
+            "still searching for",
+        ]
+        if any(kw in clean for kw in longing_kws):
+            return "longing"
+
+        mixed_feelings_kws = [
+            "relationship was toxic", "wasn't right for me", "wasnt right for me",
+            "we argued so much", "it was bad for me", "i know it's for the best",
+            "i know its for the best", "better off without", "part of me is relieved",
+            "relieved it's over", "relieved its over",
+        ]
+        if any(kw in clean for kw in mixed_feelings_kws):
+            return "mixed_feelings"
+
         greeting_kws = [
             "how are you", "how are you today", "what's up", "whats up",
             "how's it going", "hows it going", "how are things",
             "how have you been", "how do you do"
         ]
         
-        if clean in greeting_phrases or any(kw in clean for kw in greeting_kws):
+        if any(kw in clean for kw in greeting_kws):
             return "greeting"
             
         # If it starts with a greeting and is relatively short, consider it a greeting
@@ -2427,6 +2489,7 @@ class AdvancedNLUPipeline:
                 "no choice", "only way", "keep doing", "keep going", "keep trying",
                 "push through", "gotta", "might as well", "guess i'll", "guess i will",
                 "have to anyway", "no other way", "won't give up", "wont give up",
+                "better this way", "right decision", "was toxic", "wasn't right for me"
                 "have to deal with it", "just have to", "still gonna", "still going to",
             ],
         }
@@ -2446,6 +2509,9 @@ class AdvancedNLUPipeline:
             tracker.current_progress_detail = clean
 
         state["meaning_shift"] = meaning_shift
+        
+        if meaning_shift == "acceptance":
+            state["intent"] = "acceptance"
 
         # ── Misunderstanding Repair Layer (runs BEFORE everything below) ──
         # "That's not what I mean"/"I didn't mean that" are the user correcting
@@ -2957,9 +3023,13 @@ class AdvancedNLUPipeline:
                 
         if is_answering:
             tracker.last_bot_question["answered"] = True
-            state["intent"] = "answer_previous_question"
+            state["conversation_act"] = "answer_previous_question"
             state["answer_value"] = clean
-            return state
+            
+            # Return early ONLY if it's a generic short response (no deep emotion)
+            if clean in BOOLEAN_ANSWERS or clean in SHORT_PHRASES or len(clean.split()) <= 2:
+                state["intent"] = "answer_previous_question"
+                return state
 
         # Priority 3: Low-engagement filter (Only if NOT answering a question)
         if clean in LOW_ENGAGEMENT_KEYWORDS or (len(clean.split()) <= 2 and any(kw == clean for kw in LOW_ENGAGEMENT_KEYWORDS)):
@@ -3115,7 +3185,126 @@ class AdvancedNLUPipeline:
             if len(clean.split()) > 2 and state.get("intent") not in ["topic_shift_neutral", "topic_shift_emotion", "low_engagement"]:
                 tracker.last_bot_question["answered"] = True
 
+        state = self._apply_v3_architecture(state, tracker)
         return state
+
+    def _apply_v3_architecture(self, state: Dict[str, Any], tracker: "UserContextTracker") -> Dict[str, Any]:
+        raw_intent = state.get("intent", "")
+        raw_topic = state.get("topic", "general")
+        
+        # ── Layer 1: Main Intent ──
+        # Mappings from 60+ raw tags to ~18 v3 Layer 1 tags
+        distress_group = {"stress", "chronic_distress", "strong_negative_mood", "sadness", "venting", "negative_checkin"}
+        anxiety_group = {"overthinking", "looping_thoughts", "future_uncertainty", "fear_unsolved_problem", "topic_anxiety", "social_anxiety"}
+        self_worth_group = {"self_comparison", "self_esteem", "guilt_shame"}
+        physical_group = {"sleep_problem", "body_focus", "body_and_thoughts"}
+        loneliness_group = {"loneliness", "emptiness"}
+        improvement_group = {"slight_relief", "mixed_relief", "recovery_signal"} # acceptance is handled below
+        
+        new_intent = raw_intent
+        if raw_intent in distress_group:
+            new_intent = "distress"
+        elif raw_intent in anxiety_group:
+            new_intent = "anxiety"
+        elif raw_intent in self_worth_group:
+            new_intent = "self_worth"
+        elif raw_intent in physical_group:
+            new_intent = "physical_symptoms"
+        elif raw_intent in loneliness_group:
+            new_intent = "loneliness"
+        elif raw_intent in improvement_group or raw_intent == "acceptance":
+            new_intent = "improvement"
+            state["improvement_type"] = "acceptance" if raw_intent == "acceptance" else "relief"
+        elif raw_intent in {"general_activity", "intent_chat"}:
+            new_intent = "neutral_checkin"
+        
+        # ── Layer 1.5: Risk Level ──
+        # Determine risk level based on old safety overrides or specific high-intensity intents
+        risk_level = "low"
+        if raw_intent in ["emergency_crisis", "crisis_risk", "crisis_followup", "crisis_risk_denied"]:
+            risk_level = "crisis"
+            new_intent = raw_intent  # Absolute override, do not map to distress
+        elif raw_intent == "high_intensity_distress":
+            risk_level = "high"
+            new_intent = "distress"
+        elif state.get("distress_score", 0) >= 4:
+            risk_level = "moderate"
+        
+        state["risk_level"] = risk_level
+        
+        # ── Layer 2: Topic ──
+        topic_map = {
+            "topic_study": "academic", "focus_problem": "academic", "academic_workload": "academic",
+            "topic_work": "work", "topic_burnout": "work",
+            "relationship": "relationship", "friendship_pressure": "relationship",
+            "topic_family": "family", "family_pressure": "family",
+            "money_stress": "finance"
+        }
+        new_topic = topic_map.get(raw_intent, raw_topic)
+        if new_topic not in ["academic", "work", "relationship", "family", "health", "finance", "social"]:
+            new_topic = "general"
+            
+        # Topic Inheritance: if the user said something that doesn't explicitly name a topic,
+        # but the tracker has a specific topic locked in, we inherit it. 
+        if new_topic == "general" and tracker.topic and tracker.topic != "general":
+            new_topic = tracker.topic
+            
+        state["intent"] = new_intent
+        state["topic"] = new_topic
+        
+        # ── Layer 3: Recovery State ──
+        # We extract this during coping flow, usually via meaning_shift or direct match
+        recovery_state = "same"
+        if new_intent == "improvement":
+            recovery_state = "better" if raw_intent == "slight_relief" else "mixed"
+        elif raw_intent in {"coping_failure", "no_relief"}:
+            recovery_state = "worse"
+        state["recovery_state"] = recovery_state
+        
+        # ── Layer 6: Active State Memory (Momentum) ──
+        mem = tracker.active_intent_memory
+        old_intent = mem["current_intent"]
+        old_conf = mem["confidence"]
+        new_conf = state.get("confidence", 0.75)
+        
+        # Momentum update if intent is the same, else check for flip
+        if old_intent == new_intent:
+            mem["confidence"] = (0.6 * old_conf) + (0.4 * new_conf)
+            mem["turn_count"] += 1
+            mem["consecutive_recovery_signals"] = 0 if new_intent != "improvement" else mem["consecutive_recovery_signals"] + 1
+        else:
+            if new_intent == "improvement" and old_intent is not None:
+                mem["consecutive_recovery_signals"] += 1
+                if mem["consecutive_recovery_signals"] >= 2:
+                    # Full transition
+                    mem["current_intent"] = new_intent
+                    mem["confidence"] = new_conf
+                    mem["turn_count"] = 1
+                else:
+                    # Not enough signals to flip the entrenched state yet, just smooth the old confidence down
+                    mem["confidence"] = (0.6 * old_conf)
+                    state["intent"] = old_intent # Mask the flip this turn
+            else:
+                mem["current_intent"] = new_intent
+                mem["confidence"] = new_conf
+                mem["turn_count"] = 1
+                mem["consecutive_recovery_signals"] = 0
+                
+        # ── Topic Shift Detector ──
+        if len(tracker.topic_history) > 0:
+            last_topic = tracker.topic_history[-1]
+            if new_topic != "general" and new_topic != last_topic:
+                if new_conf > 0.70:
+                    state["topic_shift_detected"] = True
+                    state["previous_topic"] = last_topic
+        
+        if len(tracker.topic_history) == 0 or tracker.topic_history[-1] != new_topic:
+            tracker.topic_history.append(new_topic)
+            if len(tracker.topic_history) > 5:
+                tracker.topic_history.pop(0)
+
+        return state
+
 
 
 # ============================================================
@@ -3321,6 +3510,22 @@ class SmarterDialogueManager:
                 return "academic_explore_strategy"
             return "open_chat"
 
+        # ── POLICY TABLE (Coupled Stage to Strategy) ──
+        stage = tracker.conversation_stage
+        
+        # 1. Acceptance Stage Constraint
+        if stage == "acceptance" or intent == "acceptance":
+            return "acceptance_acknowledgment"
+            
+        # 2. Topic-Specific Policies
+        if topic in ["relationship", "relationship_loss"]:
+            if intent == "checking_ex_behavior":
+                return "rumination_behavior_strategy"
+            if intent == "mixed_feelings":
+                return "mixed_feelings_support"
+            if intent == "longing":
+                return "longing_support"
+                
         if intent == "academic_all_pressure":
             return "academic_all_support"
 
@@ -3344,18 +3549,8 @@ class SmarterDialogueManager:
                 # Skip light-touch responses and go straight to coping/grounding
                 return self.get_coping_strategy_for_symptom(tracker)
 
-        # Check topic transition -- but an active Attention Lock outranks the
-        # broad topic-category model here (Priority 1: Current Attention Focus
-        # > Priority 5: Global Topic). Without this, a vague message like "I
-        # don't even know what's wrong anymore" can get misclassified into an
-        # unrelated topic_category and spuriously ask "did the topic change?"
-        # even though the user is still deep in the locked technical/deadline/
-        # relationship focus.
-        if (self._topic_domain(topic) != self._topic_domain(tracker.topic)
-                and topic not in [None, "general"]
-                and tracker.topic not in [None, "general"]
-                and tracker.turn_count > 2
-                and tracker.attention.lock_turns_remaining <= 0):
+        # ── Topic Shift Detector (Layer 2) ──
+        if state.get("topic_shift_detected") and tracker.turn_count > 2 and tracker.attention.lock_turns_remaining <= 0:
             return "topic_shift_acknowledgement"
 
         # ── mood states ───────────────────────────────────────
@@ -4761,6 +4956,7 @@ class HumanResponseGenerator:
         self,
         state: Dict[str, str],
         tracker: "UserContextTracker",
+        strategy: Optional[str] = None,
         action_options: Optional[List[str]] = None,
         stage_override: Optional[str] = None,
     ) -> Tuple[str, bool]:
@@ -4804,6 +5000,8 @@ class HumanResponseGenerator:
             emotion_intent=state.get("intent", ""),
             topic_entity=entity,
             stage=stage,
+            strategy=strategy,
+            topic=state.get("topic", "general"),
             meaning_shift=state.get("meaning_shift"),
             event_category=event_category,
             action_options=action_options,
@@ -4907,6 +5105,13 @@ class HumanResponseGenerator:
             "fear_of_breakup_response":         ("fear_of_breakup_response",        "open_emotion"),
             "relationship_synthesis_response":  ("relationship_synthesis_response", None),
             "relationship_loss_support":        ("relationship_loss_support",       "open_emotion"),
+            "withdrawal_relationship_support":  ("withdrawal_relationship_support", "open_emotion"),
+            "withdrawal_general_support":       ("withdrawal_general_support",      "open_emotion"),
+            "longing_support":                  ("longing_support",                 "open_emotion"),
+            "mixed_feelings_support":           ("mixed_feelings_support",          "open_emotion"),
+            "acceptance_support":               ("acceptance_support",              "open_emotion"),
+            "acceptance_acknowledgment":        ("acceptance_acknowledgment",       None),
+            "rumination_behavior_strategy":     ("rumination_behavior_strategy",    "open_emotion"),
             "coding_pressure_support":          ("coding_pressure_support",         "open_emotion"),
             "exam_pressure_support":            ("exam_pressure_support",           "open_emotion"),
             "deadline_pressure_support":        ("deadline_pressure_support",       "open_emotion"),
@@ -5026,10 +5231,12 @@ class HumanResponseGenerator:
                     "support" in key or key in EXPLORE_BANK_KEYS
                     or key == "answer_acknowledgement_strategy"
                     or key in ANSWER_INTERPRETATION_KEYS
+                    or key == "rumination_behavior_strategy"
+                    or key == "acceptance_acknowledgment"
                 ) and hasattr(self, 'component_engine')):
                 action_options = self.responses.get(key) if key in EXPLORE_BANK_KEYS else None
                 response, has_question = self._generate_via_component_engine(
-                    state, tracker, action_options=action_options
+                    state, tracker, strategy=strategy, action_options=action_options
                 )
                 return response, (qtype if has_question else None)
 

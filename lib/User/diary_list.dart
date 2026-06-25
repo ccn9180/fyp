@@ -25,7 +25,7 @@ class _DiaryListScreenState extends State<DiaryListScreen> {
   final Color textColorMain = const Color(0xFF333333);
   final Color textColorSub = const Color(0xFF888888);
 
-  final List<String> _filters = ['All', 'Happy', 'Calm', 'Neutral', 'Anxious', 'Angry', 'Sad'];
+  final List<String> _filters = ['All', 'Shared', 'Happy', 'Calm', 'Neutral', 'Anxious', 'Angry', 'Sad'];
 
   @override
   void dispose() {
@@ -190,6 +190,9 @@ class _DiaryListScreenState extends State<DiaryListScreen> {
                     if (filter == 'All') ...[
                       Icon(Icons.grid_view_rounded, size: 16, color: isSelected ? Colors.white : primaryGreen),
                       const SizedBox(width: 8),
+                    ] else if (filter == 'Shared') ...[
+                      Icon(Icons.people_outline_rounded, size: 16, color: isSelected ? Colors.white : primaryGreen),
+                      const SizedBox(width: 8),
                     ] else if (filter == 'Happy') ...[
                       Icon(Icons.sentiment_satisfied_rounded, size: 16, color: isSelected ? Colors.white : primaryGreen),
                       const SizedBox(width: 8),
@@ -307,7 +310,7 @@ class _DiaryListScreenState extends State<DiaryListScreen> {
         .collection('diary_entries')
         .orderBy('timestamp', descending: true);
 
-    if (_selectedFilter != 'All') {
+    if (_selectedFilter != 'All' && _selectedFilter != 'Shared') {
       query = query.where('mood', isEqualTo: _selectedFilter);
     }
 
@@ -336,7 +339,14 @@ class _DiaryListScreenState extends State<DiaryListScreen> {
           final data = doc.data() as Map<String, dynamic>;
           final title = (data['title'] ?? '').toString().toLowerCase();
           final entriesContent = (data['content'] ?? '').toString().toLowerCase();
-          if (title.contains(_searchQuery) || entriesContent.contains(_searchQuery)) {
+          
+          bool matchesShared = true;
+          if (_selectedFilter == 'Shared') {
+            final Map<String, dynamic> sharingAccess = data['sharingAccess'] ?? {};
+            matchesShared = sharingAccess.values.any((v) => v == true);
+          }
+
+          if (matchesShared && (title.contains(_searchQuery) || entriesContent.contains(_searchQuery))) {
             data['id'] = doc.id;
             entries.add(data);
           }
