@@ -260,7 +260,7 @@ class _EntrySummaryScreenState extends State<EntrySummaryScreen> {
             headers: {'Content-Type': 'application/json'},
             body: jsonEncode({'text': widget.content}),
           )
-          .timeout(const Duration(seconds: 4)));
+          .timeout(const Duration(seconds: 30)));
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = jsonDecode(response.body);

@@ -59,6 +59,33 @@ class _CounsellorDetailScreenState extends State<CounsellorDetailScreen> {
         final appDoc = await FirebaseFirestore.instance.collection('counsellor_applications').doc(widget.counsellorId).get();
         final appData = appDoc.exists ? appDoc.data() as Map<String, dynamic> : null;
         
+        // Calculate rating and patients from counsellor_bookings
+        final bookingsSnap = await FirebaseFirestore.instance
+            .collection('counsellor_bookings')
+            .where('counsellorId', isEqualTo: widget.counsellorId)
+            .get();
+        
+        double totalRating = 0;
+        int ratingCount = 0;
+        Set<String> uniquePatients = {};
+        
+        for (var bDoc in bookingsSnap.docs) {
+          final bData = bDoc.data();
+          if (bData['patientId'] != null) {
+            uniquePatients.add(bData['patientId'].toString());
+          }
+          if (bData['rating'] != null) {
+            double r = (bData['rating'] is num) ? (bData['rating'] as num).toDouble() : double.tryParse(bData['rating'].toString()) ?? 0;
+            if (r > 0) {
+              totalRating += r;
+              ratingCount++;
+            }
+          }
+        }
+        
+        data['rating'] = ratingCount > 0 ? (totalRating / ratingCount).toStringAsFixed(1) : '0.0';
+        data['patients'] = uniquePatients.isNotEmpty ? uniquePatients.length.toString() : '-';
+
         if (appData != null) {
           if (data['counsellorBio'] == null || data['counsellorBio'].toString().trim().isEmpty) {
             data['counsellorBio'] = appData['bio'] ?? appData['motivation'];
@@ -215,13 +242,17 @@ class _CounsellorDetailScreenState extends State<CounsellorDetailScreen> {
             ),
 
             Expanded(
-              child: SingleChildScrollView(
+              child: _isLoadingDetails 
+                ? Center(child: CircularProgressIndicator(color: primaryGreen))
+                : SingleChildScrollView(
                 padding: const EdgeInsets.all(24),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Center(
+                    Container(
+                      width: double.infinity,
                       child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
                     // Profile Image with Verification Badge
                     Stack(

@@ -200,7 +200,7 @@ def evaluate_per_class(model, dataloader, tags, device):
 
 def train_model():
     print("🚀 Initializing Eunoia FYP BiLSTM Training Pipeline...")
-    sequences, labels, vocab, tags = load_and_prepare_data("intents_combined.json")
+    sequences, labels, vocab, tags = load_and_prepare_data("intents_v4.json")
     num_epochs = 150
     batch_size = 16
     learning_rate = 0.0005

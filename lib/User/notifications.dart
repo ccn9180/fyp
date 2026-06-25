@@ -595,6 +595,11 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         bgColor = const Color(0xFFE5A83E).withOpacity(0.1);
         iconData = Icons.wb_sunny_outlined;
         break;
+      case 'shared_item':
+        iconColor = primaryGreen;
+        bgColor = primaryGreen.withOpacity(0.1);
+        iconData = Icons.folder_shared_outlined;
+        break;
       default:
         iconColor = const Color(0xFF888888);
         bgColor = const Color(0xFF888888).withOpacity(0.1);

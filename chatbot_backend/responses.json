@@ -8,7 +8,7 @@
         "Fair enough, not every day has to be a big one."
     ],
     "open_chat": [
-        "Sounds good 😊. Happy to just chat. How's your day been so far?",
+        "Sounds good \u00f0\u0178\u02dc\u0160. Happy to just chat. How's your day been so far?",
         "Glad you came by. What's been going on lately?",
         "Nice, anything interesting happen today?"
     ],
@@ -149,9 +149,9 @@
     "smart_clarification": [
         "I want to understand you properly. Could you tell me which feeling is strongest right now?",
         "It can be hard to find the words sometimes. What feels heaviest for you right now?",
-        "I want to get this right — what's the main thing on your mind?",
+        "I want to get this right \u00e2\u20ac\u201d what's the main thing on your mind?",
         "Sometimes it's hard to put into words. What stands out most to you right now?",
-        "I'm with you — what feels closest to the truth of it for you?"
+        "I'm with you \u00e2\u20ac\u201d what feels closest to the truth of it for you?"
     ],
     "coding_pressure_support": [
         "Coding pressure is uniquely frustrating because one tiny bug can block hours of progress. What feels hardest right now\u2014understanding the logic, fixing the errors, or just not knowing where to begin?",
@@ -369,14 +369,9 @@
         "Hey there! How are you doing today?"
     ],
     "close": [
-        "Thank you so much for sharing your heart with me today. Please be very gentle with yourself and take care.",
-        "It was really good to spend this time with you today. Take things one small step at a time, and remember to be kind to yourself.",
-        "Thank you for trusting me with these heavy feelings. Rest well tonight, and remember\u2014just take it one moment at a time.",
-        "You did incredibly well today. Please remember to rest your mind and body, and be gentle with yourself.",
-        "Thank you for sharing your thoughts with me. I'll be right here whenever you need to talk again.",
-        "Take a deep breath. You are doing the absolute best you can, and that is enough. See you next time.",
-        "It takes so much courage to talk about these painful things. Please take care of yourself, okay?",
-        "I am always here for you. I hope you have a restful, peaceful day ahead."
+        "Good to hear things are feeling lighter now. Take care of yourself.",
+        "Glad things have eased up. You've done enough for today.",
+        "That's good to hear. Take things slowly from here."
     ],
     "soft_idk_response": [
         "That's completely okay. You do not need to have the perfect words or understand it all. What feels the heaviest to you right now?",
@@ -458,10 +453,32 @@
         "I want to make sure I understand you properly. Could you tell me a bit more?",
         "I'm not completely sure I'm following. Could you rephrase that for me?",
         "I'm with you, but could you share a little more about what you mean?",
-        "I want to follow this the right way — could you walk me through it a bit more?",
-        "Help me understand a little better — what's going on for you right now?",
+        "I want to follow this the right way \u00e2\u20ac\u201d could you walk me through it a bit more?",
+        "Help me understand a little better \u00e2\u20ac\u201d what's going on for you right now?",
         "I'm listening, I just want to make sure I'm getting it right. Could you say a bit more?",
-        "I don't want to assume — could you tell me more about what you mean?",
-        "Take your time, I'm still here — what would you like me to understand?"
+        "I don't want to assume \u00e2\u20ac\u201d could you tell me more about what you mean?",
+        "Take your time, I'm still here \u00e2\u20ac\u201d what would you like me to understand?"
+    ],
+    "recovery_ack": [
+        "Good to hear things have eased up. Take things at your own pace.",
+        "That's good to hear. Hope things stay manageable for you.",
+        "Alright, take care of yourself."
+    ],
+    "withdrawal_relationship_support": [
+        "It sounds like you've been withdrawing from a lot of things and mostly staying in bed. Breakups can leave people feeling drained and without much energy. What has those days been like for you?"
+    ],
+    "withdrawal_general_support": [
+        "It sounds like you've been withdrawing from a lot of things and mostly staying in bed. When things feel overwhelming, the body naturally wants to shut down and rest. What has those days been like for you?"
+    ],
+    "longing_support": [
+        "It sounds like part of you is still searching for some connection with her, even though the relationship has ended.",
+        "It's understandable to keep checking when someone still matters so much to you."
+    ],
+    "mixed_feelings_support": [
+        "Missing someone and recognizing that the relationship wasn't healthy can both be true at the same time. Those feelings don't cancel each other out."
+    ],
+    "acceptance_support": [
+        "Part of you still hurts, but another part seems to recognize that ending the relationship may have been healthier for you. Those mixed feelings are completely understandable.",
+        "It sounds like you're beginning to see both the pain of losing them and the reasons why the relationship ended."
     ]
 }

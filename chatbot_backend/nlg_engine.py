@@ -8,6 +8,46 @@ def _cap(text: str) -> str:
 
 class ComponentNLGEngine:
     def __init__(self):
+        self.TOPIC_TEMPLATES = {
+            "relationship_loss": {
+                "relationship_loss_support": [
+                    "Breakups can bring up a lot of emotions all at once. Losing someone important can hurt deeply. What's been weighing on you the most since it happened?",
+                    "That sounds incredibly painful. Going through a breakup can feel like your whole world has shifted. How are you holding up?",
+                    "I hear you. Breakups are rarely easy and often leave a heavy feeling behind. What has felt hardest for you today?"
+                ],
+                "longing_support": [
+                    "It's completely natural to feel that way. When someone was a big part of your life, the space they leave behind can feel impossible to ignore.",
+                    "Missing them is often one of the hardest parts. It takes time for your mind and heart to adjust to them not being there.",
+                    "It makes sense that you can't forget her. The connection you shared doesn't just disappear overnight."
+                ],
+                "mixed_feelings_support": [
+                    "Missing someone and recognizing that the relationship wasn't healthy can both be true at the same time. Those feelings don't cancel each other out.",
+                    "It sounds like part of you misses her deeply, while another part recognizes that the relationship wasn't healthy. Holding both of those truths at the same time can be confusing and painful."
+                ],
+                "rumination_behavior_strategy": [
+                    "It sounds like part of you still feels connected, and checking up might be one way of holding onto that connection. What usually goes through your mind afterwards?",
+                    "Many people find themselves looking for signs or memories after a breakup. How do you usually feel after checking?"
+                ],
+                "acceptance_acknowledgment": [
+                    "It sounds like part of you is beginning to wonder whether letting go might ultimately be healthier, even though it still hurts.",
+                    "Even with all the pain, it sounds like you're starting to see why part of you feels this separation may be for the best.",
+                    "It takes strength to recognize that even though it hurts, part of you is beginning to see why this relationship may not have been healthy for you. Missing her and believing this might be for the best don't cancel each other out. Sometimes both feelings exist together.",
+                    "A relationship can matter deeply and still not be good for you. It sounds like you're starting to recognize both sides of that."
+                ]
+            },
+            "academic": {
+                "mixed_feelings_support": [
+                    "It makes sense to feel conflicted about your academic path right now.",
+                    "School can bring up a lot of mixed feelings, especially when the workload is heavy."
+                ],
+                "academic_explore_strategy": [
+                    "What part of your academic workload is weighing on you the most right now?",
+                    "Is there a specific project or deadline making things feel overwhelming?"
+                ]
+            },
+            "general": {}
+        }
+        
         # ── Validation bank: emotion-group-specific empathic openers ──
         self.validations = {
             "frustration": [
@@ -69,6 +109,20 @@ class ComponentNLGEngine:
                 "That sounds like a lot to be dealing with",
                 "I'm glad you shared that with me",
                 "That makes sense, given everything going on",
+            ],
+            "relationship_loss": [
+                "That sounds really painful, especially with this happening so recently",
+                "Breakups can leave a lot of emotions all at once",
+                "Losing someone important can hurt deeply",
+                "It makes sense that this would be weighing on you",
+            ],
+            "grief": [
+                "Losing someone close can be incredibly difficult",
+                "It makes sense that you're hurting after something like this",
+            ],
+            "academic": [
+                "That sounds like a lot of pressure to carry",
+                "Having several deadlines at once can feel overwhelming",
             ],
         }
 
@@ -142,9 +196,9 @@ class ComponentNLGEngine:
         # concrete rather than generic. ──
         self.conversation_paths = {
             "general": [
-                "We could talk about what's been hardest about {topic}, what's making you feel this way, or just how you've been coping with it.",
-                "We can dig into {topic} itself, what's been weighing on you about it, or just sit with how you're feeling right now.",
-                "We could focus on {topic}, on what's underneath the feeling, or just take a moment before going further.",
+                "We could talk about what's been the hardest part of this, what's making you feel this way, or just how you've been coping with it.",
+                "We can dig into the situation itself, what's been weighing on you about it, or just sit with how you're feeling right now.",
+                "We could focus on the situation, on what's underneath the feeling, or just take a moment before going further.",
             ],
             "fallback": [
                 "We could talk about what's been making this hard, how you're feeling about it, or just take a moment together.",
@@ -239,19 +293,19 @@ class ComponentNLGEngine:
         # ── Reflection (attached): dependent clause, joined after a validation line ──
         self.reflections = {
             "general": [
-                "especially when you have to deal with {topic}.",
-                "especially regarding {topic}.",
-                "when you are facing {topic}.",
-                "when {topic} is on your mind.",
-                "especially with {topic} weighing on you.",
-                "particularly with how {topic} has been going.",
+                "especially when you have to deal with so much at once.",
+                "especially with everything going on.",
+                "when you are facing such a tough situation.",
+                "when this is constantly on your mind.",
+                "especially with this weighing on you.",
+                "particularly with how things have been going.",
             ]
         }
         self.reflections_event = {
             "general": [
                 "especially having to {event}.",
                 "particularly with having to {event} weighing on you.",
-                "especially when having to {event} keeps coming back around.",
+                "especially with having to {event} on your plate right now.",
                 "when you're stuck having to {event}.",
             ]
         }
@@ -260,11 +314,11 @@ class ComponentNLGEngine:
         # distinct in tone from validation ("So it sounds like...") ──
         self.reflection_summary = {
             "general": [
-                "So it sounds like {topic} has been the main thing weighing on you.",
-                "It seems like {topic} is the part that's been hardest to deal with.",
-                "From what you've shared, {topic} is really at the center of this right now.",
-                "So far it sounds like this has mostly been about {topic}.",
-                "It sounds like {topic} is what's been taking up most of your energy.",
+                "So it sounds like this has been the main thing weighing on you.",
+                "It seems like this is the part that's been hardest to deal with.",
+                "From what you've shared, this situation is really at the center of things right now.",
+                "So far it sounds like this is what's been taking up most of your energy.",
+                "It sounds like dealing with this is what's been taking up most of your energy.",
             ],
             "event": [
                 "So it sounds like having to {event} is the main thing weighing on you.",
@@ -288,12 +342,12 @@ class ComponentNLGEngine:
         # never just restates how it feels ──
         self.investigate = {
             "general": [
-                "What part of {topic} feels the hardest to deal with right now?",
-                "Has this been an ongoing issue with {topic}, or did something change recently?",
-                "What have you already tried with {topic}?",
+                "What part of this feels the hardest to deal with right now?",
+                "Has this been an ongoing issue, or did something change recently?",
+                "What have you already tried?",
                 "Is this happening every time, or only sometimes?",
                 "What does this usually look like when it happens?",
-                "Is there a pattern to when {topic} gets worse?",
+                "Is there a pattern to when this gets worse?",
             ],
             "event": [
                 "What part of having to {event} feels the hardest right now?",
@@ -312,8 +366,28 @@ class ComponentNLGEngine:
         }
         self.investigate_statement = {
             "general": [
-                "It sounds like this keeps coming up around {topic}.",
-                "This seems like a pattern that's been building with {topic} for a while.",
+                "It sounds like this has been a lot to deal with right now.",
+                "This seems like it is weighing on you quite a bit.",
+            ],
+            "event": [
+                "It sounds like having to {event} has been a lot to deal with.",
+                "This seems like having to {event} is weighing on you right now.",
+            ],
+            "fallback": [
+                "It sounds like this has been a lot to deal with.",
+                "This seems like it's been weighing on you quite a bit.",
+            ],
+        }
+        # "Recurring pattern" framing names something specific (this has
+        # happened before, more than once) -- it must only be used when the
+        # message actually carries that evidence (repetition_cue, e.g. "keep
+        # happening"/"again and again"/"every week"/"always"/"repeatedly"),
+        # never just because an event/topic is being discussed again. Several
+        # deadlines landing in the same week is not a "recurring pattern".
+        self.investigate_statement_recurring = {
+            "general": [
+                "It sounds like this keeps coming up for you.",
+                "This seems like a pattern that's been building for a while.",
             ],
             "event": [
                 "It sounds like having to {event} has turned into a recurring pattern.",
@@ -406,6 +480,8 @@ class ComponentNLGEngine:
                 "observation": [
                     "Working against a deadline can make everything feel more urgent than it might otherwise.",
                     "Trying to get everything done before time runs out can be exhausting on its own, separate from the work itself.",
+                    "Having something due soon has a way of making every minute feel smaller than it actually is.",
+                    "Even just watching the clock can wear you down before you've gotten to any of the actual work.",
                 ],
                 "next_steps_question": [
                     "What's the one task that, if you finished it next, would relieve the most pressure?",
@@ -450,6 +526,25 @@ class ComponentNLGEngine:
                 ],
                 "observation": [],
             },
+            # Several deadlines landing at once -- distinct from a single
+            # "deadline" crunch and never framed as a recurring pattern,
+            # since simultaneous isn't repeated. See _problem_solving_line's
+            # dedicated multiple_deadlines branch for the problem_solving-
+            # stage content (validation + normalization + prioritization).
+            "multiple_deadlines": {
+                "investigate_question": [
+                    "Which of these feels most urgent to tackle first?",
+                    "Is it the number of things due, or how close together they are, that feels heaviest?",
+                ],
+                "investigate_statement": [
+                    "It sounds like having several things due around the same time is what's making this feel so heavy.",
+                    "This seems like the sheer number of deadlines landing together is what's piling on the pressure.",
+                ],
+                "observation": [
+                    "Having several deadlines at once can make everything feel overwhelming.",
+                    "When everything seems urgent at the same time, it's easy to feel stuck.",
+                ],
+            },
             "relationship": {
                 "investigate_question": [
                     "What was going through your mind when that happened?",
@@ -480,16 +575,41 @@ class ComponentNLGEngine:
             },
         }
         # categories specific enough to outrank a strategy's own generic question bank
-        self.SPECIFIC_CATEGORIES = {"technical", "deadline", "supervisor_feedback", "relationship", "family"}
+        self.SPECIFIC_CATEGORIES = {"technical", "deadline", "supervisor_feedback", "relationship", "family", "multiple_deadlines"}
+
+        # ── Slot Completeness Tracking: a question bank entry that just asks
+        # for information the user already volunteered this session (see
+        # tracker.deadline_timing_known/workload_incomplete_known in
+        # AdvancedNLUPipeline) must be skipped rather than asked again --
+        # matched by substring against the bot's own template text, same
+        # approach as ANSWER_TYPE_PATTERNS in HumanResponseGenerator.
+        self.REDUNDANT_QUESTION_RULES = [
+            ("how much do you still have left to do before the deadline", "workload_incomplete_known"),
+            ("how much work is", "workload_incomplete_known"),
+            ("how much is left", "workload_incomplete_known"),
+        ]
+
+        # ── Multi-Event Fusion: when the user discloses a deadline-flavored
+        # event (a presentation/deadline/exam) AND that the work itself isn't
+        # ready, in the same breath or the same thread, a single fused
+        # observation naming BOTH is far more "understood" than picking one
+        # category's generic bank and ignoring the other half of what was
+        # said. {event} is the deadline-flavored thing (e.g. "your FYP
+        # presentation"); used only when workload_incomplete_known is True.
+        self.deadline_workload_fusion_observations = [
+            "Having {event} coming up while feeling like the work still isn't ready can create a lot of pressure.",
+            "It can feel like time is moving faster than you'd like when something important is approaching and it still isn't done.",
+            "Trying to prepare for {event} while it still feels unfinished is its own kind of stress, on top of the work itself.",
+        ]
 
         # ── Answering a pending question continues the same thread -- this
         # acknowledges the specific answer instead of pivoting to a canned line ──
         self.answer_ack = {
             "general": [
-                "Ah, so {topic} has been taking up most of your time.",
-                "Got it, so {topic} is the main thing going on.",
-                "I see, so {topic} is where most of this is coming from.",
-                "That makes sense, so {topic} is what's been keeping you busy.",
+                "Ah, so this has been taking up most of your time.",
+                "Got it, so this is the main thing going on.",
+                "I see, so this is where most of the pressure is coming from.",
+                "That makes sense, so this is what's been keeping you busy.",
             ],
             "event": [
                 "Ah, so having to {event} has been taking up most of your time.",
@@ -502,6 +622,46 @@ class ComponentNLGEngine:
             ],
         }
 
+        # ── Typed Pending Questions: an answer to a duration/quantity/
+        # project_name/issue question is interpreted as THAT kind of value,
+        # never run through the generic {topic}/{event} acknowledgment above
+        # -- "one week" answering "how much time has X been taking up?" is a
+        # timespan, not a new topic ("One week has been keeping you busy
+        # lately" is wrong). See generate_response's answer_previous_question
+        # branch and AdvancedNLUPipeline's expected_answer_type inference.
+        self.duration_answer_acks = [
+            "So you've been putting a lot of time into it already.",
+            "That's a real chunk of time to have already spent on it.",
+            "Sounds like it's already taken up a fair amount of your time.",
+        ]
+        self.quantity_answer_acks = [
+            "That's a lot to juggle at once.",
+            "That's a fair amount to be carrying all together.",
+            "That's a real handful to manage at the same time.",
+        ]
+        self.priority_choice_acks = [
+            "That makes sense. Sounds like {entity} feels like the biggest priority right now.",
+            "Got it -- sounds like {entity} is the one weighing on you most right now.",
+            "Okay, sounds like {entity} feels like the highest priority right now.",
+        ]
+        self.priority_choice_followup = [
+            "What's been slowing you down the most with it?",
+            "What's been the biggest holdup with it so far?",
+            "What part of it has been the hardest to get moving on?",
+        ]
+        self.issue_answer_technical = [
+            "Backend issues can be frustrating because one bug often affects several things.",
+            "That kind of technical snag can eat up more time than the actual work itself.",
+        ]
+        self.issue_answer_with_entity = [
+            "{entity} sounds like the real sticking point right now.",
+            "It sounds like {entity} is what's actually been holding things up.",
+        ]
+        self.issue_answer_fallback = [
+            "That sounds like the real sticking point right now.",
+            "It sounds like that's what's actually been holding things up.",
+        ]
+
         # ── Assumption Safety Layer (emotional): topic mention != emotional
         # state. When answer_previous_question only surfaces a topic ("I'm
         # doing my FYP") and no distress/emotion has actually been expressed
@@ -513,9 +673,9 @@ class ComponentNLGEngine:
         self.answer_neutral_followup = {
             "statement": {
                 "general": [
-                    "Sounds like {topic} has been keeping you busy lately.",
-                    "Looks like you've been spending a lot of time on {topic}.",
-                    "{Topic} seems to be taking up quite a bit of your attention recently.",
+                    "Sounds like things have been keeping you busy lately.",
+                    "Looks like you've been spending a lot of time on this.",
+                    "This seems to be taking up quite a bit of your attention recently.",
                 ],
                 "event": [
                     "Sounds like having to {event} has been keeping you busy lately.",
@@ -529,9 +689,9 @@ class ComponentNLGEngine:
             },
             "question": {
                 "general": [
-                    "How much of your time has {topic} been taking up lately?",
-                    "Is {topic} the main thing you've been focused on lately?",
-                    "What's been on your plate the most when it comes to {topic}?",
+                    "How much of your time has this been taking up lately?",
+                    "Is this the main thing you've been focused on lately?",
+                    "What's been on your plate the most?",
                 ],
                 "event": [
                     "How much time has having to {event} been taking up lately?",
@@ -564,12 +724,12 @@ class ComponentNLGEngine:
         # ── Observation (standalone): full sentences, no validation needed ──
         self.observations = {
             "general": [
-                "It sounds like {topic} has been sitting with you for a while now.",
-                "{Topic} seems to be taking up a lot of space in your mind right now.",
-                "It seems like {topic} keeps coming back to mind.",
-                "It sounds like {topic} has been wearing on you lately.",
-                "It makes sense that {topic} would feel like a lot right now.",
-                "{Topic} sounds like it's been a heavy thing to carry around.",
+                "It sounds like this has been sitting with you for a while now.",
+                "This seems to be taking up a lot of space in your mind right now.",
+                "It seems like this keeps coming back to mind.",
+                "It sounds like this has been wearing on you lately.",
+                "It makes sense that this would feel like a lot right now.",
+                "That sounds like it's been a heavy thing to carry around.",
             ],
             "fallback": [
                 "It sounds like there's a lot sitting with you right now.",
@@ -636,9 +796,9 @@ class ComponentNLGEngine:
                 "What's the smallest version of progress that would still count?",
             ],
             "topic": [
-                "What's the biggest blocker between you and finishing {topic}?",
-                "If you broke {topic} down into smaller pieces, what would the first piece be?",
-                "What's the one part of {topic} that, if solved, would make the rest easier?",
+                "What's the biggest blocker right now?",
+                "If you broke this down into smaller pieces, what would the first piece be?",
+                "What's the one part of this that, if solved, would make the rest easier?",
             ],
             "event": [
                 "What's the biggest blocker standing in the way of having to {event}?",
@@ -652,7 +812,7 @@ class ComponentNLGEngine:
                 "It might help to separate what needs fixing now from what can wait.",
             ],
             "topic": [
-                "It might help to break {topic} down into smaller, more manageable pieces.",
+                "It might help to break this down into smaller, more manageable pieces.",
             ],
             "event": [
                 "It might help to break having to {event} down into smaller, more manageable pieces.",
@@ -691,6 +851,33 @@ class ComponentNLGEngine:
                 "If the fear of being alone wasn't part of it, what would you want?",
             ],
         }
+        # ── Multiple-deadlines problem-solving: several things due at once
+        # need validation + permission to not do everything at once + ONE
+        # gentle prioritization question -- never the generic blocker/
+        # breakdown next-step content, and never "recurring pattern" framing
+        # (simultaneous deadlines aren't a repeated pattern). See
+        # _multiple_deadlines_problem_solving_line below.
+        self.multiple_deadlines_problem_solving = {
+            "validations": [
+                "That sounds like a lot to carry all at once.",
+                "Juggling several things due at the same time is genuinely a lot to hold.",
+                "That's a heavy load to be facing all together.",
+            ],
+            "normalizers_with_entity": [
+                "You don't have to solve all of {entity} at the same time.",
+                "You don't have to tackle {entity} all in one go.",
+            ],
+            "normalizers_generic": [
+                "You don't have to solve everything at the same time.",
+                "You don't have to tackle all of it in one go.",
+                "It's okay to take these one at a time instead of all at once.",
+            ],
+            "prioritization_questions": [
+                "Which one feels most urgent or easiest to start with?",
+                "If you only picked one to start with, which would it be?",
+                "Which of these would relieve the most pressure if it were done first?",
+            ],
+        }
         # ── Synthesis stage (Problem 3/4): after a couple of exploration
         # turns, recap the pattern across what's been shared instead of
         # asking a third exploration question in a row -- show
@@ -705,8 +892,8 @@ class ComponentNLGEngine:
         ]
         self.synthesis_observations = {
             "general": [
-                "Putting it together, it sounds like {topic} has been the thread running through a lot of this.",
-                "Stepping back, {topic} keeps showing up as the thing underneath everything else you've shared.",
+                "Putting it together, it sounds like this has been the thread running through a lot of it.",
+                "Stepping back, this keeps showing up as the thing underneath everything else you've shared.",
             ],
             "event": [
                 "Putting it together, it sounds like having to {event} keeps being the thing underneath everything else.",
@@ -718,8 +905,18 @@ class ComponentNLGEngine:
             ],
         }
 
-    def _map_emotion_to_group(self, intent: str) -> str:
+    def _map_emotion_to_group(self, intent: str, topic_label: Optional[str] = None, event_category: Optional[str] = None) -> str:
         intent = intent.lower()
+        topic_label = (topic_label or "").lower()
+        event_category = (event_category or "").lower()
+
+        if topic_label == "relationship_loss" or "relationship_loss" in intent:
+            return "relationship_loss"
+        if topic_label == "grief" or "grief" in intent:
+            return "grief"
+        if topic_label == "academic" or event_category == "academic" or "academic" in intent:
+            return "academic"
+
         if "anger" in intent or "frustration" in intent:
             return "frustration"
         if "sadness" in intent or "depression" in intent or "emptiness" in intent:
@@ -730,7 +927,7 @@ class ComponentNLGEngine:
             return "anxiety"
         if "pressure" in intent or "stress" in intent or "burnout" in intent:
             return "stress"
-        if "academic" in intent or "workload" in intent or "coding" in intent or "deadline" in intent:
+        if "workload" in intent or "coding" in intent or "deadline" in intent:
             return "stress"
         return "general"
 
@@ -777,6 +974,22 @@ class ComponentNLGEngine:
                 return cautious
         return cat.get(key)
 
+    def _filter_redundant_questions(self, bank, known_slots):
+        """Drop any question in `bank` that would just ask for a slot the
+        user already filled this session (e.g. "how much do you still have
+        left to do?" right after "my system still isn't ready") -- returns
+        None if EVERY question turns out redundant, so the caller can fall
+        back to a statement instead of asking anyway. A no-op when
+        known_slots is empty, so callers that never pass it behave exactly
+        as before."""
+        if not bank or not known_slots:
+            return bank
+        filtered = [
+            q for q in bank
+            if not any(slot in known_slots and sub in q.lower() for sub, slot in self.REDUNDANT_QUESTION_RULES)
+        ]
+        return filtered if filtered else None
+
     def _answer_neutral_followup(self, event, entity, ask_question, pick):
         """Strictly neutral continuation for answer_previous_question when
         has_emotional_evidence is False -- attention/focus/time-occupied
@@ -792,17 +1005,31 @@ class ComponentNLGEngine:
         chosen = pick(pool)
         return chosen if ask_question else _cap(chosen)
 
-    def _investigate_line(self, event_category, event, entity, action_options, ask_question, pick, pick_diverse=None, has_evidence=False):
+    def _issue_answer_line(self, entity, event, pick) -> str:
+        """Acknowledge an "issue"-typed answer (what's blocking/wrong) by
+        naming the actual blocker flavor when it's recognizably technical,
+        rather than a generic "X is where this is coming from" topic ack."""
+        focus = (entity or event or "").lower()
+        if any(kw in focus for kw in ("backend", "bug", "code", "coding", "database", "api", "server")):
+            return pick(self.issue_answer_technical)
+        if entity:
+            return _cap(pick(self.issue_answer_with_entity).replace("{entity}", entity))
+        return pick(self.issue_answer_fallback)
+
+    def _investigate_line(self, event_category, event, entity, action_options, ask_question, pick, pick_diverse=None, has_evidence=False, repetition_cue=False, known_slots=frozenset()):
         """Resolve the exploration-stage investigative line. A *specific* category
-        (technical/deadline/supervisor_feedback/relationship/family) has its own
-        small bank used exclusively, since it's a strong, precise signal. A
-        generic "academic" category instead gets merged into the broader
-        event/entity-aware pool -- exclusive use of its tiny bank caused rapid
-        repetition for the (very common) plain-academic case.
+        (technical/deadline/supervisor_feedback/relationship/family/
+        multiple_deadlines) has its own small bank used exclusively, since
+        it's a strong, precise signal. A generic "academic" category instead
+        gets merged into the broader event/entity-aware pool -- exclusive use
+        of its tiny bank caused rapid repetition for the (very common)
+        plain-academic case.
 
         Statement-style content (not questions) goes through pick_diverse when
         provided, so the same observation "flavor" doesn't repeat across turns
-        even when the exact wording differs."""
+        even when the exact wording differs. repetition_cue only widens the
+        statement pool with "recurring pattern" framing when there's actual
+        evidence of recurrence -- see investigate_statement_recurring."""
         pick_stmt = pick_diverse or pick
         cat = self.category_content.get(event_category) if event_category else None
         is_specific = event_category in self.SPECIFIC_CATEGORIES
@@ -810,15 +1037,28 @@ class ComponentNLGEngine:
         if cat and is_specific:
             if ask_question:
                 bank = self._category_bank(cat, "investigate_question", event_category, has_evidence)
+                filtered = self._filter_redundant_questions(bank, known_slots)
+                if filtered:
+                    return pick(filtered)
                 if bank:
-                    return pick(bank)
+                    # Every question this category could ask was already
+                    # answered (Slot Completeness Tracking) -- speak instead
+                    # of asking anyway just because ask_question rolled True.
+                    statement_bank = self._category_bank(cat, "investigate_statement", event_category, has_evidence)
+                    if statement_bank:
+                        return _cap(pick_stmt(statement_bank))
             else:
                 bank = self._category_bank(cat, "investigate_statement", event_category, has_evidence)
                 if bank:
                     return _cap(pick_stmt(bank))
 
-        if action_options and ask_question:
-            return pick(action_options)
+        if action_options:
+            if ask_question:
+                return pick(action_options)
+            else:
+                stmts = [o for o in action_options if "?" not in o]
+                if stmts:
+                    return pick(stmts)
 
         if ask_question:
             if event:
@@ -829,14 +1069,20 @@ class ComponentNLGEngine:
                 pool = list(self.investigate["fallback"])
             if cat and cat.get("investigate_question"):
                 pool = pool + list(cat["investigate_question"])
-            return pick(pool)
+            return pick(self._filter_redundant_questions(pool, known_slots) or pool)
 
         if event:
             stm_pool = list(self.investigate_statement["event"])
+            if repetition_cue:
+                stm_pool = stm_pool + list(self.investigate_statement_recurring["event"])
         elif entity:
             stm_pool = list(self.investigate_statement["general"])
+            if repetition_cue:
+                stm_pool = stm_pool + list(self.investigate_statement_recurring["general"])
         else:
             stm_pool = list(self.investigate_statement["fallback"])
+            if repetition_cue:
+                stm_pool = stm_pool + list(self.investigate_statement_recurring["fallback"])
         if cat and cat.get("investigate_statement"):
             stm_pool = stm_pool + list(cat["investigate_statement"])
         chosen = pick_stmt(stm_pool)
@@ -887,20 +1133,38 @@ class ComponentNLGEngine:
             f"Sometimes it helps to ask:\n\n{points_text}\n\n{question}"
         )
 
-    def _problem_solving_line(self, event_category, event, entity, ask_question, pick, pick_diverse=None, has_evidence=False):
+    def _multiple_deadlines_problem_solving_line(self, entity, pick) -> str:
+        """Problem-solving content for several simultaneous deadlines
+        (Problem 4): validation that this is genuinely a lot, permission to
+        not solve everything at once, then ONE gentle prioritization
+        question -- never the generic blocker/breakdown framing
+        _problem_solving_line uses below, and never a "recurring pattern"
+        observation (simultaneous isn't repeated)."""
+        bank = self.multiple_deadlines_problem_solving
+        validation = pick(bank["validations"])
+        if entity:
+            normalizer = pick(bank["normalizers_with_entity"]).replace("{entity}", entity)
+        else:
+            normalizer = pick(bank["normalizers_generic"])
+        question = pick(bank["prioritization_questions"])
+        return f"{validation} {normalizer} {question}"
+
+    def _problem_solving_line(self, event_category, event, entity, ask_question, pick, pick_diverse=None, has_evidence=False, known_slots=frozenset()):
         """Resolve problem-solving-stage content: identify blockers, break the
         problem down, prioritize -- never a generic exploration question.
         Same priority pattern as _investigate_line: specific category bank
         first (it names the actual blocker-type), then event/topic-aware
         generic next-step content, then a content-free fallback.
 
-        Relationship decision dilemmas are the one exception (Problem 3):
-        "Should I stay or leave?" isn't a blocker to break into smaller
-        pieces, so event_category == "relationship" routes to
-        _relationship_decision_line above instead of the blocker-style
-        content below."""
+        Relationship decision dilemmas and multiple-simultaneous-deadlines
+        are exceptions to that generic pattern (Problem 3/4): neither is a
+        single blocker to break into smaller pieces, so they route to their
+        own dedicated composers above instead of the blocker-style content
+        below."""
         if event_category == "relationship":
             return self._relationship_decision_line(pick)
+        if event_category == "multiple_deadlines":
+            return self._multiple_deadlines_problem_solving_line(entity, pick)
         pick_stmt = pick_diverse or pick
         cat = self.category_content.get(event_category) if event_category else None
         is_specific = event_category in self.SPECIFIC_CATEGORIES
@@ -908,8 +1172,15 @@ class ComponentNLGEngine:
         if cat and is_specific:
             if ask_question:
                 bank = self._category_bank(cat, "next_steps_question", event_category, has_evidence)
+                filtered = self._filter_redundant_questions(bank, known_slots)
+                if filtered:
+                    return pick(filtered)
                 if bank:
-                    return pick(bank)
+                    # Same Slot Completeness fallback as _investigate_line:
+                    # don't ask anyway once every question here is redundant.
+                    statement_bank = self._category_bank(cat, "next_steps_statement", event_category, has_evidence)
+                    if statement_bank:
+                        return _cap(pick_stmt(statement_bank))
             else:
                 bank = self._category_bank(cat, "next_steps_statement", event_category, has_evidence)
                 if bank:
@@ -923,7 +1194,7 @@ class ComponentNLGEngine:
                 pool = [t.replace("{topic}", entity) for t in bank["topic"]]
             else:
                 pool = list(bank["fallback"])
-            return pick(pool)
+            return pick(self._filter_redundant_questions(pool, known_slots) or pool)
 
         bank = self.next_steps_statement
         if event:
@@ -945,6 +1216,18 @@ class ComponentNLGEngine:
                 return pick(lines)
         return None
 
+    def _get_safe_reflections(self, entity: Optional[str]) -> List[str]:
+        """Add unsafe phrase detection: block templates containing 'particularly with how'
+        when topic labels represent people."""
+        pool = list(self.reflections["general"])
+        if not entity:
+            return pool
+        PERSON_TOPICS = {"girlfriend", "boyfriend", "father", "mother", "friend", "lecturer"}
+        entity_lower = entity.lower()
+        if any(p in entity_lower for p in PERSON_TOPICS):
+            return [r for r in pool if "particularly with how" not in r]
+        return pool
+
     def _event_observation_line(self, event_category, event, repetition_cue, pick, pick_diverse=None, has_evidence=False):
         """Resolve the event-acknowledgment line for encouragement/validation,
         preferring category-specific phrasing (e.g. the technical "trial and
@@ -958,7 +1241,7 @@ class ComponentNLGEngine:
         bank = self.observations_event_recurring if repetition_cue else self.observations_event["general"]
         return _cap(pick_stmt(bank).replace("{event}", event))
 
-    def _dead_end_bridge(self, event, entity, emotion_intent, pick):
+    def _dead_end_bridge(self, event, entity, emotion_intent, pick, topic_label="general"):
         """Last-resort conversational momentum: called only when a response
         would otherwise be bare validation/encouragement with no question and
         no reflective insight already attached -- the exact dead end where a
@@ -974,6 +1257,8 @@ class ComponentNLGEngine:
             reframed = self._label_reframe(entity, pick)
             if reframed:
                 return _cap(reframed)
+            if topic_label in ["relationship_loss", "grief"]:
+                return _cap(pick(self.observations["fallback"]))
             return _cap(pick(self.observations["general"]).replace("{topic}", entity).replace("{Topic}", _cap(entity)))
         if emotion_intent in self.STUCK_INTENTS:
             return pick(self.conversation_paths["fallback"])
@@ -984,8 +1269,11 @@ class ComponentNLGEngine:
         emotion_intent: str,
         topic_entity: Optional[str],
         stage: str,
+        strategy: Optional[str] = None,
+        topic: str = "general",
         meaning_shift: Optional[str] = None,
         event_category: Optional[str] = None,
+        topic_label: Optional[str] = None,
         action_options: Optional[List[str]] = None,
         event_phrase: Optional[str] = None,
         repetition_cue: bool = False,
@@ -999,24 +1287,31 @@ class ComponentNLGEngine:
         recent_phrases: Optional[List[str]] = None,
         recent_categories: Optional[List[str]] = None,
         ask_question: bool = True,
+        expected_answer_type: Optional[str] = None,
+        known_slots: frozenset = frozenset(),
+        workload_incomplete: bool = False,
     ) -> Tuple[str, List[str], List[str]]:
         """Compose a response whose *content shape* is driven by stage, not just
-        its trailing question: validation acknowledges feeling, reflection
-        summarizes understanding, exploration investigates, encouragement
-        names effort/strength, problem_solving discusses next steps.
-
-        meaning_shift (e.g. "acceptance") and emotion_intent=="answer_previous_question"
-        both override the feeling-acknowledgment part regardless of stage, so the
-        bot reacts to what just changed/was just answered instead of repeating
-        the previous emotion's framing or pivoting away from it generically.
-
-        event_category (technical/deadline/supervisor_feedback/relationship/family/
-        academic) lets situation-specific phrasing outrank generic academic-stress
-        templates when a more specific signal is available.
-
-        Returns (response_text, phrases_used, categories_used) -- caller should
-        fold both into its own tracker memory for anti-repetition across turns.
+        surface intent. This enables the bot to push through an anxious frame
+        to deliver concrete steps during problem-solving, or acknowledge relief
+        before returning to a heavy topic.
         """
+        if strategy and topic:
+            topic_pool = self.TOPIC_TEMPLATES.get(topic, {})
+            if strategy in topic_pool:
+                # Direct topic-isolated strategy override
+                return random.choice(topic_pool[strategy]), [], []
+
+        # meaning_shift (e.g. "acceptance") and emotion_intent=="answer_previous_question"
+        # both override the feeling-acknowledgment part regardless of stage, so the
+        # bot reacts to what just changed/was just answered instead of repeating
+        # the previous emotion's framing or pivoting away from it generically.
+        #
+        # event_category (technical/deadline/supervisor_feedback/relationship/family/
+        # academic) lets situation-specific phrasing outrank generic academic-stress
+        # templates when a more specific signal is available.
+        # Returns (response_text, phrases_used, categories_used) -- caller should
+        # fold both into its own tracker memory for anti-repetition across turns.
         recent_phrases = list(recent_phrases or [])
         recent_categories = list(recent_categories or [])
         used: List[str] = []
@@ -1092,8 +1387,11 @@ class ComponentNLGEngine:
                 template = pick(self.reflections_event["general"])
                 parts.append(f"{line}, {template.replace('{event}', event)}")
             elif entity:
-                template = pick(self.reflections["general"])
-                parts.append(f"{line}, {template.replace('{topic}', entity)}")
+                if topic_label in ["relationship_loss", "grief"]:
+                    parts.append(f"{line}.")
+                else:
+                    template = pick(self._get_safe_reflections(entity))
+                    parts.append(f"{line}, {template.replace('{topic}', entity)}")
             else:
                 parts.append(f"{line}.")
                 has_insight = False
@@ -1108,7 +1406,7 @@ class ComponentNLGEngine:
                 if meaning_shift == "progress":
                     parts.append(pick(self.progress_followup))
                 else:
-                    parts.append(self._dead_end_bridge(event, entity, emotion_intent, pick))
+                    parts.append(self._dead_end_bridge(event, entity, emotion_intent, pick, topic_label))
 
         elif emotion_intent == "confirmed_both" and choice_options and choice_options[0] and choice_options[1]:
             # "Workload or time pressure?" -> "Both." -- acknowledge BOTH named
@@ -1133,7 +1431,7 @@ class ComponentNLGEngine:
             if ask_question:
                 parts.append(pick(self.light_curiosity))
             elif not has_insight:
-                parts.append(self._dead_end_bridge(event, entity, emotion_intent, pick))
+                parts.append(self._dead_end_bridge(event, entity, emotion_intent, pick, topic_label))
 
         elif emotion_intent == "denied_observation":
             # The user rejected the bot's assumption -- acknowledge the
@@ -1149,40 +1447,99 @@ class ComponentNLGEngine:
             parts.append(pick(self.partial_acknowledgements))
             parts.append(pick(self.clarify_after_partial))
 
+        elif emotion_intent == "checking_ex_behavior":
+            parts.append(pick([
+                "Part of you still seems connected to them, and checking their social media might be one way of holding onto that connection."
+            ]))
+            if ask_question:
+                parts.append(pick([
+                    "What usually goes through your mind afterward?"
+                ]))
+
         elif emotion_intent == "answer_previous_question":
-            # The user just answered our question -- continue the SAME thread
-            # instead of pivoting to a generic acknowledgment. The follow-up
-            # still respects the current stage: investigate normally, but
-            # discuss next steps if we've already reached problem_solving
-            # (otherwise every answer would default back to "more questions").
-            # entity takes priority over event here (unlike other branches):
-            # a short answer is typically naming a THING ("my core tech"), and
-            # using it keeps the ack fresh instead of falling back to a stale
-            # event phrase inferred from an earlier message.
-            # follow_event is suppressed when entity was used for the ack, so the
-            # follow-up references the SAME thing instead of a mismatched stale event.
-            if entity:
-                ack = pick(self.answer_ack["general"]).replace("{topic}", entity)
-                follow_event = None
-            elif event:
-                ack = pick(self.answer_ack["event"]).replace("{event}", event)
-                follow_event = event
+            # Typed Pending Questions: the bot's own last question was
+            # classified by what KIND of answer it was fishing for (see
+            # AdvancedNLUPipeline.expected_answer_type) -- a duration/
+            # quantity/issue/project_name answer is interpreted as THAT kind
+            # of value, never run through the generic {topic}/{event}
+            # acknowledgment below. "one week" answering "how much time has
+            # X been taking up?" is a timespan, not a new topic -- it must
+            # never produce "One week has been keeping you busy lately."
+            if entity and expected_answer_type in (None, "project_name"):
+                # The user just named which thing to focus on first --
+                # whether or not the prior question explicitly fished for
+                # "which one" (expected_answer_type=="project_name"), or was
+                # just a generic open question that happened to get a named
+                # topic back (expected_answer_type is None) -- acknowledge it
+                # as the chosen priority and go straight to what's blocking
+                # them on THAT thing, never back to a generic time/attention
+                # question (that would re-ask "how much time has X been
+                # taking up" right after the user named X as the priority,
+                # discarding their own answer).
+                parts.append(pick(self.priority_choice_acks).replace("{entity}", entity))
+                if ask_question:
+                    parts.append(pick(self.priority_choice_followup))
+                else:
+                    # No question this turn (pacing throttle) -- still leave the
+                    # user with something to react to instead of a bare,
+                    # conversation-ending acknowledgment (the same dead-end this
+                    # layer exists to avoid elsewhere). Force the ENTITY path
+                    # (pass event=None) rather than the stale `event` from
+                    # whatever was discussed before the user just named this
+                    # priority -- _dead_end_bridge prefers event over entity,
+                    # which would otherwise resurrect the old, now-superseded
+                    # topic (e.g. "having to deal with three assignments due
+                    # this week") right after the user said "my fyp".
+                    parts.append(self._dead_end_bridge(None, entity, emotion_intent, pick, topic_label))
             else:
-                ack = pick(self.answer_ack["fallback"])
-                follow_event = None
-            parts.append(ack)
-            if not has_emotional_evidence:
-                # Assumption Safety Layer (emotional): the user has only named
-                # a topic so far ("I'm doing my FYP") -- topic mention is NOT
-                # an emotional disclosure, so stay strictly in attention/
-                # focus/time-occupied territory regardless of stage. Once the
-                # user actually expresses distress/emotion (has_emotional_
-                # evidence flips True), the branches below apply instead.
-                parts.append(self._answer_neutral_followup(follow_event, entity, ask_question, pick))
-            elif stage == "problem_solving":
-                parts.append(self._problem_solving_line(event_category, follow_event, entity, ask_question, pick, pick_diverse, has_evidence))
-            else:
-                parts.append(self._investigate_line(event_category, follow_event, entity, action_options, ask_question, pick, pick_diverse, has_evidence))
+                # entity takes priority over event here (unlike other branches):
+                # a short answer is typically naming a THING ("my core tech"), and
+                # using it keeps the ack fresh instead of falling back to a stale
+                # event phrase inferred from an earlier message.
+                # follow_event is suppressed when entity was used for the ack, so the
+                # follow-up references the SAME thing instead of a mismatched stale event.
+                if expected_answer_type == "duration":
+                    ack = pick(self.duration_answer_acks)
+                    follow_event = event
+                elif expected_answer_type == "quantity":
+                    ack = pick(self.quantity_answer_acks)
+                    follow_event = event
+                elif expected_answer_type == "issue":
+                    ack = self._issue_answer_line(entity, event, pick)
+                    follow_event = None if entity else event
+                elif entity:
+                    ack = pick(self.answer_ack["general"]).replace("{topic}", entity)
+                    follow_event = None
+                elif event:
+                    ack = pick(self.answer_ack["event"]).replace("{event}", event)
+                    follow_event = event
+                else:
+                    ack = pick(self.answer_ack["fallback"])
+                    follow_event = None
+                parts.append(ack)
+                if expected_answer_type == "issue":
+                    # A named blocker ("backend problems") is already
+                    # substantive content, not a bare topic mention -- dig
+                    # into it the same way real distress content would be
+                    # explored, rather than retreating to the neutral "how
+                    # much time has X been taking up" framing, which would
+                    # just re-ask what the user already told us.
+                    if stage == "problem_solving":
+                        parts.append(self._problem_solving_line(event_category, follow_event, entity, ask_question, pick, pick_diverse, has_evidence, known_slots))
+                    else:
+                        parts.append(self._investigate_line(event_category, follow_event, entity, action_options, ask_question, pick, pick_diverse, has_evidence, repetition_cue, known_slots))
+                elif not has_emotional_evidence:
+                    # Assumption Safety Layer (emotional): the user has only named
+                    # a topic so far ("I'm doing my FYP") -- topic mention is NOT
+                    # an emotional disclosure, so stay strictly in attention/
+                    # focus/time-occupied territory regardless of stage. Once the
+                    # user actually expresses distress/emotion (has_emotional_
+                    # evidence flips True), the branches below apply instead.
+                    parts.append(self._answer_neutral_followup(follow_event, entity, ask_question, pick))
+                elif stage == "problem_solving":
+                    parts.append(self._problem_solving_line(event_category, follow_event, entity, ask_question, pick, pick_diverse, has_evidence, known_slots))
+                else:
+                    parts.append(self._investigate_line(event_category, follow_event, entity, action_options, ask_question, pick, pick_diverse, has_evidence, repetition_cue, known_slots))
 
         elif (
             new_info and (event or entity) and event_category in self.SPECIFIC_CATEGORIES
@@ -1212,10 +1569,34 @@ class ComponentNLGEngine:
             if reframed:
                 parts.append(reframed)
             else:
-                parts.append(f"It sounds like {focus_clause} is carrying most of the weight right now.")
-            parts.append(self._event_observation_line(event_category, event, repetition_cue, pick, pick_diverse, has_evidence))
+                # This branch fires every time a fresh entity/event shows up
+                # in a SPECIFIC_CATEGORIES turn -- a single hardcoded f-string
+                # here ("It sounds like {clause} is carrying most of the
+                # weight right now.") meant that exact sentence (just the
+                # noun swapped in) repeated verbatim turn after turn whenever
+                # the conversation stayed in deadline/technical/etc. content,
+                # which is exactly the "feels robotic/repetitive" complaint --
+                # pick from the same varied bank _dead_end_bridge already uses
+                # for this kind of reflective opener instead of one fixed line.
+                GENERIC_PRONOUNS = ["everyone", "everything", "someone", "nobody", "it", "this", "all of this", "them", "that"]
+                is_generic = focus_clause and focus_clause.lower() in GENERIC_PRONOUNS
+                bank = self.observations["general"] if (focus_clause and not is_generic) else self.observations["fallback"]
+                line = pick(bank)
+                parts.append(_cap(line.replace("{topic}", focus_clause).replace("{Topic}", _cap(focus_clause))) if (focus_clause and not is_generic) else line)
+            if workload_incomplete and entity:
+                # Multi-Event Fusion: the user disclosed a deadline-flavored
+                # event (presentation/exam/deadline) AND that the work itself
+                # isn't ready, in the same breath -- naming only one half
+                # (just "your FYP presentation sounds heavy") and then asking
+                # a generic deadline question ignores the other half of what
+                # was actually said. A fused line acknowledges both at once
+                # instead of picking one category's generic observation bank.
+                fused = pick(self.deadline_workload_fusion_observations).replace("{event}", entity)
+                parts.append(_cap(fused))
+            else:
+                parts.append(self._event_observation_line(event_category, event, repetition_cue, pick, pick_diverse, has_evidence))
             if ask_question:
-                parts.append(self._investigate_line(event_category, event, entity, action_options, True, pick, pick_diverse, has_evidence))
+                parts.append(self._investigate_line(event_category, event, entity, action_options, True, pick, pick_diverse, has_evidence, repetition_cue, known_slots))
 
         elif stage == "reflection":
             if progress_detail:
@@ -1233,7 +1614,7 @@ class ComponentNLGEngine:
                 parts.append(pick(self.reflection_followup))
 
         elif stage == "exploration":
-            parts.append(self._investigate_line(event_category, event, entity, action_options, ask_question, pick, pick_diverse, has_evidence))
+            parts.append(self._investigate_line(event_category, event, entity, action_options, ask_question, pick, pick_diverse, has_evidence, repetition_cue, known_slots))
 
         elif stage == "synthesis":
             # Problem 3/4: recap, don't interrogate -- no question appended
@@ -1252,14 +1633,88 @@ class ComponentNLGEngine:
                 if reframed:
                     parts.append(_cap(reframed))
                 else:
-                    template = pick(self.observations["general"])
-                    parts.append(_cap(template.replace("{topic}", entity).replace("{Topic}", _cap(entity))))
+                    GENERIC_PRONOUNS = ["everyone", "everything", "someone", "nobody", "it", "this", "all of this", "them", "that"]
+                    is_generic = entity.lower() in GENERIC_PRONOUNS
+                    if is_generic:
+                        template = pick(self.observations["fallback"])
+                        parts.append(_cap(template))
+                    else:
+                        template = pick(self.observations["general"])
+                        parts.append(_cap(template.replace("{topic}", entity).replace("{Topic}", _cap(entity))))
                 has_insight = True
             if ask_question:
                 parts.append(pick(self.encouragement_followup))
             elif not has_insight:
                 # Bare encouragement with no question and nothing else -- dead end.
-                parts.append(self._dead_end_bridge(event, entity, emotion_intent, pick))
+                parts.append(self._dead_end_bridge(event, entity, emotion_intent, pick, topic_label))
+
+        elif stage == "grief_processing":
+            if action_options:
+                parts.append(pick(action_options))
+            else:
+                parts.append(pick([
+                    "It's completely normal to feel waves of sadness even when you thought you were doing okay.",
+                    "Grief doesn't follow a straight line. Taking it one day at a time is sometimes all you can do."
+                ]))
+                if ask_question:
+                    parts.append(pick([
+                        "What's been the hardest part of letting go?",
+                        "When do you notice the absence the most?"
+                    ]))
+
+        elif stage == "meaning_making":
+            if action_options:
+                parts.append(pick(action_options))
+            else:
+                parts.append(pick([
+                    "It makes sense to feel conflicted—you can miss someone deeply and still know it wasn't right.",
+                    "Holding two opposing feelings at the same time is really exhausting, but it's a normal part of processing this.",
+                    "It sounds like part of you misses them, while another part recognizes the relationship wasn't healthy. Holding both of those feelings at the same time can be really confusing."
+                ]))
+                if ask_question:
+                    parts.append(pick([
+                        "Which feeling feels the heaviest right now?",
+                        "What is it like to sit with both of those emotions today?"
+                    ]))
+
+        elif stage == "meaning_making":
+            if action_options:
+                parts.append(pick(action_options))
+            else:
+                parts.append(pick([
+                    "Sometimes stepping back helps us see what the experience taught us, even if it was painful.",
+                    "Finding meaning in what happened doesn't erase the hurt, but it can make it easier to carry."
+                ]))
+                if ask_question:
+                    parts.append(pick([
+                        "What do you think you've learned about yourself through all of this?",
+                        "How has this experience changed what you're looking for going forward?"
+                    ]))
+
+        elif stage == "acceptance":
+            if action_options:
+                parts.append(pick(action_options))
+            else:
+                parts.append(pick(self.acceptance_validations))
+                if ask_question:
+                    parts.append(pick([
+                        "How does it feel to be at this point now?",
+                        "What's the next small step you want to take for yourself?"
+                    ]))
+
+        elif stage == "closure":
+            if action_options:
+                parts.append(pick(action_options))
+            else:
+                parts.append(pick([
+                    "It takes a lot of strength to reach a point of peace with this.",
+                    "Moving forward doesn't mean forgetting, just that it doesn't hurt as much anymore."
+                ]))
+                if ask_question:
+                    parts.append(pick([
+                        "What are you looking forward to next?",
+                        "How are you going to take care of yourself today?"
+                    ]))
 
         elif stage == "problem_solving":
             # action_options (e.g. academic_explore_strategy's own bank) is an
@@ -1267,10 +1722,10 @@ class ComponentNLGEngine:
             # here was why "stage=problem_solving" still produced generic
             # "what kind of issue" exploration questions instead of real
             # blocker/breakdown/prioritization content.
-            parts.append(self._problem_solving_line(event_category, event, entity, ask_question, pick, pick_diverse, has_evidence))
+            parts.append(self._problem_solving_line(event_category, event, entity, ask_question, pick, pick_diverse, has_evidence, known_slots))
 
         else:  # validation (default/fallback stage)
-            group = self._map_emotion_to_group(emotion_intent)
+            group = self._map_emotion_to_group(emotion_intent, topic_label, event_category)
             validation = pick_diverse(self.validations.get(group, self.validations["general"]))
             has_insight = True
             if event and repetition_cue:
@@ -1282,8 +1737,11 @@ class ComponentNLGEngine:
                 template = pick(self.reflections_event["general"])
                 parts.append(f"{validation}, {template.replace('{event}', event)}")
             elif entity:
-                template = pick(self.reflections["general"])
-                parts.append(f"{validation}, {template.replace('{topic}', entity)}")
+                if topic_label in ["relationship_loss", "grief"] or group in ["relationship_loss", "grief"]:
+                    parts.append(f"{validation}.")
+                else:
+                    template = pick(self._get_safe_reflections(entity))
+                    parts.append(f"{validation}, {template.replace('{topic}', entity)}")
             else:
                 parts.append(f"{validation}.")
                 has_insight = False
@@ -1292,7 +1750,7 @@ class ComponentNLGEngine:
             elif not has_insight:
                 # Bare validation, no question, nothing to connect it to -- this
                 # is the exact "I'm sad." -> "That sounds really heavy." dead end.
-                parts.append(self._dead_end_bridge(event, entity, emotion_intent, pick))
+                parts.append(self._dead_end_bridge(event, entity, emotion_intent, pick, topic_label))
 
         response = " ".join(p.strip() for p in parts if p)
         return _cap(response), used, used_categories

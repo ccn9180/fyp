@@ -25,7 +25,8 @@ class _CounsellorScreenState extends State<CounsellorScreen> {
   String _selectedGender = 'Any';
   String _selectedLanguage = 'Any';
   List<dynamic> _userFavorites = [];
-  String _searchQuery = '';
+  String? _searchQuery = '';
+  String? _latestEmotion;
   
   final User? _currentUser = FirebaseAuth.instance.currentUser;
   final ScrollController _scrollController = ScrollController();
@@ -42,6 +43,8 @@ class _CounsellorScreenState extends State<CounsellorScreen> {
 
   @override
   void initState() {
+    super.initState();
+    _fetchLatestEmotion();
     super.initState();
     _counsellorsStream = FirebaseFirestore.instance
         .collection('users')
@@ -65,7 +68,28 @@ class _CounsellorScreenState extends State<CounsellorScreen> {
     });
   }
 
-
+  Future<void> _fetchLatestEmotion() async {
+    if (_currentUser == null) return;
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(_currentUser!.uid)
+          .collection('diary_entries')
+          .orderBy('timestamp', descending: true)
+          .limit(1)
+          .get();
+      if (snap.docs.isNotEmpty) {
+        final data = snap.docs.first.data();
+        if (mounted) {
+          setState(() {
+            _latestEmotion = data['mood'] ?? data['aiCategory'] ?? data['userMood'];
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint("Error fetching latest emotion: $e");
+    }
+  }
 
   void scrollToTop() {
     if (_scrollController.hasClients) {
@@ -147,11 +171,11 @@ class _CounsellorScreenState extends State<CounsellorScreen> {
                 }
 
                 // 5. Search Filter
-                if (_searchQuery.isNotEmpty) {
+                if (_searchQuery != null && _searchQuery!.isNotEmpty) {
                   final name = (data['fullName'] ?? '').toString().toLowerCase();
                   final List<dynamic> specs = data['specializations'] ?? [];
-                  final matchesName = name.contains(_searchQuery);
-                  final matchesSpecs = specs.any((spec) => spec.toString().toLowerCase().contains(_searchQuery));
+                  final matchesName = name.contains(_searchQuery!);
+                  final matchesSpecs = specs.any((spec) => spec.toString().toLowerCase().contains(_searchQuery!));
                   if (!matchesName && !matchesSpecs) return false;
                 }
 
@@ -159,12 +183,12 @@ class _CounsellorScreenState extends State<CounsellorScreen> {
               }).toList();
 
               // Relevance sorting when search is active — best matches float to top
-              if (_searchQuery.isNotEmpty) {
+              if (_searchQuery != null && _searchQuery!.isNotEmpty) {
                 int relevanceScore(dynamic doc) {
                   final data = doc.data() as Map<String, dynamic>;
                   final name = (data['fullName'] ?? '').toString().toLowerCase().trim();
                   final List<dynamic> specs = data['specializations'] ?? [];
-                  final q = _searchQuery.trim();
+                  final q = _searchQuery!.trim();
                   if (name == q) return 0;                          // exact name match
                   if (name.startsWith(q)) return 1;                 // name starts with query
                   if (name.contains(q)) return 2;                   // name contains query
@@ -173,6 +197,51 @@ class _CounsellorScreenState extends State<CounsellorScreen> {
                   return 5;                                          // partial spec match
                 }
                 filteredCounsellors.sort((a, b) => relevanceScore(a).compareTo(relevanceScore(b)));
+              } else if (_latestEmotion != null) {
+                // Emotion Matching Algorithm
+                List<String> targetSpecs = [];
+                String emotion = _latestEmotion!.toLowerCase();
+                if (emotion == 'sadness' || emotion == 'grief') {
+                  targetSpecs = ['Depression', 'Grief & Loss'];
+                } else if (emotion == 'anxiety' || emotion == 'overwhelmed' || emotion == 'panic') {
+                  targetSpecs = ['Anxiety & Stress', 'OCD', 'Trauma & PTSD'];
+                } else if (emotion == 'anger') {
+                  targetSpecs = ['Relationship Issues', 'Anxiety & Stress'];
+                }
+                
+                if (targetSpecs.isNotEmpty) {
+                  int matchScore(dynamic doc) {
+                    final data = doc.data() as Map<String, dynamic>;
+                    final List<dynamic> specs = data['specializations'] ?? [];
+                    for (var s in specs) {
+                      if (targetSpecs.contains(s.toString())) return 0; // Matched
+                    }
+                    return 1; // Not matched
+                  }
+                  
+                  filteredCounsellors.sort((a, b) {
+                    int scoreA = matchScore(a);
+                    int scoreB = matchScore(b);
+                    if (scoreA != scoreB) {
+                      return scoreA.compareTo(scoreB);
+                    }
+                    int favA = (a.data() as Map<String, dynamic>)['favoritesCount'] ?? 0;
+                    int favB = (b.data() as Map<String, dynamic>)['favoritesCount'] ?? 0;
+                    return favB.compareTo(favA);
+                  });
+                } else {
+                  filteredCounsellors.sort((a, b) {
+                    int favA = (a.data() as Map<String, dynamic>)['favoritesCount'] ?? 0;
+                    int favB = (b.data() as Map<String, dynamic>)['favoritesCount'] ?? 0;
+                    return favB.compareTo(favA);
+                  });
+                }
+              } else {
+                filteredCounsellors.sort((a, b) {
+                  int favA = (a.data() as Map<String, dynamic>)['favoritesCount'] ?? 0;
+                  int favB = (b.data() as Map<String, dynamic>)['favoritesCount'] ?? 0;
+                  return favB.compareTo(favA);
+                });
               }
 
               return SafeArea(
@@ -229,7 +298,7 @@ class _CounsellorScreenState extends State<CounsellorScreen> {
                   ),
 
                   // 2. Upcoming Sessions (Scrolls away)
-                  if (_searchQuery.isEmpty)
+                  if (_searchQuery == null || _searchQuery!.isEmpty)
                     SliverToBoxAdapter(
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
@@ -482,7 +551,7 @@ class _CounsellorScreenState extends State<CounsellorScreen> {
                             const SizedBox(height: 16),
                             _buildFilterChips(),
                             const SizedBox(height: 32),
-                            _buildSectionHeader(_searchQuery.isNotEmpty ? 'SEARCH RESULTS' : 'RECOMMENDED FOR YOU'),
+                            _buildSectionHeader((_searchQuery != null && _searchQuery!.isNotEmpty) ? 'SEARCH RESULTS' : 'RECOMMENDED FOR YOU'),
                             const SizedBox(height: 16),
                           ],
                         ),
@@ -546,22 +615,38 @@ class _CounsellorScreenState extends State<CounsellorScreen> {
                                 final specialty = specs.isNotEmpty ? specs[0].toString() : 'Expert Therapist';
                                 final rating = data['rating']?.toString() ?? '0.0';
                                 final reviews = data['reviews']?.toString() ?? '0';
+                                final favoritesCount = data['favoritesCount']?.toString() ?? '0';
                                 final price = data['price']?.toString() ?? 'Free';
                                 final imageUrl = data['counsellorImageUrl'] ?? data['profileImageUrl'];
                                 final isOnline = data['isOnline'] ?? true;
+                                
+                                String? matchReason;
+                                if ((_searchQuery == null || _searchQuery!.isEmpty) && _latestEmotion != null) {
+                                  List<String> targetSpecs = [];
+                                  String emotion = _latestEmotion!.toLowerCase();
+                                  if (emotion == 'sadness' || emotion == 'grief') {
+                                    targetSpecs = ['Depression', 'Grief & Loss'];
+                                  } else if (emotion == 'anxiety' || emotion == 'overwhelmed' || emotion == 'panic') {
+                                    targetSpecs = ['Anxiety & Stress', 'OCD', 'Trauma & PTSD'];
+                                  } else if (emotion == 'anger') {
+                                    targetSpecs = ['Relationship Issues', 'Anxiety & Stress'];
+                                  }
+                                  
+                                  if (targetSpecs.isNotEmpty) {
+                                    final List<dynamic> docSpecs = data['specializations'] ?? [];
+                                    if (docSpecs.any((s) => targetSpecs.contains(s.toString()))) {
+                                      matchReason = 'Top Match for your recent ${emotion.substring(0,1).toUpperCase()}${emotion.substring(1)}';
+                                    }
+                                  }
+                                }
 
-                                 return FutureBuilder<DocumentSnapshot?>(
-                                   future: (data['counsellorImageUrl'] == null) 
-                                      ? FirebaseFirestore.instance.collection('counsellor_applications').doc(doc.id).get()
-                                      : Future.value(null),
-                                   builder: (context, appSnap) {
-                                     String? finalImageUrl = imageUrl;
-                                     if (appSnap.hasData && appSnap.data != null && appSnap.data!.exists) {
-                                       final appData = appSnap.data!.data() as Map<String, dynamic>?;
-                                       if (appData != null && appData['profilePhotoUrl'] != null) {
-                                         finalImageUrl = appData['profilePhotoUrl'];
-                                       }
-                                     }
+                                 return FutureBuilder<Map<String, dynamic>>(
+                                   future: _fetchCounsellorExtraData(doc.id, data['counsellorImageUrl']),
+                                   builder: (context, extraSnap) {
+                                     final extraData = extraSnap.data ?? {};
+                                     final finalImageUrl = extraData['imageUrl'] ?? imageUrl;
+                                     final finalRating = (extraData['rating'] != null && extraData['rating'] != '0.0') ? extraData['rating'] : rating;
+                                     final finalReviews = (extraData['reviews'] != null && extraData['reviews'] != '0') ? extraData['reviews'] : reviews;
 
                                      return Padding(
                                       padding: const EdgeInsets.only(bottom: 16),
@@ -569,13 +654,15 @@ class _CounsellorScreenState extends State<CounsellorScreen> {
                                         context,
                                         name: name,
                                         specialty: specialty,
-                                        rating: rating,
-                                        reviews: reviews,
+                                        rating: finalRating,
+                                        reviews: finalReviews,
                                         price: (price.toLowerCase() == 'free' || price == '0' || price.trim().isEmpty) ? 'Free' : (price.startsWith('RM') ? price : 'RM$price/hr'),
                                         imageUrl: finalImageUrl ?? 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&q=80&w=2000',
                                         isOnline: isOnline,
+                                        favoritesCount: favoritesCount,
                                         isFavorite: _userFavorites.contains(doc.id),
                                         bgColor: const Color(0xFFF3E7C9),
+                                        matchReason: matchReason,
                                         data: {...data, 'id': doc.id}, 
                                       ),
                                     );
@@ -594,6 +681,44 @@ class _CounsellorScreenState extends State<CounsellorScreen> {
         },
       ),
     );
+  }
+
+  Future<Map<String, dynamic>> _fetchCounsellorExtraData(String counsellorId, String? imageUrl) async {
+    String? finalImageUrl = imageUrl;
+    if (finalImageUrl == null) {
+      final appSnap = await FirebaseFirestore.instance.collection('counsellor_applications').doc(counsellorId).get();
+      if (appSnap.exists && appSnap.data() != null) {
+        finalImageUrl = appSnap.data()!['profilePhotoUrl'];
+      }
+    }
+
+    final bookingsSnap = await FirebaseFirestore.instance
+        .collection('counsellor_bookings')
+        .where('counsellorId', isEqualTo: counsellorId)
+        .get();
+    
+    double totalRating = 0;
+    int ratingCount = 0;
+    
+    for (var bDoc in bookingsSnap.docs) {
+      final bData = bDoc.data();
+      if (bData['rating'] != null) {
+        double r = (bData['rating'] is num) ? (bData['rating'] as num).toDouble() : double.tryParse(bData['rating'].toString()) ?? 0;
+        if (r > 0) {
+          totalRating += r;
+          ratingCount++;
+        }
+      }
+    }
+    
+    String computedRating = ratingCount > 0 ? (totalRating / ratingCount).toStringAsFixed(1) : '0.0';
+    String computedReviews = ratingCount.toString();
+
+    return {
+      'imageUrl': finalImageUrl,
+      'rating': computedRating,
+      'reviews': computedReviews,
+    };
   }
 
   Widget _buildSectionHeader(String title, [String? actionLabel, VoidCallback? onTap]) {
@@ -778,7 +903,7 @@ class _CounsellorScreenState extends State<CounsellorScreen> {
             fontSize: 14,
           ),
           prefixIcon: const Icon(Icons.search, color: Color(0xFFC0C0C0)),
-          suffixIcon: _searchQuery.isNotEmpty 
+          suffixIcon: (_searchQuery != null && _searchQuery!.isNotEmpty) 
               ? IconButton(
                   onPressed: () {
                     _searchController.clear();
@@ -828,7 +953,7 @@ class _CounsellorScreenState extends State<CounsellorScreen> {
             _showLanguagePicker();
           }),
           const SizedBox(width: 8),
-          ...['Anxiety', 'Grief', 'Growth', 'Stress'].map((filter) {
+          ...['Anxiety', 'Stress', 'Depression', 'Relationship', 'Trauma', 'Career', 'Addiction'].map((filter) {
             final bool isSelected = filter == _selectedSpecialty;
             return Padding(
               padding: const EdgeInsets.only(right: 8),
@@ -989,7 +1114,9 @@ class _CounsellorScreenState extends State<CounsellorScreen> {
         required bool isOnline,
         Color bgColor = const Color(0xFFEBCDAA),
         Map<String, dynamic>? data,
+        String favoritesCount = '0',
         bool isFavorite = false,
+        String? matchReason,
       }) {
     return InkWell(
       onTap: () {
@@ -1043,6 +1170,31 @@ class _CounsellorScreenState extends State<CounsellorScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  if (matchReason != null)
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFE8F5E9),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: primaryGreen.withOpacity(0.3)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.auto_awesome, color: primaryGreen, size: 12),
+                          const SizedBox(width: 4),
+                          Text(
+                            matchReason,
+                            style: GoogleFonts.outfit(
+                              color: primaryGreen,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -1081,14 +1233,25 @@ class _CounsellorScreenState extends State<CounsellorScreen> {
                           fontSize: 12,
                         ),
                       ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '($reviews)',
+                        style: GoogleFonts.outfit(
+                          color: textColorSub,
+                          fontSize: 12,
+                        ),
+                      ),
                       const Spacer(),
                       GestureDetector(
                         onTap: () async {
                           final docRef = FirebaseFirestore.instance.collection('users').doc(_currentUser?.uid);
+                          final counsellorDocRef = FirebaseFirestore.instance.collection('users').doc(data?['id']);
                           if (_userFavorites.contains(data?['id'])) {
                             await docRef.update({'favoriteCounsellors': FieldValue.arrayRemove([data?['id']])});
+                            await counsellorDocRef.update({'favoritesCount': FieldValue.increment(-1)});
                           } else {
                             await docRef.update({'favoriteCounsellors': FieldValue.arrayUnion([data?['id']])});
+                            await counsellorDocRef.update({'favoritesCount': FieldValue.increment(1)});
                           }
                         },
                         child: Icon(
@@ -1099,7 +1262,7 @@ class _CounsellorScreenState extends State<CounsellorScreen> {
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        '($reviews)',
+                        '($favoritesCount)',
                         style: GoogleFonts.outfit(
                           color: textColorSub,
                           fontSize: 12,

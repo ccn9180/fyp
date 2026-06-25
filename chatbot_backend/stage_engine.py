@@ -77,6 +77,19 @@ PLANNING_KEYWORDS = [
     "how do i solve this", "next step", "next steps",
 ]
 
+# Helplessness/"stuck" language means the user wants direction, not more
+# open-ended interviewing -- same problem_solving fast-track destination as
+# PLANNING_KEYWORDS, kept as its own list since the trigger is "I don't know
+# what to do" rather than already having a concrete planning ask.
+HELPLESSNESS_KEYWORDS = [
+    "i don't know what to do", "i dont know what to do",
+    "i don't know where to start", "i dont know where to start",
+    "don't know what to do", "dont know what to do",
+    "don't know where to start", "dont know where to start",
+    "how do i deal with this", "how do you deal with this",
+    "i'm stuck", "im stuck",
+]
+
 # Hard cap, not just a backstop: at most 2 consecutive exploration turns --
 # past that the conversation must summarize (synthesis) rather than keep
 # interviewing, regardless of whether a relief/resilience/coping signal has
@@ -156,10 +169,19 @@ class ConversationStageEngine:
         return effective_stage
 
     def _wants_problem_solving(self, strategy: str, state: Dict[str, str]) -> bool:
+        is_grief = state.get("topic") in ["relationship", "grief", "relationship_loss"]
         if state.get("intent") == "seeking_solutions" or strategy == "solution_suggestion":
             return True
+        # For grief/relationship loss, do not jump into problem solving prematurely
+        # based on planning or helplessness keywords.
+        if is_grief:
+            return False
+            
         clean_text = state.get("clean_text", "")
-        return any(kw in clean_text for kw in PLANNING_KEYWORDS)
+        return (
+            any(kw in clean_text for kw in PLANNING_KEYWORDS)
+            or any(kw in clean_text for kw in HELPLESSNESS_KEYWORDS)
+        )
 
     def _next(
         self, stage: str, turns: int, strategy: str, state: Dict[str, str]
@@ -173,6 +195,38 @@ class ConversationStageEngine:
         meaning_shift = state.get("meaning_shift")
         showing_relief = is_relief or intent in RELIEF_INTENTS
         showing_escalation = intent in ESCALATION_INTENTS and meaning_shift != "acceptance"
+
+        is_grief = state.get("topic") in ["relationship", "grief", "relationship_loss"]
+        resilience_shown = is_coping or showing_relief or meaning_shift == "acceptance"
+
+        if is_grief:
+            # NON-LINEAR GRIEF MODEL
+            # If they show resilience or acceptance, move to acceptance
+            if resilience_shown or intent == "acceptance":
+                return "acceptance", 0
+                
+            # If they show mixed feelings (e.g. recognizing a toxic relationship but missing it)
+            if intent == "mixed_feelings":
+                return "meaning_making", 0
+                
+            # Behavioral intents map to specific processing
+            if intent in ["checking_ex_behavior", "longing", "rumination"]:
+                return "grief_processing", 0
+                
+            # If they drop down to shock or distress, drop stage down to validation
+            if intent in ["shock", "distress"]:
+                return "validation", 0
+                
+            # Otherwise, maintain the current stage but oscillate gently if needed
+            if stage in ["acceptance", "meaning_making"] and intent in ["sadness", "venting"]:
+                # Oscillate back down
+                return "grief_processing", 0
+                
+            # Default fallback for generic grief processing
+            if stage not in ["validation", "reflection", "exploration", "grief_processing", "meaning_making", "meaning_making", "acceptance", "closure"]:
+                return "grief_processing", 0
+                
+            return stage, turns + 1
 
         if stage == "validation":
             if is_support or turns >= 1:

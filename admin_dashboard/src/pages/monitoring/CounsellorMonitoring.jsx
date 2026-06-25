@@ -56,17 +56,7 @@ export default function CounsellorMonitoring() {
         cancelledSessions: cancelledSessions > 0 ? cancelledSessions : (c.cancelledSessions || 0),
       };
     });
-    const MOCK_COUNSELLORS = [
-      { id: 'mc1', name: 'Dr. Kevin Zhang', email: 'k.zhang@wellness.com', role: 'counsellor', specializations: ['CBT', 'Anxiety & Stress'], performanceScore: 92, totalSessions: 450, rating: 4.8, slotUtilization: 95, completionRate: 98, cancelledSessions: 2, status: 'Active', createdAt: new Date('2025-01-10') },
-      { id: 'mc2', name: 'Dr. Robert Vance', email: 'r.vance@clinic.org', role: 'counsellor', specializations: ['Depression', 'Grief & Loss'], performanceScore: 78, totalSessions: 120, rating: 4.5, slotUtilization: 45, completionRate: 90, cancelledSessions: 5, status: 'Active', createdAt: new Date('2025-03-15') },
-      { id: 'mc3', name: 'Sarah Jenkins', email: 's.jenkins@therapy.net', role: 'counsellor', specializations: ['Relationship Issues', 'Addiction Recovery'], performanceScore: 65, totalSessions: 310, rating: 4.1, slotUtilization: 80, completionRate: 85, cancelledSessions: 32, status: 'Review', createdAt: new Date('2025-02-01') },
-      { id: 'mc4', name: 'Dr. Emily Chen', email: 'e.chen@mindful.org', role: 'counsellor', specializations: ['Trauma & PTSD'], performanceScore: 88, totalSessions: 290, rating: 4.7, slotUtilization: 85, completionRate: 95, cancelledSessions: 4, status: 'Active', createdAt: new Date('2025-06-20') },
-      { id: 'mc5', name: 'Mark Halloway', email: 'm.halloway@counseling.com', role: 'counsellor', specializations: ['Career Counseling', 'Anxiety & Stress'], performanceScore: 95, totalSessions: 550, rating: 4.9, slotUtilization: 88, completionRate: 99, cancelledSessions: 1, status: 'Active', createdAt: new Date('2024-11-05') }
-    ].map(c => ({
-      ...c,
-      completedSessions: c.completedSessions !== undefined ? c.completedSessions : Math.round((c.completionRate / 100) * c.totalSessions)
-    }));
-    return [...live, ...MOCK_COUNSELLORS];
+    return live;
   }, [allUsers, allBookings]);
 
   const availableSpecialties = [

@@ -22,6 +22,8 @@ import 'meditation_player.dart';
 import 'widgets/mood_calendar_widget.dart';
 import '../services/gamification_service.dart';
 import '../widgets/quest_completed_dialog.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../services/fcm_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -151,6 +153,21 @@ class _HomeScreenState extends State<HomeScreen> {
             backgroundColor: Color(0xFF7C9C84)
           ),
         );
+      }
+      
+      // Update check-in date to skip today's evening reflection reminder
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final now = DateTime.now();
+        final todayStr = "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
+        await prefs.setString('last_checkin_date', todayStr);
+        
+        final dailyEnabled = prefs.getBool('daily_reminder') ?? true;
+        if (dailyEnabled) {
+          await FCMService.scheduleDailyReminder();
+        }
+      } catch (e) {
+        debugPrint("Failed to update check-in date for notifications: $e");
       }
       
       // Check and update streak
@@ -519,64 +536,94 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               const SizedBox(height: 16),
-              GestureDetector(
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => const SharedWithMeScreen()),
+              StreamBuilder<DocumentSnapshot>(
+                stream: FirebaseAuth.instance.currentUser != null 
+                    ? FirebaseFirestore.instance.collection('users').doc(FirebaseAuth.instance.currentUser!.uid).snapshots()
+                    : const Stream.empty(),
+                builder: (context, snapshot) {
+                  bool hasNewItems = false;
+                  if (snapshot.hasData && snapshot.data != null && snapshot.data!.exists) {
+                    final data = snapshot.data!.data() as Map<String, dynamic>?;
+                    hasNewItems = data?['hasNewSharedItems'] == true;
+                  }
+                  
+                  return GestureDetector(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const SharedWithMeScreen()),
+                      );
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(24),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(28),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.04),
+                            blurRadius: 20,
+                            offset: const Offset(0, 10),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF1F3EE),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.people_alt_rounded, color: Color(0xFF7C9C84), size: 24),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Inner Circle',
+                                  style: GoogleFonts.playfairDisplay(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: const Color(0xFF333333),
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Diary & Conversations shared with you',
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 13,
+                                    color: const Color(0xFF888888),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (hasNewItems)
+                            Container(
+                              margin: const EdgeInsets.only(right: 12),
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Colors.redAccent,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                'NEW',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Color(0xFFB0B0B0)),
+                        ],
+                      ),
+                    ),
                   );
-                },
-                child: Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(28),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.04),
-                        blurRadius: 20,
-                        offset: const Offset(0, 10),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF1F3EE),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(Icons.people_alt_rounded, color: Color(0xFF7C9C84), size: 24),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Inner Circle',
-                              style: GoogleFonts.playfairDisplay(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: const Color(0xFF333333),
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Diary & Conversations shared with you',
-                              style: GoogleFonts.outfit(
-                                fontSize: 13,
-                                color: const Color(0xFF888888),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Color(0xFFB0B0B0)),
-                    ],
-                  ),
-                ),
+                }
               ),
 
               const SizedBox(height: 32),

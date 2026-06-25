@@ -102,31 +102,71 @@ export default function ChatbotMonitoring() {
     return (avg / 5 * 100).toFixed(1);
   }, [filteredByDate]);
 
+  const responseSpeed = useMemo(() => {
+    const validSessions = filteredByDate.filter(s => s.responseSpeed && !isNaN(s.responseSpeed));
+    if (validSessions.length === 0) return '—';
+    const avg = validSessions.reduce((sum, s) => sum + s.responseSpeed, 0) / validSessions.length;
+    return avg.toFixed(1);
+  }, [filteredByDate]);
+
   // Chart Data Mapping (Weekly Trend)
-  const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-  const chartData = days.map(day => ({
-    day,
-    chats: Math.round(totalChats / 7) + Math.floor(Math.random() * 15),
-    crisis: Math.round(totalCrisis / 7) + (Math.random() > 0.8 ? 2 : 1),
-    accuracy: parseFloat(chatbotAccuracy) + (Math.random() * 2 - 1),
-    latency: 0.7 + (Math.random() * 0.3)
-  }));
+  const chartData = useMemo(() => {
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const dataMap = days.reduce((acc, day) => ({ ...acc, [day]: { day, chats: 0, crisis: 0 } }), {});
+    
+    filteredByDate.forEach(s => {
+      const d = s.createdAt?.toDate ? s.createdAt.toDate() : new Date();
+      const dayName = days[d.getDay()];
+      dataMap[dayName].chats += 1;
+      if (s.crisisDetected || s.crisis_detected) dataMap[dayName].crisis += 1;
+    });
+    
+    return [
+      dataMap['Mon'], dataMap['Tue'], dataMap['Wed'], dataMap['Thu'], 
+      dataMap['Fri'], dataMap['Sat'], dataMap['Sun']
+    ];
+  }, [filteredByDate]);
 
-  const emotionData = [
-    { name: 'Anxious', value: 35, color: '#FCD34D' },
-    { name: 'Depressed', value: 25, color: '#60A5FA' },
-    { name: 'Hopeful', value: 20, color: '#34D399' },
-    { name: 'Crisis', value: 10, color: '#F87171' },
-    { name: 'Neutral', value: 10, color: '#94A3B8' }
-  ];
+  const emotionData = useMemo(() => {
+    const emotions = { Anxious: 0, Depressed: 0, Hopeful: 0, Crisis: 0, Neutral: 0 };
+    filteredByDate.forEach(s => {
+      if (s.crisisDetected || s.crisis_detected) emotions.Crisis += 1;
+      else if (s.emotion) {
+        if (emotions[s.emotion] !== undefined) emotions[s.emotion] += 1;
+        else emotions.Neutral += 1;
+      } else {
+        emotions.Neutral += 1;
+      }
+    });
+    
+    const result = [
+      { name: 'Anxious', value: emotions.Anxious, color: '#FCD34D' },
+      { name: 'Depressed', value: emotions.Depressed, color: '#60A5FA' },
+      { name: 'Hopeful', value: emotions.Hopeful, color: '#34D399' },
+      { name: 'Crisis', value: emotions.Crisis, color: '#F87171' },
+      { name: 'Neutral', value: emotions.Neutral, color: '#94A3B8' }
+    ].filter(e => e.value > 0);
+    
+    // Provide a fallback if empty so chart doesn't break
+    return result.length > 0 ? result : [{ name: 'No Data', value: 1, color: '#E2E8F0' }];
+  }, [filteredByDate]);
 
-  const ratingDistData = [
-    { star: '5★', count: 45, color: '#7C9C84' },
-    { star: '4★', count: 30, color: '#A3B8A9' },
-    { star: '3★', count: 15, color: '#BBCBC2' },
-    { star: '2★', count: 7, color: '#D1D5DB' },
-    { star: '1★', count: 3, color: '#F3F4F6' }
-  ];
+  const ratingDistData = useMemo(() => {
+    const ratings = { '5': 0, '4': 0, '3': 0, '2': 0, '1': 0 };
+    filteredByDate.forEach(s => {
+      if (s.rating) {
+        const r = Math.round(s.rating).toString();
+        if (ratings[r] !== undefined) ratings[r] += 1;
+      }
+    });
+    return [
+      { star: '5★', count: ratings['5'], color: '#7C9C84' },
+      { star: '4★', count: ratings['4'], color: '#A3B8A9' },
+      { star: '3★', count: ratings['3'], color: '#BBCBC2' },
+      { star: '2★', count: ratings['2'], color: '#D1D5DB' },
+      { star: '1★', count: ratings['1'], color: '#F3F4F6' }
+    ];
+  }, [filteredByDate]);
 
   // Table Data Processing
   const processedSessions = useMemo(() => {
@@ -337,7 +377,7 @@ export default function ChatbotMonitoring() {
                   <Activity size={16} />
                 </div>
                 <div>
-                  <p className="section-label !text-[9px] mb-0 leading-none text-blue-500">Platform Presence</p>
+                  <p className="section-label !text-[9px] mb-0 leading-none text-blue-500">Total Sessions</p>
                   <p className="font-display font-bold text-lg text-charcoal">{totalChats} <span className="text-[10px] font-medium opacity-60">sessions</span></p>
                 </div>
               </div>
@@ -348,7 +388,7 @@ export default function ChatbotMonitoring() {
                 </div>
                 <div>
                   <p className="section-label !text-[9px] mb-0 leading-none text-amber-600">Response Speed</p>
-                  <p className="font-display font-bold text-lg text-charcoal">0.8 <span className="text-[10px] font-medium opacity-60">sec</span></p>
+                  <p className="font-display font-bold text-lg text-charcoal">{responseSpeed} <span className="text-[10px] font-medium opacity-60">sec</span></p>
                 </div>
               </div>
             </div>

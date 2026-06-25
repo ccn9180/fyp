@@ -12,6 +12,8 @@ import '../widgets/level_up_dialog.dart';
 import '../widgets/quest_completed_dialog.dart';
 import '../widgets/badge_unlocked_dialog.dart';
 import '../services/crisis_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../services/fcm_service.dart';
 
 
 class AddDiaryScreen extends StatefulWidget {
@@ -732,6 +734,57 @@ class _AddDiaryScreenState extends State<AddDiaryScreen> {
               .doc(user.uid)
               .collection('diary_entries')
               .add(diaryData);
+        }
+        
+        // Update check-in date to skip today's evening reflection reminder
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          final now = DateTime.now();
+          final todayStr = "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
+          await prefs.setString('last_checkin_date', todayStr);
+          
+          final dailyEnabled = prefs.getBool('daily_reminder') ?? true;
+          if (dailyEnabled) {
+            await FCMService.scheduleDailyReminder();
+          }
+        } catch (e) {
+          debugPrint("Failed to update check-in date for notifications: $e");
+        }
+        
+        // Notify recipients that there is a new shared item
+        if (sharingTeams.isNotEmpty) {
+          final initialSharingAccess = widget.initialData?['sharingAccess'] ?? {};
+          final uidsToNotify = sharingTeams.entries
+              .where((e) => e.value == true && initialSharingAccess[e.key] != true)
+              .map((e) => e.key)
+              .toList();
+          
+          if (uidsToNotify.isNotEmpty) {
+            final senderDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+            final senderName = senderDoc.data()?['fullName'] ?? 'A friend';
+
+            for (var uid in uidsToNotify) {
+              try {
+                await FirebaseFirestore.instance
+                    .collection('users')
+                    .doc(uid)
+                    .update({'hasNewSharedItems': true});
+
+                await FirebaseFirestore.instance.collection('notifications').add({
+                  'to': uid,
+                  'from': user.uid,
+                  'title': 'New Shared Diary',
+                  'message': '$senderName shared a diary entry with you.',
+                  'type': 'shared_item',
+                  'isRead': false,
+                  'sendPush': false,
+                  'timestamp': FieldValue.serverTimestamp(),
+                });
+              } catch (e) {
+                debugPrint("Error updating hasNewSharedItems for $uid: $e");
+              }
+            }
+          }
         }
         
         if (isCrisis) {
